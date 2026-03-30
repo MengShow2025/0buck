@@ -1,0 +1,84 @@
+Note: Unnecessary use of -X or --request, POST is already inferred.
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* Host www.0buck.com:443 was resolved.
+* IPv6: 2620:127:f00f:e::
+* IPv4: 23.227.38.74
+*   Trying [2620:127:f00f:e::]:443...
+* Connected to www.0buck.com (2620:127:f00f:e::) port 443
+* ALPN: curl offers h2,http/1.1
+* (304) (OUT), TLS handshake, Client hello (1):
+} [318 bytes data]
+*  CAfile: /etc/ssl/cert.pem
+*  CApath: none
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0* (304) (IN), TLS handshake, Server hello (2):
+{ [122 bytes data]
+* (304) (IN), TLS handshake, Unknown (8):
+{ [19 bytes data]
+* (304) (IN), TLS handshake, Certificate (11):
+{ [2038 bytes data]
+* (304) (IN), TLS handshake, CERT verify (15):
+{ [78 bytes data]
+* (304) (IN), TLS handshake, Finished (20):
+{ [36 bytes data]
+* (304) (OUT), TLS handshake, Finished (20):
+} [36 bytes data]
+* SSL connection using TLSv1.3 / AEAD-CHACHA20-POLY1305-SHA256 / [blank] / UNDEF
+* ALPN: server accepted h2
+* Server certificate:
+*  subject: CN=www.0buck.com
+*  start date: Mar 26 02:33:32 2026 GMT
+*  expire date: Jun 24 02:33:31 2026 GMT
+*  subjectAltName: host "www.0buck.com" matched cert's "www.0buck.com"
+*  issuer: C=US; O=Let's Encrypt; CN=E8
+*  SSL certificate verify ok.
+* using HTTP/2
+* [HTTP/2] [1] OPENED stream for https://www.0buck.com/admin/api/2026-01/graphql.json
+* [HTTP/2] [1] [:method: POST]
+* [HTTP/2] [1] [:scheme: https]
+* [HTTP/2] [1] [:authority: www.0buck.com]
+* [HTTP/2] [1] [:path: /admin/api/2026-01/graphql.json]
+* [HTTP/2] [1] [user-agent: curl/8.7.1]
+* [HTTP/2] [1] [accept: */*]
+* [HTTP/2] [1] [x-shopify-access-token: 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]
+* [HTTP/2] [1] [content-type: application/json]
+* [HTTP/2] [1] [content-length: 60]
+> POST /admin/api/2026-01/graphql.json HTTP/2
+> Host: www.0buck.com
+> User-Agent: curl/8.7.1
+> Accept: */*
+> X-Shopify-Access-Token: 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
+> Content-Type: application/json
+> Content-Length: 60
+> 
+} [60 bytes data]
+* upload completely sent off: 60 bytes
+< HTTP/2 301 
+< date: Fri, 27 Mar 2026 11:43:05 GMT
+< content-type: application/json; charset=utf-8
+< content-length: 0
+< location: https://0buck-shop.myshopify.com/admin/api/2026-01/graphql.json
+< cf-ray: 9e2e22abe811fa22-SJC
+< referrer-policy: origin-when-cross-origin
+< x-frame-options: DENY
+< strict-transport-security: max-age=7889238
+< server-timing: processing;dur=27, verdict_flag_enabled;desc="count=4";dur=0.146, _y;desc="0d20e6eb-cae6-4233-a2c4-a3963e3b9137", _s;desc="47990511-6c7a-4ad3-b353-ef652645cf82"
+< server-timing: cfRequestDuration;dur=129.000187
+< server-timing: ipv6
+< content-security-policy: default-src 'self' data: blob: 'unsafe-inline' 'unsafe-eval' https://* shopify-pos://*; block-all-mixed-content; child-src 'self' https://* shopify-pos://*; connect-src 'self' wss://* https://*; frame-ancestors 'none'; img-src 'self' data: blob: https:; script-src https://cdn.shopify.com https://cdn.shopifycdn.net https://checkout.pci.shopifyinc.com https://checkout.pci.shopifyinc.com/build/04ed4e1/card_fields.js https://api.stripe.com https://mpsnare.iesnare.com https://appcenter.intuit.com https://www.paypal.com https://js.braintreegateway.com https://c.paypal.com https://maps.googleapis.com https://www.google-analytics.com https://v.shopify.com 'self' 'unsafe-inline' 'unsafe-eval'; upgrade-insecure-requests; report-uri /csp-report?source%5Baction%5D=query&source%5Bapp%5D=Shopify&source%5Bcontroller%5D=admin%2Fgraphql&source%5Bsection%5D=admin_api&source%5Buuid%5D=4b15d3f9-8724-46d5-9a2e-99440b373235-1774611785; report-to shopify-csp
+< x-content-type-options: nosniff
+< x-download-options: noopen
+< x-permitted-cross-domain-policies: none
+< x-xss-protection: 1; mode=block
+< reporting-endpoints: shopify-csp="/csp-report?source%5Baction%5D=query&source%5Bapp%5D=Shopify&source%5Bcontroller%5D=admin%2Fgraphql&source%5Bsection%5D=admin_api&source%5Buuid%5D=4b15d3f9-8724-46d5-9a2e-99440b373235-1774611785"
+< x-dc: gcp-us-west1,gcp-us-central1,gcp-us-central1
+< x-request-id: 4b15d3f9-8724-46d5-9a2e-99440b373235-1774611785
+< alt-svc: h3=":443"; ma=86400
+< cf-cache-status: DYNAMIC
+< report-to: {"endpoints":[{"url":"https:\/\/a.nel.cloudflare.com\/report\/v4?s=kFulaaHMRcVganx5aV6grftUw%2Fb8vwgE14RKG%2BdHElT5ryhnGg4sWfAoxzzx3iVX8%2FAVURv5hK%2BOQXIh%2FDMaiZQ6xM7btFaGRH8WkR0QlRUk7Ut7ezwlo%2BVPaKa9IpVdFnAP5PK1kOR4Tv8%3D"}],"group":"cf-nel","max_age":604800}
+< nel: {"success_fraction":0.01,"report_to":"cf-nel","max_age":604800}
+< server: cloudflare
+< 
+{ [0 bytes data]
+100    60    0     0  100    60      0     89 --:--:-- --:--:-- --:--:--    89
+* Connection #0 to host www.0buck.com left intact
