@@ -8,7 +8,7 @@
       "enabled": true,
       "deleteAfterRun": false,
       "createdAtMs": 1774611341329,
-      "updatedAtMs": 1774876917142,
+      "updatedAtMs": 1774877182673,
       "schedule": {
         "kind": "every",
         "everyMs": 1800000

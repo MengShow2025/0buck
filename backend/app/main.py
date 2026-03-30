@@ -8,6 +8,7 @@ from backend.app.services.sync_1688 import Sync1688Service
 from backend.app.services.sync_shopify import SyncShopifyService
 from backend.app.api.webhooks import router as webhooks_router
 from backend.app.api.admin import router as admin_router
+from backend.app.api.proxy import router as proxy_router
 from backend.app.services.rewards import RewardsService
 
 app = FastAPI(
@@ -112,3 +113,4 @@ async def sync_customer_to_shopify(customer_id: str, db: Session = Depends(get_d
 app.include_router(api_router, tags=["api"])
 app.include_router(admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 app.include_router(webhooks_router, prefix=f"{settings.API_V1_STR}/webhooks", tags=["webhooks"])
+app.include_router(proxy_router, prefix=f"{settings.API_V1_STR}/checkin", tags=["checkin"])
