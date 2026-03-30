@@ -31,6 +31,24 @@ class RewardsService:
 
     # --- User & Level Management ---
 
+    def ensure_user_exists(self, customer_id: int):
+        user_ext = self.db.query(UserExt).filter_by(customer_id=customer_id).first()
+        if not user_ext:
+            # Generate a referral code for new users
+            import string
+            import random
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            
+            user_ext = UserExt(customer_id=customer_id, referral_code=code)
+            self.db.add(user_ext)
+            
+            # Create Wallet
+            wallet = Wallet(user_id=customer_id)
+            self.db.add(wallet)
+            self.db.commit()
+            self.db.refresh(user_ext)
+        return user_ext
+
     def get_user_level(self, customer_id: int) -> dict:
         """
         Silver: $0 - $1,000 (1.5%)
@@ -62,6 +80,32 @@ class RewardsService:
         return {"level": level, "rate": rate, "total_volume": total_volume}
 
     # --- Check-in Logic ---
+
+    def init_checkin_plan(self, customer_id: int, order_id: int, reward_base: Decimal, timezone: str = "UTC"):
+        """
+        TC-01: User completes checkout.
+        Initialize rewards/checkin plan for the order.
+        """
+        self.ensure_user_exists(customer_id)
+        
+        # Check if plan already exists for this order
+        plan = self.db.query(CheckinPlan).filter_by(order_id=order_id).first()
+        if plan:
+            return plan
+            
+        plan = CheckinPlan(
+            user_id=customer_id,
+            order_id=order_id,
+            reward_base=reward_base,
+            status='pending_choice', # User needs to choose between check-in or group-buy
+            timezone=timezone,
+            # Total Duration: 555 days fixed window.
+            expires_at=datetime.now() + timedelta(days=555)
+        )
+        self.db.add(plan)
+        self.db.commit()
+        self.db.refresh(plan)
+        return plan
 
     def process_checkin(self, customer_id: int, plan_id: str) -> dict:
         """

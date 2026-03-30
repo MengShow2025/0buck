@@ -78,6 +78,23 @@ class Sync1688Service:
             "is_reward_eligible": is_reward_eligible
         }
 
+    async def trigger_sourcing(self, order_id: int, line_items: List[Dict[str, Any]]):
+        """
+        Trigger 1688 sourcing for paid Shopify orders.
+        Extracts 1688 IDs from SKU/Metafields and creates procurement orders.
+        """
+        print(f"Triggering 1688 Sourcing for Shopify Order: {order_id}")
+        for item in line_items:
+            sku = item.get("sku", "")
+            quantity = item.get("quantity", 1)
+            # In production, we extract the 1688 product ID and variant ID from SKU or metadata
+            # e.g., SKU: 1688_67891234_v5
+            print(f"  Item: {item.get('title')} (SKU: {sku}) x{quantity}")
+            # Mock 1688 Procurement API call
+            # await self.create_1688_order(sku, quantity)
+        
+        return True
+
     async def sync_product(self, product_id_1688: str):
         # 1. Fetch
         raw_data = await self.fetch_product_details(product_id_1688)
