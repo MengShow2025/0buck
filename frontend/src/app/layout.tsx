@@ -1,3 +1,4 @@
+import './globals.css';
 import {ShopifyProvider} from '@shopify/hydrogen-react';
 
 const shopifyConfig = {
