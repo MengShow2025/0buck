@@ -1,0 +1,14 @@
+t=2026-03-31T08:14:43+0800 lvl=info msg="no configuration paths supplied"
+t=2026-03-31T08:14:43+0800 lvl=info msg="using configuration at default config path" path="/Users/long/Library/Application Support/ngrok/ngrok.yml"
+t=2026-03-31T08:14:43+0800 lvl=info msg="open config file" path="/Users/long/Library/Application Support/ngrok/ngrok.yml" err=nil
+t=2026-03-31T08:14:43+0800 lvl=info msg="FIPS 140 mode" enabled=false
+t=2026-03-31T08:14:43+0800 lvl=info msg="starting web service" obj=web addr=127.0.0.1:4040 allow_hosts=[]
+t=2026-03-31T08:14:44+0800 lvl=info msg="client session established" obj=tunnels.session
+t=2026-03-31T08:14:44+0800 lvl=info msg="tunnel session started" obj=tunnels.session
+t=2026-03-31T08:14:44+0800 lvl=info msg="started tunnel" obj=tunnels name=command_line addr=http://localhost:3001 url=https://eea1-38-175-103-191.ngrok-free.app
+t=2026-03-31T08:23:31+0800 lvl=info msg=start pg=/api/tunnels id=dff43453fab05b3c
+t=2026-03-31T08:23:31+0800 lvl=info msg=end pg=/api/tunnels id=dff43453fab05b3c status=200 dur=233.333µs
+t=2026-03-31T08:28:35+0800 lvl=info msg=start pg=/api/tunnels id=f5f384cb2c3193da
+t=2026-03-31T08:28:35+0800 lvl=info msg=end pg=/api/tunnels id=f5f384cb2c3193da status=200 dur=177.208µs
+t=2026-03-31T08:29:07+0800 lvl=info msg="received stop request" obj=app stopReq="{err:<nil> restart:false}"
+t=2026-03-31T08:29:07+0800 lvl=info msg="session closing" obj=tunnels.session err=nil

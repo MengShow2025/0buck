@@ -7,11 +7,17 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Database
+    DATABASE_URL: Optional[str] = os.getenv("DATABASE_URL")
     POSTGRES_SERVER: str = os.getenv("POSTGRES_SERVER", "localhost")
     POSTGRES_USER: str = os.getenv("POSTGRES_USER", "postgres")
     POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD", "password")
     POSTGRES_DB: str = os.getenv("POSTGRES_DB", "0buck")
-    SQLALCHEMY_DATABASE_URI: Optional[str] = f"postgresql://{POSTGRES_USER}:{POSTGRES_PASSWORD}@{POSTGRES_SERVER}/{POSTGRES_DB}"
+    
+    @property
+    def SQLALCHEMY_DATABASE_URI(self) -> str:
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
+        return f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}@{self.POSTGRES_SERVER}/{self.POSTGRES_DB}"
 
     # External APIs
     ALIBABA_1688_API_KEY: str = os.getenv("ALIBABA_1688_API_KEY", "")
@@ -22,6 +28,7 @@ class Settings(BaseSettings):
     SHOPIFY_API_SECRET: str = os.getenv("SHOPIFY_API_SECRET", "")
     SHOPIFY_SHOP_NAME: str = os.getenv("SHOPIFY_SHOP_NAME", "")
     SHOPIFY_ACCESS_TOKEN: str = os.getenv("SHOPIFY_ACCESS_TOKEN", "")
+    SHOPIFY_STOREFRONT_TOKEN: str = os.getenv("SHOPIFY_STOREFRONT_TOKEN", "")
     
     # AI
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")

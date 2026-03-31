@@ -11,6 +11,10 @@ from backend.app.api.admin import router as admin_router
 from backend.app.api.proxy import router as proxy_router
 from backend.app.services.rewards import RewardsService
 
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
@@ -114,3 +118,17 @@ app.include_router(api_router, tags=["api"])
 app.include_router(admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 app.include_router(webhooks_router, prefix=f"{settings.API_V1_STR}/webhooks", tags=["webhooks"])
 app.include_router(proxy_router, prefix=f"{settings.API_V1_STR}/checkin", tags=["checkin"])
+
+# Serve static files from React build
+frontend_path = "/Volumes/SAMSUNG 970/AccioWork/coder/0buck/frontend/dist"
+if os.path.exists(frontend_path):
+    app.mount("/assets", StaticFiles(directory=f"{frontend_path}/assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # If the path looks like an API call, it's already handled by routers above.
+        # Otherwise, serve index.html for React Router to handle.
+        file_path = os.path.join(frontend_path, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(frontend_path, "index.html"))

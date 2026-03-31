@@ -1,0 +1,53 @@
+INFO:     Started server process [22416]
+INFO:     Waiting for application startup.
+INFO:     Application startup complete.
+INFO:     Uvicorn running on http://0.0.0.0:80 (Press CTRL+C to quit)
+Webhook Received: Order Paid 123456789 for customer 987654321
+Total: 100.00, Tax: 10.00, Shipping: 5.00 -> Base: 85.00
+Triggering 1688 Sourcing for Shopify Order: 123456789
+  Item: 0Buck AI Smart Watch (SKU: 0B-1688_12345) x1
+INFO:     127.0.0.1:57967 - "POST /api/v1/webhooks/shopify/orders/paid HTTP/1.1" 200 OK
+Webhook Received: Order Paid 123456789 for customer 987654321
+Total: 100.00, Tax: 10.00, Shipping: 5.00 -> Base: 85.00
+Triggering 1688 Sourcing for Shopify Order: 123456789
+  Item: 0Buck AI Smart Watch (SKU: 0B-1688_12345) x1
+INFO:     127.0.0.1:57986 - "POST /api/v1/webhooks/shopify/orders/paid HTTP/1.1" 200 OK
+Webhook Received: Order Paid 6964384760111 for customer 9851899019567
+Total: 13.02, Tax: 0.00, Shipping: 0.00 -> Base: 13.02
+Triggering 1688 Sourcing for Shopify Order: 6964384760111
+  Item: 0Buck AI Smart Watch (SKU: 0B-1688_001) x2
+INFO:     34.60.181.170:0 - "POST /api/v1/webhooks/shopify/orders/paid HTTP/1.1" 200 OK
+INFO:     136.111.186.93:0 - "POST /api/v1/webhooks/shopify/orders/paid HTTP/1.1" 200 OK
+Webhook Received: Order Paid 6964384760111 for customer 9851899019567
+Total: 13.02, Tax: 0.00, Shipping: 0.00 -> Base: 13.02
+Triggering 1688 Sourcing for Shopify Order: 6964384760111
+  Item: 0Buck AI Smart Watch (SKU: 0B-1688_001) x2
+INFO:     35.192.222.212:0 - "POST /api/v1/webhooks/shopify/orders/paid HTTP/1.1" 200 OK
+Webhook Received: Order Paid 6964384760111 for customer 9851899019567
+Total: 13.02, Tax: 0.00, Shipping: 0.00 -> Base: 13.02
+Triggering 1688 Sourcing for Shopify Order: 6964384760111
+  Item: 0Buck AI Smart Watch (SKU: 0B-1688_001) x2
+INFO:     34.67.91.203:0 - "POST /api/v1/webhooks/shopify/orders/paid HTTP/1.1" 200 OK
+INFO:     38.175.103.191:0 - "GET /logs HTTP/1.1" 404 Not Found
+INFO:     38.175.103.191:0 - "GET /favicon.ico HTTP/1.1" 404 Not Found
+INFO:     38.175.103.191:0 - "GET /webhooks/logs HTTP/1.1" 404 Not Found
+INFO:     38.175.103.191:0 - "GET / HTTP/1.1" 404 Not Found
+Webhook Received: Order Paid 820982911946154508 for customer 115310627314723954
+Total: 58.38, Tax: 0.00, Shipping: 10.00 -> Base: 48.38
+Triggering 1688 Sourcing for Shopify Order: 820982911946154508
+  Item: [0Buck] 新款加湿器 智能定时家用雾化器usb静音夜灯小型空气净化加湿器 (SKU: ) x1
+  Item: Lens Protection Plan (2 Year) (SKU: LENS-PROTECT-2YR) x1
+  Item: Premium Leather Case (SKU: CASE-LEATHER-PREM) x1
+  Item: [0Buck] 热销蓝牙音响琉璃5华强北哈顿曼6新无线音箱低音炮小钢炮桌面音箱 (SKU: ) x1
+  Item: [0Buck] Aigo/爱国者Q710国民好物无线鼠标商务2.4G笔记本台式办公电脑配 (SKU: ) x1
+INFO:     136.116.182.150:0 - "POST /api/v1/webhooks/shopify/orders/paid HTTP/1.1" 200 OK
+INFO:     38.175.103.191:0 - "GET /logs HTTP/1.1" 404 Not Found
+INFO:     38.175.103.191:0 - "GET /docs HTTP/1.1" 200 OK
+INFO:     38.175.103.191:0 - "GET /api/v1/openapi.json HTTP/1.1" 200 OK
+INFO:     38.175.103.191:0 - "GET /api/v1/admin/summary?customer_id=9851899019567 HTTP/1.1" 200 OK
+INFO:     38.175.103.191:0 - "GET /api/v1/admin/users?customer_id=9851899019567 HTTP/1.1" 200 OK
+INFO:     38.175.103.191:0 - "GET /api/v1/users/9851899019567 HTTP/1.1" 200 OK
+INFO:     Shutting down
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
+INFO:     Finished server process [22416]
