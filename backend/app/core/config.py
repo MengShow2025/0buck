@@ -36,6 +36,10 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", 6333))
 
+    # Pricing & Currency
+    EXCHANGE_RATE: float = 0.14 # 1 CNY to USD
+    EXCHANGE_BUFFER: float = 0.005 # 0.5% buffer for fluctuations
+
     class Config:
         case_sensitive = True
         env_file = ".env"

@@ -68,6 +68,12 @@ class SyncShopifyService:
                 },
                 {
                     "namespace": "0buck_sync",
+                    "key": "source_cost_usd",
+                    "value": str(getattr(product, 'source_cost_usd', 0)),
+                    "type": "number_decimal"
+                },
+                {
+                    "namespace": "0buck_sync",
                     "key": "last_sync_timestamp",
                     "value": product.last_synced_at.isoformat(),
                     "type": "date_time"

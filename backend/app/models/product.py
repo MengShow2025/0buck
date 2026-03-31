@@ -28,6 +28,7 @@ class Product(Base):
     description_en = Column(String)
     
     original_price = Column(Float)  # 1688 cost in CNY
+    source_cost_usd = Column(Float) # Buffered cost in USD (0.5% buffer applied)
     sale_price = Column(Float)      # Final price in USD
     
     images = Column(JSON)           # List of image URLs

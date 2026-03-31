@@ -54,9 +54,11 @@ class Sync1688Service:
         Apply differential pricing strategy from PRD.
         1688 cost (CNY) -> USD sale price
         Returns both price and reward eligibility.
+        Includes a 0.5% buffer for exchange rate fluctuations.
         """
-        # Approximate CNY to USD conversion (1 CNY = 0.14 USD)
-        cost_usd = cost_cny * 0.14
+        # Base conversion with buffer (e.g., 0.14 * 1.005)
+        buffered_rate = settings.EXCHANGE_RATE * (1 + settings.EXCHANGE_BUFFER)
+        cost_usd = cost_cny * buffered_rate
         
         # Differential pricing rules from PRD:
         if cost_usd <= 5:
@@ -75,7 +77,8 @@ class Sync1688Service:
         
         return {
             "sale_price": round(sale_price, 2),
-            "is_reward_eligible": is_reward_eligible
+            "is_reward_eligible": is_reward_eligible,
+            "cost_usd_buffered": round(cost_usd, 4)
         }
 
     async def trigger_sourcing(self, order_id: int, line_items: List[Dict[str, Any]]):
@@ -88,20 +91,28 @@ class Sync1688Service:
         for item in line_items:
             sku = item.get("sku", "")
             quantity = item.get("quantity", 1)
-            # In production, we extract the 1688 product ID and variant ID from SKU or metadata
-            # e.g., SKU: 1688_67891234_v5
-            print(f"  Item: {item.get('title')} (SKU: {sku}) x{quantity}")
+            
+            # Extract 1688 ID from SKU (format: 1688-ID)
+            product_id_1688 = None
+            if sku and sku.startswith("1688-"):
+                product_id_1688 = sku.replace("1688-", "")
+            
+            if not product_id_1688:
+                print(f"  Skipping item {item.get('title')} - No 1688 ID found in SKU {sku}")
+                continue
+
+            print(f"  Sourcing Item: {item.get('title')} (1688 ID: {product_id_1688}) x{quantity}")
             
             # --- Mock 1688 Procurement API call ---
             # In a real scenario, this would call ElimAPI or 1688 Open Platform
             order_payload = {
                 "external_order_id": str(order_id),
-                "sku": sku,
+                "product_id_1688": product_id_1688,
                 "quantity": quantity,
                 "shipping_address": "Mock Hub Shenzhen, China"
             }
             # Response mock
-            mock_1688_order_id = f"1688_{order_id}_{sku}"
+            mock_1688_order_id = f"1688_ORD_{order_id}_{product_id_1688}"
             procurement_orders.append({
                 "item": item.get("title"),
                 "1688_order_id": mock_1688_order_id,
@@ -146,6 +157,7 @@ class Sync1688Service:
         product.description_zh = enriched_data["description"]
         product.description_en = enriched_data["description_en"]
         product.original_price = enriched_data["price"]
+        product.source_cost_usd = pricing_result["cost_usd_buffered"]
         product.sale_price = sale_price_usd
         product.is_reward_eligible = is_reward_eligible
         product.images = enriched_data["images"]
