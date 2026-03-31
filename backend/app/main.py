@@ -1,7 +1,10 @@
 from fastapi import FastAPI, Depends, Request, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
+import json
+import asyncio
 from backend.app.core.config import settings
 from backend.app.db.session import get_db
 from backend.app.services.sync_1688 import Sync1688Service
@@ -9,6 +12,7 @@ from backend.app.services.sync_shopify import SyncShopifyService
 from backend.app.api.webhooks import router as webhooks_router
 from backend.app.api.admin import router as admin_router
 from backend.app.api.proxy import router as proxy_router
+from backend.app.api.agent import router as agent_router
 from backend.app.services.rewards import RewardsService
 
 from fastapi.staticfiles import StaticFiles
@@ -50,42 +54,6 @@ async def sync_1688_product(product_id: str, db: Session = Depends(get_db)):
         "shopify_id": product.shopify_product_id
     }
 
-@api_router.post("/chat")
-async def chat(request: Request, db: Session = Depends(get_db)):
-    try:
-        data = await request.json()
-    except Exception:
-        data = {}
-        
-    content = data.get("content", "something interesting")
-    
-    # Mock AI response
-    return {
-        "id": "msg_" + str(datetime.now().timestamp()),
-        "role": "assistant",
-        "content": f"I found some items related to '{content}' with AI-optimized pricing and rewards!",
-        "type": "products",
-        "products": [
-            {
-                "id": "1688_001",
-                "shopify_id": "14074199736623",
-                "title": "Smart AI Glasses (2nd Gen)",
-                "price": 129.99,
-                "images": ["https://sc01.alicdn.com/kf/Abafe897f47f7466ab81e2fd5d542336ce.png"],
-                "is_reward_eligible": True
-            },
-            {
-                "id": "1688_002",
-                "shopify_id": "14074199736624",
-                "title": "Rewarding Mini Projector",
-                "price": 45.00,
-                "images": ["https://sc01.alicdn.com/kf/Abafe897f47f7466ab81e2fd5d542336ce.png"],
-                "is_reward_eligible": True
-            }
-        ],
-        "timestamp": datetime.now().isoformat()
-    }
-
 @api_router.get("/users/{customer_id}")
 async def get_user_profile(customer_id: str, db: Session = Depends(get_db)):
     rewards = RewardsService(db)
@@ -115,6 +83,7 @@ async def sync_customer_to_shopify(customer_id: str, db: Session = Depends(get_d
 
 # Include routers
 app.include_router(api_router, tags=["api"])
+app.include_router(agent_router, prefix=f"{settings.API_V1_STR}/agent", tags=["agent"])
 app.include_router(admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 app.include_router(webhooks_router, prefix=f"{settings.API_V1_STR}/webhooks", tags=["webhooks"])
 app.include_router(proxy_router, prefix=f"{settings.API_V1_STR}/checkin", tags=["checkin"])

@@ -2,7 +2,7 @@ import os
 from typing import List, Dict, Any, Optional
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
-from app.core.config import settings
+from backend.app.core.config import settings
 
 class VectorSearchService:
     def __init__(self):

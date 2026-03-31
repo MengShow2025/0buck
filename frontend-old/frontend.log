@@ -12,3 +12,7 @@
 8:27:40 AM [vite] server restarted.
 8:35:05 AM [vite] (client) hmr update /src/components/ChatInterface.tsx, /src/index.css
 10:03:59 AM [vite] changed tsconfig file detected: /Volumes/SAMSUNG 970/AccioWork/coder/0buck/frontend/tsconfig.json - Clearing cache and forcing full-reload to ensure TypeScript is compiled with updated config values.
+10:14:02 AM [vite] (client) hmr update /src/components/ChatInterface.tsx, /src/index.css
+10:14:08 AM [vite] (client) hmr update /src/components/ChatInterface.tsx, /src/index.css
+10:14:14 AM [vite] (client) hmr update /src/components/ChatInterface.tsx, /src/index.css
+10:24:36 AM [vite] (client) hmr update /src/components/ChatInterface.tsx, /src/index.css

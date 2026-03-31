@@ -84,16 +84,33 @@ class Sync1688Service:
         Extracts 1688 IDs from SKU/Metafields and creates procurement orders.
         """
         print(f"Triggering 1688 Sourcing for Shopify Order: {order_id}")
+        procurement_orders = []
         for item in line_items:
             sku = item.get("sku", "")
             quantity = item.get("quantity", 1)
             # In production, we extract the 1688 product ID and variant ID from SKU or metadata
             # e.g., SKU: 1688_67891234_v5
             print(f"  Item: {item.get('title')} (SKU: {sku}) x{quantity}")
-            # Mock 1688 Procurement API call
-            # await self.create_1688_order(sku, quantity)
+            
+            # --- Mock 1688 Procurement API call ---
+            # In a real scenario, this would call ElimAPI or 1688 Open Platform
+            order_payload = {
+                "external_order_id": str(order_id),
+                "sku": sku,
+                "quantity": quantity,
+                "shipping_address": "Mock Hub Shenzhen, China"
+            }
+            # Response mock
+            mock_1688_order_id = f"1688_{order_id}_{sku}"
+            procurement_orders.append({
+                "item": item.get("title"),
+                "1688_order_id": mock_1688_order_id,
+                "status": "created"
+            })
+            print(f"  Mock 1688 Order Created: {mock_1688_order_id}")
+            # --- End Mock ---
         
-        return True
+        return procurement_orders
 
     async def sync_product(self, product_id_1688: str):
         # 1. Fetch

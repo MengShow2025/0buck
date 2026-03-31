@@ -32,6 +32,7 @@ class Settings(BaseSettings):
     
     # AI
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
+    EXA_API_KEY: str = os.getenv("EXA_API_KEY", "")
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", 6333))
 

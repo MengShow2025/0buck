@@ -107,6 +107,26 @@ class RewardsService:
         self.db.refresh(plan)
         return plan
 
+    def start_checkin_plan(self, customer_id: int, plan_id: str) -> dict:
+        """
+        User chooses 'check-in' mode.
+        Wait for delivery, then activate.
+        """
+        plan = self.db.query(CheckinPlan).filter_by(id=plan_id, user_id=customer_id).first()
+        if not plan:
+            return {"status": "error", "message": "No plan found."}
+        
+        # In a real scenario, we'd check if the order is already delivered.
+        # For now, we allow the transition if it was 'pending_choice'.
+        if plan.status == 'pending_choice':
+            plan.status = 'active_checkin'
+            # The 555 days actually starts from here or confirmed_at
+            plan.confirmed_at = datetime.now()
+            self.db.commit()
+            return {"status": "success", "message": "Check-in plan activated!"}
+        
+        return {"status": "error", "message": f"Plan is in status {plan.status}"}
+
     def process_checkin(self, customer_id: int, plan_id: str) -> dict:
         """
         Updated Strict Consecutive Rule (v1.0):
@@ -134,9 +154,11 @@ class RewardsService:
         days_per_period = self._get_period_days(plan.current_period)
 
         is_consecutive = False
-        if plan.last_checkin_at:
-            if plan.last_checkin_at == today - timedelta(days=1):
-                is_consecutive = True
+        if not plan.last_checkin_at:
+            # First time checking in
+            is_consecutive = True
+        elif plan.last_checkin_at == today - timedelta(days=1):
+            is_consecutive = True
 
         if is_consecutive:
             plan.consecutive_days += 1
