@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", 6333))
 
+    # Domains & Routing
+    BACKEND_URL: str = os.getenv("BACKEND_URL", "")
+    STOREFRONT_DOMAIN: str = os.getenv("STOREFRONT_DOMAIN", "0buck.com")
+    SHOPIFY_CHECKOUT_DOMAIN: str = os.getenv("SHOPIFY_CHECKOUT_DOMAIN", "") # e.g. shop.0buck.com
+
     # Pricing & Currency
     EXCHANGE_RATE: float = 0.14 # 1 CNY to USD
     EXCHANGE_BUFFER: float = 0.005 # 0.5% buffer for fluctuations
