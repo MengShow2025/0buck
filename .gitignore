@@ -1,0 +1,42 @@
+# Node
+node_modules/
+dist/
+build/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+ENV/
+
+# OS
+.DS_Store
+
+# DB
+*.db
+*.sqlite
+
+# Logs
+*.log
+curl_output.txt
+
+# Temp / Local
+.accio/
+.chrome-profile/
+.vscode/
+temp/
+shop_info.json
+*.log
+
+# Frontend/Backend specifics
+frontend/node_modules/
+backend/node_modules/
+
+# Security: never commit secrets
+curl_output.txt
+*.log
+backend_output_*.log
+test_new_credentials.py
+test_customer_permission.py

@@ -1,0 +1,103 @@
+from fastapi import FastAPI, Depends, Request, APIRouter
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+from datetime import datetime
+import json
+import asyncio
+from backend.app.core.config import settings
+from backend.app.db.session import get_db
+from backend.app.services.sync_1688 import Sync1688Service
+from backend.app.services.sync_shopify import SyncShopifyService
+from backend.app.api.webhooks import router as webhooks_router
+from backend.app.api.admin import router as admin_router
+from backend.app.api.proxy import router as proxy_router
+from backend.app.api.agent import router as agent_router
+from backend.app.services.rewards import RewardsService
+
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+)
+
+# Set up CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# API Router
+api_router = APIRouter(prefix=settings.API_V1_STR)
+
+@api_router.get("/")
+async def root():
+    return {"message": f"Welcome to {settings.PROJECT_NAME} API"}
+
+@api_router.post("/sync/1688/{product_id}")
+async def sync_1688_product(product_id: str, db: Session = Depends(get_db)):
+    sync_1688 = Sync1688Service(db)
+    product = await sync_1688.sync_product(product_id)
+    
+    sync_shopify = SyncShopifyService()
+    shopify_res = sync_shopify.sync_to_shopify(product)
+    
+    return {
+        "status": "success", 
+        "product": product.title_en, 
+        "shopify_id": product.shopify_product_id
+    }
+
+@api_router.get("/users/{customer_id}")
+async def get_user_profile(customer_id: str, db: Session = Depends(get_db)):
+    rewards = RewardsService(db)
+    summary = rewards.get_wallet_summary(int(customer_id))
+    level_info = rewards.get_user_level(int(customer_id))
+    
+    return {
+        "id": customer_id,
+        "name": "User " + customer_id,
+        "wallet_balance": summary["available"],
+        "level": level_info["level"]
+    }
+
+@api_router.get("/customer/sync/{customer_id}")
+async def sync_customer_to_shopify(customer_id: str, db: Session = Depends(get_db)):
+    """
+    Force a sync between local database and Shopify for a specific customer.
+    Called when user checks balance or level to ensure 100% accuracy.
+    """
+    rewards = RewardsService(db)
+    success = rewards.sync_customer_data_to_shopify(int(customer_id))
+    
+    if success:
+        return {"status": "success", "message": f"Data synced for customer {customer_id}"}
+    else:
+        return {"status": "failed", "message": "Failed to sync data to Shopify. Check permissions."}
+
+# Include routers
+app.include_router(api_router, tags=["api"])
+app.include_router(agent_router, prefix=f"{settings.API_V1_STR}/agent", tags=["agent"])
+app.include_router(admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
+app.include_router(webhooks_router, prefix=f"{settings.API_V1_STR}/webhooks", tags=["webhooks"])
+app.include_router(proxy_router, prefix=f"{settings.API_V1_STR}/checkin", tags=["checkin"])
+
+# Serve static files from React build
+frontend_path = "/Volumes/SAMSUNG 970/AccioWork/coder/0buck/frontend/dist"
+if os.path.exists(frontend_path):
+    app.mount("/assets", StaticFiles(directory=f"{frontend_path}/assets"), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_frontend(full_path: str):
+        # If the path looks like an API call, it's already handled by routers above.
+        # Otherwise, serve index.html for React Router to handle.
+        file_path = os.path.join(frontend_path, full_path)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse(os.path.join(frontend_path, "index.html"))
