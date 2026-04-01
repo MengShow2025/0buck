@@ -427,7 +427,7 @@ export const ChatInterface: React.FC = () => {
                   className="flex-1 bg-transparent py-3 px-2 text-sm focus:outline-none placeholder:text-gray-400 font-medium"
                 />
                 <button 
-                  onClick={handleSendMessage}
+                  onClick={() => handleSendMessage()}
                   disabled={!input.trim() || isLoading}
                   className={cn(
                     "p-3 rounded-2xl transition-all shadow-sm",
