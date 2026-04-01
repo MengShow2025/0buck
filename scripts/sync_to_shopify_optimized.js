@@ -3,7 +3,7 @@ const path = require('path');
 
 const SHOP_NAME = "pxjkad-zt";
 const ACCESS_TOKEN = "process.env.SHOPIFY_ACCESS_TOKEN";
-const GEMINI_API_KEY = "AIzaSyAiiICu3XOGQgUk3Pt_6qRbnGJ_b3dvt2s";
+const GEMINI_API_KEY = process.env.GOOGLE_API_KEY;
 const GRAPHQL_URL = `https://${SHOP_NAME}.myshopify.com/admin/api/2024-01/graphql.json`;
 
 const categories = [

@@ -1,4 +1,4 @@
-const API_KEY = "AIzaSyAiiICu3XOGQgUk3Pt_6qRbnGJ_b3dvt2s";
+const API_KEY = process.env.GOOGLE_API_KEY;
 async function test() {
     try {
         console.log("Testing fetch to Gemini...");

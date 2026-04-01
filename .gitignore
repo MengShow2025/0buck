@@ -29,6 +29,8 @@ curl_output.txt
 temp/
 shop_info.json
 *.log
+project/
+SECURITY_POST_MORTEM.md
 
 # Frontend/Backend specifics
 frontend/node_modules/
