@@ -83,7 +83,7 @@ async def sync_customer_to_shopify(customer_id: str, db: Session = Depends(get_d
 
 # Include routers
 app.include_router(api_router, tags=["api"])
-app.include_router(agent_router, prefix=f"{settings.API_V1_STR}/agent", tags=["agent"])
+app.include_router(agent_router, prefix=f"{settings.API_V1_STR}", tags=["agent"])
 app.include_router(admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 app.include_router(webhooks_router, prefix=f"{settings.API_V1_STR}/webhooks", tags=["webhooks"])
 app.include_router(proxy_router, prefix=f"{settings.API_V1_STR}/checkin", tags=["checkin"])

@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { ProductCard } from './ProductCard';
 import { 
   Send, 
   Image as ImageIcon, 
@@ -350,36 +351,9 @@ export const ChatInterface: React.FC = () => {
 
               {/* Product Cards Grid */}
               {message.products && message.products.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-[90%] mt-2">
+                <div className="grid grid-cols-2 gap-3 w-full mt-2">
                   {message.products.map((product) => (
-                    <motion.div 
-                      whileHover={{ y: -4 }}
-                      key={product.id}
-                      className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden flex flex-col group cursor-pointer"
-                    >
-                      <div className="aspect-square relative overflow-hidden bg-gray-50">
-                        <img 
-                          src={product.images[0]} 
-                          alt={product.title}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                        />
-                        {product.is_reward_eligible && (
-                          <div className="absolute top-2 right-2 bg-white/90 backdrop-blur-md px-2 py-1 rounded-full flex items-center gap-1 shadow-sm">
-                            <Zap size={10} className="text-orange-600 fill-orange-600" />
-                            <span className="text-[10px] font-bold text-orange-600 uppercase">Rewarding</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="p-3 flex flex-col flex-1">
-                        <h4 className="text-sm font-bold text-gray-900 line-clamp-1 mb-1">{product.title}</h4>
-                        <div className="flex items-center justify-between mt-auto">
-                          <span className="text-lg font-black text-black">${product.price.toFixed(2)}</span>
-                          <button className="p-2 bg-gray-900 text-white rounded-xl shadow-md hover:bg-black transition-colors">
-                            <ArrowRight size={14} />
-                          </button>
-                        </div>
-                      </div>
-                    </motion.div>
+                    <ProductCard key={product.id} product={product} />
                   ))}
                 </div>
               )}

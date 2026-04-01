@@ -8,7 +8,7 @@ interface ProductCardProps {
 }
 
 export const ProductCard: React.FC<ProductCardProps> = ({ product }) => {
-  const shopifyUrl = `https://0buck.myshopify.com/products/${product.shopify_id || product.id}`;
+  const shopifyUrl = `https://shop.0buck.com/products/${product.shopify_id || product.id}`;
 
   return (
     <motion.div
