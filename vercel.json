@@ -1,12 +1,18 @@
 {
   "version": 2,
   "framework": "vite",
-  "rootDirectory": "frontend",
-  "buildCommand": "npm run build",
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
   "installCommand": "npm install",
-  "outputDirectory": "dist",
   "env": {
     "NEXT_PUBLIC_SHOPIFY_STORE_DOMAIN": "shop.0buck.com",
-    "NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN": ""
-  }
+    "NEXT_PUBLIC_SHOPIFY_STOREFRONT_ACCESS_TOKEN": "3c6332b475f582151740bead6a971193",
+    "NEXT_PUBLIC_API_URL": "https://35c5-38-175-103-191.ngrok-free.app"
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://35c5-38-175-103-191.ngrok-free.app/api/:path*"
+    }
+  ]
 }
