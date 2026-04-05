@@ -3,7 +3,7 @@ import { StreamChat } from 'stream-chat';
 import axios from 'axios';
 
 const API_KEY = (import.meta as any).env?.VITE_STREAM_API_KEY || '';
-const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:8000';
+const BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || '';
 
 export function useStreamVCC(isAuthenticated: boolean, currentUser: any) {
   const [chatClient] = useState(() => StreamChat.getInstance(API_KEY));

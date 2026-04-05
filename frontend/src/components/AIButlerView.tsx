@@ -173,7 +173,7 @@ export default function AIButlerView({ agentName, onProductClick, onBuyNow, onAd
 
     // Call to backend AI endpoint (Proxying MiniMax to protect keys)
     try {
-      const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || 'http://localhost:8000';
+      const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || '';
       const response = await fetch(`${backendUrl}/api/v1/butler/chat`, {
         method: 'POST',
         headers: {

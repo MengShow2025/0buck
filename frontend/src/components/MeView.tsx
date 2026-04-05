@@ -130,29 +130,29 @@ export default function MeView({
             
             <div>
               <div className="flex items-center gap-2 text-primary mb-1">
-                <Terminal className="w-4 h-4" />
-                <span className="text-[10px] font-black tracking-[0.3em] uppercase">{t('me.secure_terminal')}</span>
+                <Terminal className="w-3 h-3 sm:w-4 h-4" />
+                <span className="text-[8px] sm:text-[10px] font-black tracking-[0.2em] sm:tracking-[0.3em] uppercase">{t('me.secure_terminal')}</span>
               </div>
-              <h1 className="font-headline text-3xl md:text-4xl font-extrabold tracking-tighter text-white flex items-center gap-3">
+              <h1 className="font-headline text-2xl sm:text-4xl font-extrabold tracking-tighter text-white flex items-center gap-2 sm:gap-3">
                 <input 
                     type="text" 
                     defaultValue="Julian Rossi"
-                    className="bg-transparent border-none outline-none focus:ring-0 focus:border-b focus:border-primary/50 transition-all p-0 w-full max-w-[200px]"
+                    className="bg-transparent border-none outline-none focus:ring-0 focus:border-b focus:border-primary/50 transition-all p-0 w-full max-w-[150px] sm:max-w-[200px]"
                   />
                 <button className="text-zinc-500 hover:text-primary transition-colors">
-                  <Settings className="w-4 h-4" />
+                  <Settings className="w-3.5 h-3.5 sm:w-4 h-4" />
                 </button>
               </h1>
-              <p className="text-sm font-bold text-zinc-500 tracking-widest uppercase mt-1">Pro Member • Node ID: 8829-QX</p>
+              <p className="text-[9px] sm:text-sm font-bold text-zinc-500 tracking-widest uppercase mt-1">Pro Member • Node ID: 8829-QX</p>
             </div>
           </div>
 
-          <div className="px-4 py-2 glass-panel rounded-full flex items-center gap-3 self-start md:self-auto">
-            <div className="flex -space-x-2">
-              <div className="w-6 h-6 rounded-full border border-black bg-zinc-800 flex items-center justify-center text-[10px] font-black">T</div>
-              <div className="w-6 h-6 rounded-full border border-black bg-zinc-800 flex items-center justify-center text-[10px] font-black">E</div>
+          <div className="px-3 sm:px-4 py-1.5 sm:py-2 glass-panel rounded-full flex items-center gap-2 sm:gap-3 self-start md:self-auto">
+            <div className="flex -space-x-1.5 sm:-space-x-2">
+              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-black bg-zinc-800 flex items-center justify-center text-[8px] sm:text-[10px] font-black">T</div>
+              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-black bg-zinc-800 flex items-center justify-center text-[8px] sm:text-[10px] font-black">E</div>
             </div>
-            <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">{t('me.multi_sig')}</span>
+            <span className="text-[8px] sm:text-[10px] font-bold text-zinc-400 uppercase tracking-widest whitespace-nowrap">{t('me.multi_sig')}</span>
           </div>
         </header>
 
@@ -322,62 +322,62 @@ export default function MeView({
             <table className="w-full text-left">
               <thead className="bg-black/40">
                 <tr>
-                  <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest">{t('me.hash_id')}</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest">{t('me.product')}</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest text-center">{t('me.status')}</th>
-                  <th className="px-6 py-4 text-[10px] font-black text-zinc-500 uppercase tracking-widest text-right">{t('me.actions')}</th>
+                  <th className="px-1.5 sm:px-6 py-3 text-[7px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter sm:tracking-widest whitespace-nowrap">{t('me.hash_id')}</th>
+                  <th className="px-1.5 sm:px-6 py-3 text-[7px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter sm:tracking-widest whitespace-nowrap">{t('me.product')}</th>
+                  <th className="px-1.5 sm:px-6 py-3 text-[7px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter sm:tracking-widest text-center whitespace-nowrap">{t('me.status')}</th>
+                  <th className="px-1.5 sm:px-6 py-3 text-[7px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter sm:tracking-widest text-right whitespace-nowrap">{t('me.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
                 <tr className="hover:bg-white/[0.02] transition-colors group">
-                  <td className="px-6 py-4 font-mono text-[11px] text-zinc-400">0x892...fA2</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-white/10 overflow-hidden">
+                  <td className="px-1.5 sm:px-6 py-3 font-mono text-[7px] sm:text-[11px] text-zinc-400 whitespace-nowrap">0x892...fA2</td>
+                  <td className="px-1.5 sm:px-6 py-3">
+                    <div className="flex items-center gap-1 sm:gap-3">
+                      <div className="w-5 h-5 sm:w-10 sm:h-10 rounded-md sm:rounded-xl bg-zinc-900 border border-white/10 overflow-hidden flex-shrink-0">
                         <img src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop" className="w-full h-full object-cover opacity-80" alt="Product" />
                       </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-xs font-bold text-white">Neural Key V2</span>
-                        <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Hardware</span>
+                      <div className="flex items-center gap-1 min-w-0 whitespace-nowrap">
+                        <span className="text-[8px] sm:text-xs font-bold text-white truncate max-w-[45px] sm:max-w-none">Neural Key V2</span>
+                        <span className="hidden sm:inline text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Hardware</span>
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full border border-primary/20">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                      <span className="text-[10px] font-black text-primary uppercase tracking-widest">In Transit</span>
+                  <td className="px-1.5 sm:px-6 py-3 text-center">
+                    <div className="inline-flex items-center gap-1 px-1 sm:px-3 py-0.5 bg-primary/10 rounded-full border border-primary/20 whitespace-nowrap">
+                      <span className="w-0.5 h-0.5 sm:w-1.5 sm:h-1.5 rounded-full bg-primary animate-pulse"></span>
+                      <span className="text-[7px] sm:text-[10px] font-black text-primary uppercase tracking-tighter sm:tracking-widest">In Transit</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-right">
-                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-2 hover:bg-white/10 rounded-xl text-zinc-500 hover:text-white transition-all">
-                        <Share2 className="w-4 h-4" />
+                  <td className="px-1.5 sm:px-6 py-3 text-right">
+                    <div className="flex justify-end gap-0.5 sm:gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button className="p-1 sm:p-2 hover:bg-white/10 rounded-md sm:rounded-xl text-zinc-500 hover:text-white transition-all">
+                        <Share2 className="w-3 h-3 sm:w-4 h-4" />
                       </button>
-                      <button className="p-2 hover:bg-white/10 rounded-xl text-zinc-500 hover:text-white transition-all">
-                        <Eye className="w-4 h-4" />
+                      <button className="p-1 sm:p-2 hover:bg-white/10 rounded-md sm:rounded-xl text-zinc-500 hover:text-white transition-all">
+                        <Eye className="w-3 h-3 sm:w-4 h-4" />
                       </button>
                     </div>
                   </td>
                 </tr>
                 <tr className="hover:bg-white/[0.02] transition-colors group">
-                  <td className="px-6 py-4 font-mono text-[11px] text-zinc-400">0x110...dB5</td>
-                  <td className="px-6 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-zinc-900 border border-white/10 overflow-hidden flex items-center justify-center">
-                        <Globe className="w-5 h-5 text-zinc-600" />
+                  <td className="px-1.5 sm:px-6 py-3 font-mono text-[7px] sm:text-[11px] text-zinc-400 whitespace-nowrap">0x110...dB5</td>
+                  <td className="px-1.5 sm:px-6 py-3">
+                    <div className="flex items-center gap-1 sm:gap-3">
+                      <div className="w-5 h-5 sm:w-10 sm:h-10 rounded-md sm:rounded-xl bg-zinc-900 border border-white/10 overflow-hidden flex items-center justify-center flex-shrink-0">
+                        <Globe className="w-3 h-3 sm:w-5 h-5 text-zinc-600" />
                       </div>
-                      <div className="flex flex-col gap-0.5">
-                        <span className="text-xs font-bold text-white">Cloud Node 1yr</span>
-                        <span className="text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Service</span>
+                      <div className="flex items-center gap-1 min-w-0 whitespace-nowrap">
+                        <span className="text-[8px] sm:text-xs font-bold text-white truncate max-w-[45px] sm:max-w-none">Cloud Node 1yr</span>
+                        <span className="hidden sm:inline text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Service</span>
                       </div>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-center">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 bg-green-500/10 rounded-full border border-green-500/20">
-                      <span className="text-[10px] font-black text-green-500 uppercase tracking-widest">Delivered</span>
+                  <td className="px-1.5 sm:px-6 py-3 text-center">
+                    <div className="inline-flex items-center gap-1 px-1 sm:px-3 py-0.5 bg-green-500/10 rounded-full border border-green-500/20 whitespace-nowrap">
+                      <span className="text-[7px] sm:text-[10px] font-black text-green-500 uppercase tracking-tighter sm:tracking-widest">Delivered</span>
                     </div>
                   </td>
-                  <td className="px-6 py-4 text-right">
+                  <td className="px-1.5 sm:px-6 py-3 text-right">
                     <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button className="p-2 hover:bg-white/10 rounded-xl text-zinc-500 hover:text-white transition-all">
                         <Share2 className="w-4 h-4" />

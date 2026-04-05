@@ -45,7 +45,7 @@ export default function LoginView({ onLogin, onGoRegister, onGuestAccess, onInte
       <div className="flex items-center gap-2">
         <Logo mode="horizontal" size={32} />
         <div className="h-4 w-px bg-white/10 mx-2"></div>
-        <span className="text-[10px] uppercase tracking-[0.3em] text-white/40 font-bold">Precision Ledger v2.4</span>
+        <span className="text-[8px] sm:text-[10px] uppercase tracking-[0.2em] text-white/40 font-bold whitespace-nowrap">Precision Ledger v2.4</span>
       </div>
       <div className="hidden md:flex items-center gap-6">
         <a className="text-sm font-medium text-white/60 hover:text-white transition-colors" href="#">Documentation</a>

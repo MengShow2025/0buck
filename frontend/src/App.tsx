@@ -171,7 +171,7 @@ export default function App() {
                 setCurrentView('product-detail');
               } else if (action === 'VOTE') {
                 // Trigger C2M Vote logic
-                axios.post(`${(import.meta as any).env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/v1/c2m/vote`, {
+                axios.post(`${(import.meta as any).env.VITE_BACKEND_URL || ''}/api/v1/c2m/vote`, {
                   user_id: currentUser?.id,
                   wish_id: params.wish_id
                 }).then(() => alert('Vote registered!'))
@@ -502,6 +502,9 @@ export default function App() {
         return { hideHeader: true, showSearch: false };
       case 'product-detail':
         return { hideHeader: true };
+      case 'login':
+      case 'register':
+        return { hideHeader: true };
       default:
         return { title: currentView.charAt(0).toUpperCase() + currentView.slice(1) };
     }
@@ -529,18 +532,20 @@ export default function App() {
             transition={{ duration: 0.5 }}
             className="h-full w-full relative"
           >
-            <Sidebar 
-              currentView={currentView} 
-              onViewChange={setCurrentView} 
-              onLogout={handleLogout} 
-              agentName={agentName} 
-              isAuthenticated={isAuthenticated} 
-              onLoginClick={() => { setAuthMode('login'); setShowShowAuthModal(true); }} 
-              cartItemsCount={cartItems.length}
-              isOpen={isSidebarOpen}
-              onClose={() => setIsSidebarOpen(false)}
-            />
-            <main className="lg:ml-20 h-screen flex flex-col relative overflow-hidden">
+            {!['login', 'register'].includes(currentView) && (
+              <Sidebar 
+                currentView={currentView} 
+                onViewChange={setCurrentView} 
+                onLogout={handleLogout} 
+                agentName={agentName} 
+                isAuthenticated={isAuthenticated} 
+                onLoginClick={() => { setAuthMode('login'); setShowShowAuthModal(true); }} 
+                cartItemsCount={cartItems.length}
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+              />
+            )}
+            <main className={`${!['login', 'register'].includes(currentView) ? 'lg:ml-20' : ''} h-screen flex flex-col relative overflow-hidden`}>
               <TopBar 
                 {...getHeaderProps()} 
                 currentView={currentView} 
