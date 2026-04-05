@@ -24,8 +24,15 @@ export default function ReferralView({ isAuthenticated = false, currentUser }: R
   
   const { status, isLoading } = useRewards(currentUser?.id ? parseInt(currentUser.id) : null);
   
-  // Local view mode override (for mobile toggling)
+  // Local view mode override (for mobile/PC toggling)
   const [viewMode, setViewMode] = useState<'talent' | 'user' | null>(null);
+
+  // v3.4.6: Automatically sync view mode with user identity once status is loaded
+  React.useEffect(() => {
+    if (status?.user_type && viewMode === null) {
+      setViewMode(status.user_type === 'kol' ? 'talent' : 'user');
+    }
+  }, [status, viewMode]);
 
   // Determine if user is KOL/Talent based on real backend data OR manual override
   const isTalent = viewMode === 'talent' || (viewMode === null && status?.user_type === 'kol');
@@ -54,14 +61,13 @@ export default function ReferralView({ isAuthenticated = false, currentUser }: R
 
       {isTalent ? <TalentReferralView isDark={isDark} status={status} /> : <UserReferralView isDark={isDark} status={status} />}
 
-      {/* Draggable View Toggle (Mobile Floating) */}
-      {deviceType === 'h5' && (
-        <motion.div 
-          drag
-          dragConstraints={{ left: -100, right: 100, top: -400, bottom: 50 }}
-          whileDrag={{ scale: 1.1, zIndex: 100 }}
-          className="fixed bottom-28 left-6 z-[60] flex flex-col gap-3 p-1 bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl touch-none"
-        >
+      {/* Draggable View Toggle (Floating) */}
+      <motion.div 
+        drag
+        dragConstraints={{ left: -100, right: 100, top: -400, bottom: 50 }}
+        whileDrag={{ scale: 1.1, zIndex: 100 }}
+        className="fixed bottom-28 left-6 z-[60] flex flex-col gap-3 p-1 bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl shadow-2xl touch-none"
+      >
           <button 
             onClick={() => setViewMode('talent')}
             className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center transition-all active:scale-90 ${
@@ -88,7 +94,6 @@ export default function ReferralView({ isAuthenticated = false, currentUser }: R
             <span className="text-[7px] font-black uppercase mt-0.5 tracking-tighter">Member</span>
           </button>
         </motion.div>
-      )}
     </div>
   );
 }

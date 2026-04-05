@@ -36,25 +36,19 @@ class PersonalizedMatrixService:
 
         search_query = " ".join([f"{f.key}: {f.value}" for f in facts]) if facts else "popular trending products"
         
-        # 2. Vector Search for matching products
-        # In a real scenario, we'd search our Qdrant collection
-        # For now, we simulate by getting 10 products from DB or vector search
+        # 2. Vector Search for matching products (Fall back to DB if search fails or is empty)
+        products = []
         try:
             vector = await vector_search_service.get_embedding(text=search_query)
-            # This returns payloads from Qdrant
-            raw_results = vector_search_service.search(vector=vector, limit=limit)
-            
-            # Convert payloads to a more UI-friendly format or fetch from SQL
-            products = raw_results
-            
-            if not products:
-                # Fallback to random popular products if search fails
-                db_products = self.db.query(Product).filter(Product.is_melted == False).limit(limit).all()
-                products = [{"id": p.id, "title": p.title_en, "price": p.sale_price, "image": p.images[0] if p.images else ""} for p in db_products]
-
+            products = vector_search_service.search(vector=vector, limit=limit)
         except Exception as e:
             logger.error(f"Vector search failed for personalized matrix: {e}")
             products = []
+            
+        if not products:
+            # Fallback to DB products if vector search is empty or failed
+            db_products = self.db.query(Product).filter(Product.is_active == True).limit(limit).all()
+            products = [{"id": p.id, "title": p.title_en, "price": p.sale_price, "image": p.images[0] if p.images else ""} for p in db_products]
 
         # 3. Generate Personalized Greeting (The Easter Egg)
         greeting = ""

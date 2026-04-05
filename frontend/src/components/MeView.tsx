@@ -1,4 +1,5 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../context/ThemeContext';
 import { 
@@ -52,7 +53,41 @@ export default function MeView({
   const [showRulesModal, setShowRulesModal] = useState<'points' | 'renewal' | 'rewards' | null>(null);
   const [draftAgentName, setDraftAgentName] = useState(agentName);
   const [useByok, setUseByok] = useState(false);
+  
+  // v3.4.5: Dynamic Countdown Logic
+  const [timeLeft, setTimeLeft] = useState({ days: 4, hrs: 18, min: 52, sec: 30 });
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev.sec > 0) return { ...prev, sec: prev.sec - 1 };
+        if (prev.min > 0) return { ...prev, min: prev.min - 1, sec: 59 };
+        if (prev.hrs > 0) return { ...prev, hrs: prev.hrs - 1, min: 59, sec: 59 };
+        if (prev.days > 0) return { ...prev, days: prev.days - 1, hrs: 23, min: 59, sec: 59 };
+        return prev;
+      });
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const isAgentNameDirty = useMemo(() => draftAgentName.trim() !== agentName.trim(), [agentName, draftAgentName]);
+
+  const FlipDigit = ({ value, color = "text-white" }: { value: string | number, color?: string }) => (
+    <div className="relative overflow-hidden flex flex-col items-center">
+      <AnimatePresence mode="popLayout">
+        <motion.div
+          key={value}
+          initial={{ y: 20, opacity: 0, rotateX: -90 }}
+          animate={{ y: 0, opacity: 1, rotateX: 0 }}
+          exit={{ y: -20, opacity: 0, rotateX: 90 }}
+          transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
+          className={`flip-card text-2xl font-headline font-black px-2 py-1 bg-zinc-900 rounded-lg border border-white/5 shadow-inner ${color}`}
+        >
+          {value}
+        </motion.div>
+      </AnimatePresence>
+    </div>
+  );
 
   React.useEffect(() => {
     setDraftAgentName(agentName);
@@ -149,16 +184,8 @@ export default function MeView({
                   <Settings className="w-3.5 h-3.5 sm:w-4 h-4" />
                 </button>
               </h1>
-              <p className="text-[9px] sm:text-sm font-bold text-zinc-500 tracking-widest uppercase mt-1">Pro Member • Node ID: 8829-QX</p>
+              <p className="text-[11px] sm:text-sm font-bold text-zinc-500 tracking-widest uppercase mt-1">Pro Member • Node ID: 8829-QX</p>
             </div>
-          </div>
-
-          <div className="px-3 sm:px-4 py-1.5 sm:py-2 glass-panel rounded-full flex items-center gap-2 sm:gap-3 self-start md:self-auto">
-            <div className="flex -space-x-1.5 sm:-space-x-2">
-              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-black bg-zinc-800 flex items-center justify-center text-[8px] sm:text-[10px] font-black">T</div>
-              <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full border border-black bg-zinc-800 flex items-center justify-center text-[8px] sm:text-[10px] font-black">E</div>
-            </div>
-            <span className="text-[8px] sm:text-[10px] font-bold text-zinc-400 uppercase tracking-widest whitespace-nowrap">{t('me.multi_sig')}</span>
           </div>
         </header>
 
@@ -252,31 +279,39 @@ export default function MeView({
                   </div>
                 </div>
 
-                <div>
-                  <p className="text-[10px] font-black text-zinc-500 uppercase mb-3">{t('me.phase_ends')}</p>
-                  <div className="flex gap-2">
-                    <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center">
+                  <p className="text-[10px] font-black text-zinc-500 uppercase mb-4 tracking-[0.3em]">{t('me.phase_ends')}</p>
+                  <div className="flex justify-center items-start gap-4 h-16">
+                    <div className="flex flex-col items-center gap-2">
                       <div className="flex gap-1">
-                        <div className="flip-card text-sm text-white">0</div>
-                        <div className="flip-card text-sm text-white">4</div>
+                        <FlipDigit value={Math.floor(timeLeft.days / 10)} />
+                        <FlipDigit value={timeLeft.days % 10} />
                       </div>
-                      <span className="text-[8px] font-black text-zinc-600 uppercase mt-1 tracking-widest">{t('me.days')}</span>
+                      <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">{t('me.days')}</span>
                     </div>
-                    <div className="text-xl text-zinc-700 pt-1">:</div>
-                    <div className="flex flex-col items-center">
+                    <div className="text-2xl font-headline font-black text-zinc-800 pt-1">:</div>
+                    <div className="flex flex-col items-center gap-2">
                       <div className="flex gap-1">
-                        <div className="flip-card text-sm text-white">1</div>
-                        <div className="flip-card text-sm text-white">8</div>
+                        <FlipDigit value={Math.floor(timeLeft.hrs / 10)} />
+                        <FlipDigit value={timeLeft.hrs % 10} />
                       </div>
-                      <span className="text-[8px] font-black text-zinc-600 uppercase mt-1 tracking-widest">{t('me.hrs')}</span>
+                      <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">{t('me.hrs')}</span>
                     </div>
-                    <div className="text-xl text-zinc-700 pt-1">:</div>
-                    <div className="flex flex-col items-center">
+                    <div className="text-2xl font-headline font-black text-zinc-800 pt-1">:</div>
+                    <div className="flex flex-col items-center gap-2">
                       <div className="flex gap-1">
-                        <div className="flip-card text-sm text-primary">5</div>
-                        <div className="flip-card text-sm text-primary">2</div>
+                        <FlipDigit value={Math.floor(timeLeft.min / 10)} />
+                        <FlipDigit value={timeLeft.min % 10} />
                       </div>
-                      <span className="text-[8px] font-black text-zinc-600 uppercase mt-1 tracking-widest">{t('me.min')}</span>
+                      <span className="text-[9px] font-black text-zinc-600 uppercase tracking-widest">{t('me.min')}</span>
+                    </div>
+                    <div className="text-2xl font-headline font-black text-zinc-800 pt-1">:</div>
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="flex gap-1">
+                        <FlipDigit value={Math.floor(timeLeft.sec / 10)} color="text-primary" />
+                        <FlipDigit value={timeLeft.sec % 10} color="text-primary" />
+                      </div>
+                      <span className="text-[9px] font-black text-primary uppercase tracking-widest">{t('me.sec') || 'SEC'}</span>
                     </div>
                   </div>
                 </div>
@@ -332,6 +367,72 @@ export default function MeView({
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Order History Table (Restored & Optimized) */}
+        <section className="glass-panel rounded-[2.5rem] overflow-hidden mt-8">
+          <div className="p-6 flex justify-between items-center border-b border-white/5 bg-black/20">
+            <div className="flex items-center gap-3">
+              <History className="w-5 h-5 text-primary" />
+              <h3 className="font-headline font-bold text-white uppercase tracking-widest text-sm">{t('me.order_logs')}</h3>
+            </div>
+            <button className="text-[10px] font-black text-zinc-500 hover:text-white uppercase tracking-[0.2em] transition-colors">{t('me.export_logs')}</button>
+          </div>
+          <div className="overflow-hidden">
+            <table className="w-full text-left table-fixed border-collapse">
+              <thead className="bg-black/40">
+                <tr>
+                  <th className="w-[18%] px-1 sm:px-6 py-3 text-[9px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter whitespace-nowrap">{t('me.hash_id')}</th>
+                  <th className="w-[42%] px-1 sm:px-6 py-3 text-[9px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter whitespace-nowrap">{t('me.product')}</th>
+                  <th className="w-[25%] px-1 sm:px-6 py-3 text-[9px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter text-center whitespace-nowrap">{t('me.status')}</th>
+                  <th className="w-[15%] px-1 sm:px-6 py-3 text-[9px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter text-right whitespace-nowrap">{t('me.actions')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5">
+                {[
+                  { id: '0x892...fA2', name: 'Neural Key V2', type: 'Hardware', status: 'In Transit', statusType: 'primary', img: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop' },
+                  { id: '0x110...dB5', name: 'Cloud Node 1yr', type: 'Service', status: 'Delivered', statusType: 'success', icon: <Globe className="w-3 h-3 sm:w-5 h-5 text-zinc-600" /> }
+                ].map((order, idx) => (
+                  <tr key={idx} className="hover:bg-white/[0.02] transition-colors group">
+                    <td className="px-1 sm:px-6 py-3 font-mono text-[9px] sm:text-[11px] text-zinc-400 truncate">{order.id}</td>
+                    <td className="px-1 sm:px-6 py-3 overflow-hidden">
+                      <div className="flex items-center gap-1 sm:gap-3">
+                        <div className="w-5 h-5 sm:w-10 sm:h-10 rounded-md sm:rounded-xl bg-zinc-900 border border-white/10 overflow-hidden flex-shrink-0 hidden xs:block">
+                          {order.img ? (
+                            <img src={order.img} alt="Product" className="w-full h-full object-cover opacity-80" />
+                          ) : order.icon}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="text-[10px] sm:text-xs font-bold text-white truncate">{order.name}</span>
+                          <span className="text-[8px] sm:text-[9px] text-zinc-500 uppercase font-bold truncate">{order.type}</span>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-1 sm:px-6 py-3 text-center">
+                      <div className={`inline-flex items-center gap-0.5 sm:gap-2 px-1 sm:px-3 py-0.5 rounded-full border ${
+                        order.statusType === 'primary' ? 'bg-primary/10 border-primary/20' : 'bg-green-500/10 border-green-500/20'
+                      }`}>
+                        {order.statusType === 'primary' && <span className="w-0.5 h-0.5 sm:w-1.5 sm:h-1.5 rounded-full bg-primary animate-pulse"></span>}
+                        <span className={`text-[9px] sm:text-[10px] font-black uppercase tracking-tighter ${
+                          order.statusType === 'primary' ? 'text-primary' : 'text-green-500'
+                        }`}>{order.status}</span>
+                      </div>
+                    </td>
+                    <td className="px-1 sm:px-6 py-3 text-right">
+                      <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button className="p-1 sm:p-2 hover:bg-white/10 rounded-md sm:rounded-xl text-zinc-500 hover:text-white transition-all">
+                          <Share2 className="w-4 h-4" />
+                        </button>
+                        <button className="p-1 sm:p-2 hover:bg-white/10 rounded-md sm:rounded-xl text-zinc-500 hover:text-white transition-all">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
 

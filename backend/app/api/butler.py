@@ -27,12 +27,47 @@ class MinimaxChatRequest(BaseModel):
     butler_name: Optional[str] = "0Buck Butler"
 
 @router.post("/chat")
-async def proxy_minimax_chat(request: MinimaxChatRequest):
+async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(get_db)):
     """
-    Secure proxy for MiniMax API to avoid exposing API keys in frontend.
+    Unified AI Proxy: Uses MiniMax if configured, otherwise falls back to Google Gemini.
     """
     if not settings.MINIMAX_API_KEY:
-        raise HTTPException(status_code=500, detail="MINIMAX_API_KEY not configured")
+        # Fallback to Gemini 1.5 via ButlerService
+        service = ButlerService(db)
+        # Convert MiniMax request format to ButlerService format
+        # ButlerService.assemble_persona_prompt already handles system rules and memory
+        user_message = request.messages[-1]["content"] if request.messages else "Hello"
+        
+        # In a real scenario, we'd pass history to Gemini as well. 
+        # For this v3.4 fix, we use a simple call to Gemini to ensure availability.
+        try:
+            prompt = await service.assemble_persona_prompt(request.user_id or 1)
+            # Add current conversation context
+            chat_context = ""
+            for msg in request.messages[:-1]:
+                chat_context += f"{msg['role']}: {msg['content']}\n"
+            
+            full_prompt = f"{prompt}\n\nRecent History:\n{chat_context}\n\nUser: {user_message}\nButler:"
+            
+            import google.generativeai as genai
+            genai.configure(api_key=settings.GOOGLE_API_KEY)
+            model = genai.GenerativeModel('gemini-1.5-flash')
+            response = await model.generate_content_async(full_prompt)
+            content = response.text.strip()
+            
+            return {
+                "choices": [
+                    {
+                        "message": {
+                            "content": content,
+                            "role": "assistant"
+                        }
+                    }
+                ],
+                "model": "gemini-1.5-flash-fallback"
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Gemini Fallback Error: {str(e)}")
 
     url = "https://api.minimax.chat/v1/text/chatcompletion_v2"
     headers = {
