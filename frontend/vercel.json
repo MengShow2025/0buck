@@ -1,19 +1,11 @@
 {
-  "headers": [
-    {
-      "source": "/(.*)",
-      "headers": [
-        { "key": "X-Vercel-Config-Check", "value": "true" }
-      ]
-    }
-  ],
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "https://zerobuck-api.onrender.com/api/:path*"
+      "source": "/api/:match*",
+      "destination": "https://zerobuck-api.onrender.com/api/:match*"
     },
     {
-      "source": "/((?!api/).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]
