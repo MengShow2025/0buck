@@ -26,5 +26,5 @@ COPY . .
 EXPOSE 8000
 
 # Command to run the application
-# We use 0.0.0.0 to allow external connections in the container
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# We use the PORT environment variable provided by Railway, defaulting to 8000
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
