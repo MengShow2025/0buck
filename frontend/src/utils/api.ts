@@ -10,7 +10,9 @@ export const getApiUrl = (path: string): string => {
   // Production: Always use relative path to leverage Vercel Proxy
   const isProd = import.meta.env.PROD;
   if (isProd) {
-    return normalizedPath.startsWith('/api') ? normalizedPath : `/api${normalizedPath}`;
+    const base = 'https://zerobuck-api.onrender.com/api';
+    const subPath = normalizedPath.startsWith('/api') ? normalizedPath.substring(4) : normalizedPath;
+    return `${base}${subPath}`;
   }
 
   // Development: Use VITE_BACKEND_URL if available
