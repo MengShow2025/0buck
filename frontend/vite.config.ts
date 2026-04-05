@@ -8,7 +8,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react(), tailwindcss()],
     define: {
-      'process.env': env,
+      'process.env': env, // Vercel handles env injection differently, but for Vite 6 we need this
     },
     resolve: {
       alias: {

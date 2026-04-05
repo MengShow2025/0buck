@@ -26,7 +26,7 @@ import { useDeviceType } from './hooks/useDeviceType';
 import { useTranslation } from 'react-i18next';
 import { Attachment } from 'stream-chat-react';
 
-import 'stream-chat-react/dist/css/index.css';
+import 'stream-chat-react/dist/css/v2/index.css';
 import BAPAttachmentRenderer from './components/BAPAttachmentRenderer';
 import { useStreamVCC } from './hooks/useStreamVCC';
 
