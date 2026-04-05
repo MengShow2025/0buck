@@ -39,12 +39,14 @@ class PersonalizedMatrixService:
         # 1. Fetch Top 3 LTM facts to use as search query
         facts = []
         try:
+            # Check if UserMemoryFact table exists and query it
             facts = self.db.query(UserMemoryFact).filter(
                 UserMemoryFact.user_id == user_id,
                 UserMemoryFact.is_archived == False
             ).order_by(UserMemoryFact.confidence.desc()).limit(3).all()
         except Exception as e:
-            logger.error(f"Failed to fetch user facts: {e}")
+            # If table is missing or query fails, just log and continue with empty facts
+            logger.warning(f"LTM Memory facts unavailable (table may be missing): {e}")
             facts = []
 
         search_query = " ".join([f"{f.key}: {f.value}" for f in facts]) if facts else "popular trending products"

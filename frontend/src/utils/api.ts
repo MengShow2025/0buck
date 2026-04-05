@@ -7,18 +7,21 @@ export const getApiUrl = (path: string): string => {
   // Ensure path starts with a slash
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   
-  // v3.4.6: Leverage Vercel Proxy (configured in vercel.json) for both Prod and Dev
-  // This avoids CORS issues entirely and simplifies deployment.
+  // v3.4.6: In production/Vercel, we MUST use relative paths to leverage the proxy.
+  // This bypasses CORS and ensures all requests go through the same origin.
+  if (import.meta.env.PROD) {
+    return normalizedPath.startsWith('/api') ? normalizedPath : `/api${normalizedPath}`;
+  }
+
+  // Development: Use VITE_BACKEND_URL if provided
   const backendUrl = (import.meta as any).env?.VITE_BACKEND_URL || '';
-  
   if (backendUrl) {
-    // Development: Use VITE_BACKEND_URL if provided
     if (backendUrl.endsWith('/api') && normalizedPath.startsWith('/api')) {
       return `${backendUrl}${normalizedPath.substring(4)}`;
     }
     return `${backendUrl}${normalizedPath.startsWith('/api') ? normalizedPath : `/api${normalizedPath}`}`;
   }
 
-  // Production or Fallback: Always use relative path to leverage Vercel Proxy
+  // Local Fallback
   return normalizedPath.startsWith('/api') ? normalizedPath : `/api${normalizedPath}`;
 };
