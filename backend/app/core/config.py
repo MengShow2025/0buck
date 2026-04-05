@@ -46,7 +46,16 @@ class Settings(BaseSettings):
     STREAM_API_KEY: str = os.getenv("STREAM_API_KEY", "")
     STREAM_API_SECRET: str = os.getenv("STREAM_API_SECRET", "")
 
-    # WhatsApp Business API
+    # OAuth
+    GOOGLE_CLIENT_ID: str = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET: str = os.getenv("GOOGLE_CLIENT_SECRET", "")
+    APPLE_CLIENT_ID: str = os.getenv("APPLE_CLIENT_ID", "")
+    APPLE_CLIENT_SECRET: str = os.getenv("APPLE_CLIENT_SECRET", "")
+    FACEBOOK_CLIENT_ID: str = os.getenv("FACEBOOK_CLIENT_ID", "")
+    FACEBOOK_CLIENT_SECRET: str = os.getenv("FACEBOOK_CLIENT_SECRET", "")
+    
+    # Session Secret
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "0buck_default_secret_key_for_sessions_32")
     WHATSAPP_API_TOKEN: str = os.getenv("WHATSAPP_API_TOKEN", "")
     WHATSAPP_PHONE_NUMBER_ID: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
     WHATSAPP_VERIFY_TOKEN: str = os.getenv("WHATSAPP_VERIFY_TOKEN", "0buck_verify_token")

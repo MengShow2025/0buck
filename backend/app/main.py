@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, Request, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
@@ -17,6 +18,7 @@ from app.api.butler import router as butler_router
 from app.api.rewards import router as rewards_router
 from app.api.products import router as products_router
 from app.api.stream import router as stream_router
+from app.api.auth import router as auth_router
 from app.services.rewards import RewardsService
 from app.services.stream_chat import stream_chat_service
 
@@ -40,6 +42,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 # API Router
 api_router = APIRouter(prefix=settings.API_V1_STR)
@@ -117,6 +120,7 @@ app.include_router(butler_router, prefix=f"{settings.API_V1_STR}/butler", tags=[
 app.include_router(rewards_router, prefix=f"{settings.API_V1_STR}/rewards", tags=["rewards"])
 app.include_router(products_router, prefix=f"{settings.API_V1_STR}/products", tags=["products"])
 app.include_router(stream_router, prefix=f"{settings.API_V1_STR}/stream", tags=["stream"])
+app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(proxy_router, prefix=f"{settings.API_V1_STR}/checkin", tags=["checkin"])
 
 # Serve static files from React build

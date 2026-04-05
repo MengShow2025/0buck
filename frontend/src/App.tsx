@@ -30,9 +30,9 @@ import 'stream-chat-react/dist/css/v2/index.css';
 import BAPAttachmentRenderer from './components/BAPAttachmentRenderer';
 import { useStreamVCC } from './hooks/useStreamVCC';
 
-export default import { getApiUrl } from './utils/api';
+import { getApiUrl } from './utils/api';
 
-function App() {
+export default function App() {
   const { t } = useTranslation();
   const deviceType = useDeviceType();
   const [showWelcome, setShowWelcome] = useState(true);
@@ -54,6 +54,19 @@ function App() {
   const [isUserTyping, setIsUserTyping] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
+  // v3.4.4: Handle OAuth Callback Redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const authSuccess = params.get('auth_success');
+    const email = params.get('email');
+    
+    if (authSuccess === 'true' && email) {
+      // Clear URL params
+      window.history.replaceState({}, document.title, window.location.pathname);
+      handleLogin(email);
+    }
+  }, []);
+  
   // v3.4.3: useStreamVCC Hook for lazy initialization
   const { chatClient, isChatReady, isConnecting, connect, disconnect } = useStreamVCC(isAuthenticated, currentUser);
 
@@ -73,6 +86,14 @@ function App() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedMerchant, setSelectedMerchant] = useState<any>(null);
   const [agentName, setAgentName] = useState(() => localStorage.getItem('butlerName') || '');
+
+  useEffect(() => {
+    const handleNameChange = () => {
+      setAgentName(localStorage.getItem('butlerName') || '');
+    };
+    window.addEventListener('butlerNameChanged', handleNameChange);
+    return () => window.removeEventListener('butlerNameChanged', handleNameChange);
+  }, []);
   const [previousView, setPreviousView] = useState<ViewType>('prime');
 
   // Sync cart to localStorage
@@ -271,6 +292,7 @@ function App() {
           isChatReady={isChatReady}
           isConnecting={isConnecting}
           BAPCustomAttachment={BAPCustomAttachment}
+          onRetry={connect}
         />;
       case 'product-detail':
         return selectedProduct ? (
@@ -341,7 +363,7 @@ function App() {
       case 'chat':
         return (
           <AIButlerView 
-            agentName={agentDisplayName} 
+            agentName={agentName} 
             userId={currentUser?.id}
             currentUser={currentUser}
             onProductClick={(product) => {
@@ -396,6 +418,7 @@ function App() {
             isConnecting={isConnecting}
             BAPCustomAttachment={BAPCustomAttachment}
             currentUser={currentUser}
+            onRetry={connect}
           />
         );
       case 'contacts':

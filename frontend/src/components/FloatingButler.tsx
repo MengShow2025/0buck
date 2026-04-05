@@ -144,12 +144,14 @@ export default function FloatingButler({ onProductClick }: { onProductClick?: (p
     if (!valueToSend.trim()) return;
 
     if (!butlerName) {
-      setButlerName(valueToSend.trim());
-      localStorage.setItem('butlerName', valueToSend.trim());
+      const newName = valueToSend.trim();
+      setButlerName(newName);
+      localStorage.setItem('butlerName', newName);
+      window.dispatchEvent(new Event('butlerNameChanged'));
       setMessages([{
         id: Date.now().toString(),
         type: 'assistant',
-        content: `Great! My name is ${valueToSend.trim()}. How can I assist you today?`
+        content: `Great! My name is ${newName}. How can I assist you today?`
       }]);
       setInputValue('');
       return;

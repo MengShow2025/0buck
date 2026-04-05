@@ -146,8 +146,10 @@ export default function AIButlerView({ agentName, userId, currentUser, onProduct
     if (!inputValue.trim()) return;
 
     if (isNaming) {
-      setButlerName(inputValue.trim());
-      localStorage.setItem('butlerName', inputValue.trim());
+      const newName = inputValue.trim();
+      setButlerName(newName);
+      localStorage.setItem('butlerName', newName);
+      window.dispatchEvent(new Event('butlerNameChanged'));
       setIsNaming(false);
       setInputValue('');
       return;

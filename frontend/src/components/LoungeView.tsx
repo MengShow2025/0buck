@@ -58,6 +58,7 @@ interface LoungeViewProps {
   isConnecting?: boolean;
   BAPCustomAttachment?: any;
   currentUser?: any;
+  onRetry?: () => void;
 }
 
 const ALL_MEMBERS = Array.from({ length: 50 }, (_, i) => ({
@@ -129,7 +130,8 @@ export default function LoungeView({
   isChatReady,
   isConnecting,
   BAPCustomAttachment,
-  currentUser
+  currentUser,
+  onRetry
 }: LoungeViewProps) {
   const { t } = useTranslation();
   const [isAlertExpanded, setIsAlertExpanded] = useState(true);
@@ -459,7 +461,11 @@ export default function LoungeView({
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center p-4 lg:p-10 relative overflow-hidden bg-black h-screen">
-      <StreamGuard isReady={isChatReady || false} isConnecting={isConnecting || false}>
+      <StreamGuard 
+        isReady={isChatReady || false} 
+        isConnecting={isConnecting || false}
+        onRetry={onRetry}
+      >
         <style>{`
         .glass-panel { background: rgba(10, 10, 10, 0.7); backdrop-filter: blur(80px); -webkit-backdrop-filter: blur(80px); }
         .no-scrollbar::-webkit-scrollbar { display: none; }

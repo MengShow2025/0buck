@@ -96,8 +96,9 @@ interface SquareViewProps {
   onProductClick?: (product: any) => void;
   chatClient?: any;
   isChatReady?: boolean;
-  isConnecting?: boolean; // Add this
+  isConnecting?: boolean; 
   BAPCustomAttachment?: any;
+  onRetry?: () => void;
 }
 
 export default function SquareView({ 
@@ -106,8 +107,9 @@ export default function SquareView({
   onProductClick,
   chatClient,
   isChatReady,
-  isConnecting, // Add this
-  BAPCustomAttachment
+  isConnecting, 
+  BAPCustomAttachment,
+  onRetry
 }: SquareViewProps) {
   const { t } = useTranslation();
   const [currentPage, setCurrentPage] = useState(1);
@@ -154,7 +156,11 @@ export default function SquareView({
 
   return (
     <div className="flex flex-col">
-      <StreamGuard isReady={isChatReady || false} isConnecting={isConnecting || false}>
+      <StreamGuard 
+        isReady={isChatReady || false} 
+        isConnecting={isConnecting || false}
+        onRetry={onRetry}
+      >
         <style>{`
         .ticker-scroll {
           animation: ticker 30s linear infinite;

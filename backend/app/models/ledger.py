@@ -121,7 +121,7 @@ class AISession(Base):
     __tablename__ = "ai_sessions"
 
     session_id = Column(String, primary_key=True, index=True)
-    user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=True)
+    user_id = Column(String, index=True, nullable=True) # v3.4: Changed to String to support Guest IDs
     metadata_json = Column(JSON, default={})
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

@@ -72,22 +72,24 @@ export default function MeView({
 
   const isAgentNameDirty = useMemo(() => draftAgentName.trim() !== agentName.trim(), [agentName, draftAgentName]);
 
-  const FlipDigit = ({ value, color = "text-white" }: { value: string | number, color?: string }) => (
-    <div className="relative overflow-hidden flex flex-col items-center">
-      <AnimatePresence mode="popLayout">
-        <motion.div
-          key={value}
-          initial={{ y: 20, opacity: 0, rotateX: -90 }}
-          animate={{ y: 0, opacity: 1, rotateX: 0 }}
-          exit={{ y: -20, opacity: 0, rotateX: 90 }}
-          transition={{ duration: 0.4, ease: [0.23, 1, 0.32, 1] }}
-          className={`flip-card text-3xl font-headline font-black px-2 py-1 bg-zinc-900 rounded-lg border border-white/5 shadow-inner ${color}`}
-        >
-          {value}
-        </motion.div>
-      </AnimatePresence>
-    </div>
-  );
+  const FlipDigit = useMemo(() => {
+    return ({ value, color = "text-white" }: { value: string | number, color?: string }) => (
+      <div className="relative w-7 sm:w-10 h-10 sm:h-14 overflow-hidden">
+        <AnimatePresence mode="popLayout">
+          <motion.div
+            key={value}
+            initial={{ y: "100%", opacity: 0, rotateX: -90 }}
+            animate={{ y: "0%", opacity: 1, rotateX: 0 }}
+            exit={{ y: "-100%", opacity: 0, rotateX: 90 }}
+            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
+            className={`absolute inset-0 flex items-center justify-center text-3xl sm:text-4xl font-headline font-black bg-zinc-900 rounded-lg border border-white/5 shadow-inner ${color}`}
+          >
+            {value}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    );
+  }, []);
 
   useEffect(() => {
     setDraftAgentName(agentName);

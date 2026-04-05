@@ -62,15 +62,24 @@ export default function LoginView({ onLogin, onGoRegister, onGuestAccess, onInte
         <p className="text-white/40 text-sm mb-8">Select authentication method to access the ledger.</p>
         
         <div className="grid grid-cols-3 gap-3 mb-8">
-          <button className="flex flex-col items-center justify-center py-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all active:scale-95 group/btn">
+          <button 
+            onClick={() => window.location.href = `${(import.meta as any).env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/v1/auth/login/google`}
+            className="flex flex-col items-center justify-center py-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all active:scale-95 group/btn"
+          >
             <Chrome className="w-6 h-6 mb-2 text-white/60 group-hover/btn:text-white transition-colors" />
             <span className="text-[10px] font-bold uppercase tracking-wider text-white/60 group-hover/btn:text-white">Google</span>
           </button>
-          <button className="flex flex-col items-center justify-center py-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all active:scale-95 group/btn">
+          <button 
+            onClick={() => window.location.href = `${(import.meta as any).env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/v1/auth/login/apple`}
+            className="flex flex-col items-center justify-center py-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all active:scale-95 group/btn"
+          >
             <Apple className="w-6 h-6 mb-2 text-white/60 group-hover/btn:text-white transition-colors" />
             <span className="text-[10px] font-bold uppercase tracking-wider text-white/60 group-hover/btn:text-white">Apple</span>
           </button>
-          <button className="flex flex-col items-center justify-center py-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all active:scale-95 group/btn">
+          <button 
+            onClick={() => window.location.href = `${(import.meta as any).env.VITE_BACKEND_URL || 'http://localhost:8000'}/api/v1/auth/login/facebook`}
+            className="flex flex-col items-center justify-center py-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 hover:border-white/20 transition-all active:scale-95 group/btn"
+          >
             <Facebook className="w-6 h-6 mb-2 text-white/60 group-hover/btn:text-white transition-colors" />
             <span className="text-[10px] font-bold uppercase tracking-wider text-white/60 group-hover/btn:text-white">Meta</span>
           </button>
