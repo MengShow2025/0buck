@@ -5,7 +5,7 @@ from app.services.rewards import RewardsService
 from app.services.supply_chain import SupplyChainService
 from app.services.agent import run_agent
 from app.services.whatsapp import send_whatsapp_message
-from app.models.ledger import SystemConfig, Order
+from app.models.ledger import SystemConfig, Order, ProcessedWebhookEvent
 from app.models.product import Product
 import hmac
 import hashlib
@@ -257,6 +257,24 @@ async def receive_whatsapp_webhook(
         value = change.get("value", {})
         message_data = value.get("messages", [])[0]
         
+        msg_id = message_data.get("id")
+        # Idempotency Check
+        if msg_id:
+            existing = db.query(ProcessedWebhookEvent).filter_by(event_id=msg_id, provider="whatsapp").first()
+            if existing:
+                print(f"Skipping duplicate WhatsApp message: {msg_id}")
+                return {"status": "skipped", "reason": "duplicate"}
+            
+            # Record it
+            try:
+                new_event = ProcessedWebhookEvent(event_id=msg_id, provider="whatsapp")
+                db.add(new_event)
+                db.commit()
+            except Exception as e:
+                db.rollback()
+                print(f"Conflict recording WhatsApp event {msg_id}: {e}")
+                return {"status": "skipped", "reason": "conflict"}
+
         sender_id = message_data.get("from") # User's WhatsApp ID
         message_text = message_data.get("text", {}).get("body", "")
         

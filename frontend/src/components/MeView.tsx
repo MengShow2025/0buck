@@ -4,7 +4,7 @@ import { useTheme } from '../context/ThemeContext';
 import { 
   Terminal, ShieldCheck, Wallet, Star, HelpCircle, Info,
   Calendar, TrendingUp, History, Share2, Eye, Settings,
-  Shield, Lock, Globe, Book, LogOut, User, ChevronRight,
+  Shield, Lock, Globe, Book, LogOut, User, ChevronRight, ChevronDown, X,
   Sparkles, ArrowRight, Bell, MessageSquare, Users, Mail,
   Palette, Smartphone, EyeOff, Trash2, Menu
 } from 'lucide-react';
@@ -21,6 +21,9 @@ const LANGUAGES = [
   { code: 'ar', name: 'العربية', flag: '🇸🇦' },
   { code: 'ja', name: '日本語', flag: '🇯🇵' },
   { code: 'ko', name: '한국어', flag: '🇰🇷' },
+  { code: 'th', name: 'ไทย', flag: '🇹🇭' },
+  { code: 'ms', name: 'Bahasa Melayu', flag: '🇲🇾' },
+  { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
 ];
 
 export default function MeView({ 
@@ -44,6 +47,9 @@ export default function MeView({
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === 'dark';
   const [showSettings, setShowSettings] = useState(false);
+  const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
+  const [showModelDropdown, setShowModelDropdown] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState<'points' | 'renewal' | 'rewards' | null>(null);
   const [draftAgentName, setDraftAgentName] = useState(agentName);
   const [useByok, setUseByok] = useState(false);
   const isAgentNameDirty = useMemo(() => draftAgentName.trim() !== agentName.trim(), [agentName, draftAgentName]);
@@ -172,8 +178,12 @@ export default function MeView({
                 <span className="px-2 py-1 bg-green-500/10 text-green-500 text-[10px] font-black rounded uppercase">USD</span>
               </div>
               <div className="flex gap-2">
-                <button className="flex-1 py-2.5 bg-white/5 border border-white/5 hover:border-primary/50 transition-all rounded-xl text-xs font-bold text-zinc-300">{t('me.view_details')}</button>
-                <button className="px-4 py-2.5 bg-white/5 border border-white/5 hover:bg-white/10 transition-all rounded-xl">
+                <button className="flex-1 py-2.5 bg-white/5 border border-white/5 hover:border-primary/50 transition-all rounded-xl text-[11px] sm:text-[10px] font-black text-zinc-300 uppercase tracking-widest">{t('me.details')}</button>
+                <button className="flex-1 py-2.5 bg-white/5 border border-white/5 hover:border-primary/50 transition-all rounded-xl text-[11px] sm:text-[10px] font-black text-zinc-300 uppercase tracking-widest">{t('me.withdraw')}</button>
+                <button 
+                  onClick={() => setShowRulesModal('renewal')}
+                  className="px-4 py-2.5 bg-white/5 border border-white/5 hover:bg-white/10 transition-all rounded-xl"
+                >
                   <HelpCircle className="w-4 h-4 text-zinc-500" />
                 </button>
               </div>
@@ -194,8 +204,12 @@ export default function MeView({
                 <span className="px-2 py-1 bg-primary/10 text-primary text-[10px] font-black rounded uppercase">Tier 1</span>
               </div>
               <div className="flex gap-2">
-                <button className="flex-1 py-2.5 bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all rounded-xl text-xs font-bold text-primary">{t('me.rules_multipliers')}</button>
-                <button className="px-4 py-2.5 bg-white/5 border border-white/5 hover:bg-white/10 transition-all rounded-xl">
+                <button className="flex-1 py-2.5 bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all rounded-xl text-[11px] sm:text-[10px] font-black text-primary uppercase tracking-widest">{t('me.details')}</button>
+                <button className="flex-1 py-2.5 bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all rounded-xl text-[11px] sm:text-[10px] font-black text-primary uppercase tracking-widest">{t('me.redeem')}</button>
+                <button 
+                  onClick={() => setShowRulesModal('points')}
+                  className="px-4 py-2.5 bg-white/5 border border-white/5 hover:bg-white/10 transition-all rounded-xl"
+                >
                   <Info className="w-4 h-4 text-zinc-500" />
                 </button>
               </div>
@@ -243,24 +257,24 @@ export default function MeView({
                   <div className="flex gap-2">
                     <div className="flex flex-col items-center">
                       <div className="flex gap-1">
-                        <div className="flip-card text-2xl text-white">0</div>
-                        <div className="flip-card text-2xl text-white">4</div>
+                        <div className="flip-card text-sm text-white">0</div>
+                        <div className="flip-card text-sm text-white">4</div>
                       </div>
                       <span className="text-[8px] font-black text-zinc-600 uppercase mt-1 tracking-widest">{t('me.days')}</span>
                     </div>
-                    <div className="text-2xl text-zinc-700 pt-1">:</div>
+                    <div className="text-xl text-zinc-700 pt-1">:</div>
                     <div className="flex flex-col items-center">
                       <div className="flex gap-1">
-                        <div className="flip-card text-2xl text-white">1</div>
-                        <div className="flip-card text-2xl text-white">8</div>
+                        <div className="flip-card text-sm text-white">1</div>
+                        <div className="flip-card text-sm text-white">8</div>
                       </div>
                       <span className="text-[8px] font-black text-zinc-600 uppercase mt-1 tracking-widest">{t('me.hrs')}</span>
                     </div>
-                    <div className="text-2xl text-zinc-700 pt-1">:</div>
+                    <div className="text-xl text-zinc-700 pt-1">:</div>
                     <div className="flex flex-col items-center">
                       <div className="flex gap-1">
-                        <div className="flip-card text-2xl text-primary">5</div>
-                        <div className="flip-card text-2xl text-primary">2</div>
+                        <div className="flip-card text-sm text-primary">5</div>
+                        <div className="flip-card text-sm text-primary">2</div>
                       </div>
                       <span className="text-[8px] font-black text-zinc-600 uppercase mt-1 tracking-widest">{t('me.min')}</span>
                     </div>
@@ -271,16 +285,28 @@ export default function MeView({
               {/* Right: Rewards & Metrics */}
               <div className="lg:col-span-7 flex flex-col justify-between">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="p-6 bg-white/5 rounded-3xl border border-white/5">
+                  <div className="p-6 bg-white/5 rounded-3xl border border-white/5 relative group">
+                    <button 
+                      onClick={() => setShowRulesModal('rewards')}
+                      className="absolute top-4 right-4 p-1 hover:bg-white/5 rounded-full text-zinc-500 hover:text-white transition-colors"
+                    >
+                      <Info className="w-4 h-4" />
+                    </button>
                     <p className="text-[10px] text-zinc-500 uppercase font-black tracking-widest mb-1">{t('me.potential_reward')}</p>
-                    <p className="text-3xl font-black text-white">$45.00</p>
-                    <button className="mt-4 w-full py-2.5 bg-primary text-white rounded-xl text-xs font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20">
-                      {t('me.claim_now')}
+                    <p className="text-sm font-black text-white">$45.00</p>
+                    <button className="mt-4 w-full py-2 bg-primary text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20">
+                      {t('me.signin')}
                     </button>
                   </div>
-                  <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10">
+                  <div className="p-6 bg-primary/5 rounded-3xl border border-primary/10 relative group">
+                    <button 
+                      onClick={() => setShowRulesModal('rewards')}
+                      className="absolute top-4 right-4 p-1 hover:bg-primary/10 rounded-full text-zinc-500 hover:text-primary transition-colors"
+                    >
+                      <Info className="w-4 h-4" />
+                    </button>
                     <p className="text-[10px] text-primary uppercase font-black tracking-widest mb-1">{t('me.total_reclaimed')}</p>
-                    <p className="text-3xl font-black text-white">$1,240.65</p>
+                    <p className="text-sm font-black text-white">$1,240.65</p>
                     <div className="mt-4 flex items-center gap-2 text-green-500">
                       <TrendingUp className="w-4 h-4" />
                       <span className="text-[10px] font-bold tracking-widest uppercase">{t('me.vs_phase')}</span>
@@ -309,90 +335,6 @@ export default function MeView({
           </div>
         </section>
 
-        {/* Order History Table */}
-        <section className="glass-panel rounded-[2.5rem] overflow-hidden mt-8">
-          <div className="p-6 flex justify-between items-center border-b border-white/5 bg-black/20">
-            <div className="flex items-center gap-3">
-              <History className="w-5 h-5 text-primary" />
-              <h3 className="font-headline font-bold text-white uppercase tracking-widest text-sm">{t('me.order_logs')}</h3>
-            </div>
-            <button className="text-[10px] font-black text-zinc-500 hover:text-white uppercase tracking-[0.2em] transition-colors">{t('me.export_logs')}</button>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-black/40">
-                <tr>
-                  <th className="px-1.5 sm:px-6 py-3 text-[7px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter sm:tracking-widest whitespace-nowrap">{t('me.hash_id')}</th>
-                  <th className="px-1.5 sm:px-6 py-3 text-[7px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter sm:tracking-widest whitespace-nowrap">{t('me.product')}</th>
-                  <th className="px-1.5 sm:px-6 py-3 text-[7px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter sm:tracking-widest text-center whitespace-nowrap">{t('me.status')}</th>
-                  <th className="px-1.5 sm:px-6 py-3 text-[7px] sm:text-[10px] font-black text-zinc-500 uppercase tracking-tighter sm:tracking-widest text-right whitespace-nowrap">{t('me.actions')}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                <tr className="hover:bg-white/[0.02] transition-colors group">
-                  <td className="px-1.5 sm:px-6 py-3 font-mono text-[7px] sm:text-[11px] text-zinc-400 whitespace-nowrap">0x892...fA2</td>
-                  <td className="px-1.5 sm:px-6 py-3">
-                    <div className="flex items-center gap-1 sm:gap-3">
-                      <div className="w-5 h-5 sm:w-10 sm:h-10 rounded-md sm:rounded-xl bg-zinc-900 border border-white/10 overflow-hidden flex-shrink-0">
-                        <img src="https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop" className="w-full h-full object-cover opacity-80" alt="Product" />
-                      </div>
-                      <div className="flex items-center gap-1 min-w-0 whitespace-nowrap">
-                        <span className="text-[8px] sm:text-xs font-bold text-white truncate max-w-[45px] sm:max-w-none">Neural Key V2</span>
-                        <span className="hidden sm:inline text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Hardware</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-1.5 sm:px-6 py-3 text-center">
-                    <div className="inline-flex items-center gap-1 px-1 sm:px-3 py-0.5 bg-primary/10 rounded-full border border-primary/20 whitespace-nowrap">
-                      <span className="w-0.5 h-0.5 sm:w-1.5 sm:h-1.5 rounded-full bg-primary animate-pulse"></span>
-                      <span className="text-[7px] sm:text-[10px] font-black text-primary uppercase tracking-tighter sm:tracking-widest">In Transit</span>
-                    </div>
-                  </td>
-                  <td className="px-1.5 sm:px-6 py-3 text-right">
-                    <div className="flex justify-end gap-0.5 sm:gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-1 sm:p-2 hover:bg-white/10 rounded-md sm:rounded-xl text-zinc-500 hover:text-white transition-all">
-                        <Share2 className="w-3 h-3 sm:w-4 h-4" />
-                      </button>
-                      <button className="p-1 sm:p-2 hover:bg-white/10 rounded-md sm:rounded-xl text-zinc-500 hover:text-white transition-all">
-                        <Eye className="w-3 h-3 sm:w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-                <tr className="hover:bg-white/[0.02] transition-colors group">
-                  <td className="px-1.5 sm:px-6 py-3 font-mono text-[7px] sm:text-[11px] text-zinc-400 whitespace-nowrap">0x110...dB5</td>
-                  <td className="px-1.5 sm:px-6 py-3">
-                    <div className="flex items-center gap-1 sm:gap-3">
-                      <div className="w-5 h-5 sm:w-10 sm:h-10 rounded-md sm:rounded-xl bg-zinc-900 border border-white/10 overflow-hidden flex items-center justify-center flex-shrink-0">
-                        <Globe className="w-3 h-3 sm:w-5 h-5 text-zinc-600" />
-                      </div>
-                      <div className="flex items-center gap-1 min-w-0 whitespace-nowrap">
-                        <span className="text-[8px] sm:text-xs font-bold text-white truncate max-w-[45px] sm:max-w-none">Cloud Node 1yr</span>
-                        <span className="hidden sm:inline text-[9px] text-zinc-500 uppercase font-bold tracking-widest">Service</span>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-1.5 sm:px-6 py-3 text-center">
-                    <div className="inline-flex items-center gap-1 px-1 sm:px-3 py-0.5 bg-green-500/10 rounded-full border border-green-500/20 whitespace-nowrap">
-                      <span className="text-[7px] sm:text-[10px] font-black text-green-500 uppercase tracking-tighter sm:tracking-widest">Delivered</span>
-                    </div>
-                  </td>
-                  <td className="px-1.5 sm:px-6 py-3 text-right">
-                    <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button className="p-2 hover:bg-white/10 rounded-xl text-zinc-500 hover:text-white transition-all">
-                        <Share2 className="w-4 h-4" />
-                      </button>
-                      <button className="p-2 hover:bg-white/10 rounded-xl text-zinc-500 hover:text-white transition-all">
-                        <Eye className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
         {/* Settings List */}
         <section className="glass-panel rounded-[2.5rem] overflow-hidden mt-8">
           <div className="flex flex-col">
@@ -414,18 +356,48 @@ export default function MeView({
               <div className="p-6 bg-black/40 border-b border-white/5">
                 <div className="space-y-8">
                   {/* Language Setting */}
-                  <div className="flex items-center justify-between px-2">
+                  <div className="flex items-center justify-between px-2 py-1">
                     <div className="flex flex-col">
-                      <span className="text-[11px] font-black text-white uppercase tracking-widest">{t('settings.appearance')} / Language</span>
-                      <span className="text-[10px] font-bold text-zinc-500 tracking-tight">Active: {LANGUAGES.find(l => l.code === i18n.language)?.name}</span>
+                      <span className="text-xs sm:text-[11px] font-black text-white uppercase tracking-widest">{t('settings.appearance')} / Language</span>
+                      <span className="text-[10px] font-bold text-zinc-500 tracking-tight opacity-80">Active: {LANGUAGES.find(l => l.code === i18n.language)?.name}</span>
                     </div>
-                    <select 
-                      value={i18n.language}
-                      onChange={(e) => i18n.changeLanguage(e.target.value)}
-                      className="bg-white/5 border-none rounded-xl px-3 py-1.5 text-[10px] font-black text-primary outline-none focus:ring-2 focus:ring-primary/20"
-                    >
-                      {LANGUAGES.map(l => <option key={l.code} value={l.code} className="bg-zinc-900 text-white">{l.flag} {l.name}</option>)}
-                    </select>
+                    <div className="relative">
+                      <button 
+                        onClick={() => setShowLanguageDropdown(!showLanguageDropdown)}
+                        className="bg-white/10 border border-white/10 rounded-xl px-6 py-4 pr-10 text-[16px] sm:text-[10px] font-bold text-primary outline-none hover:bg-white/15 transition-all min-w-[160px] text-center flex items-center justify-center gap-2"
+                      >
+                        <span>{LANGUAGES.find(l => l.code === i18n.language)?.flag}</span>
+                        <span>{LANGUAGES.find(l => l.code === i18n.language)?.name}</span>
+                      </button>
+                      <ChevronDown className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-primary pointer-events-none transition-transform ${showLanguageDropdown ? 'rotate-180' : ''}`} />
+
+                      {showLanguageDropdown && (
+                        <>
+                          <div className="fixed inset-0 z-[110]" onClick={() => setShowLanguageDropdown(false)}></div>
+                          <div className="absolute right-0 top-full mt-2 w-full min-w-[180px] max-h-[300px] overflow-y-auto glass-panel rounded-2xl border-white/10 shadow-2xl z-[120] animate-in fade-in slide-in-from-top-2 duration-200 scroll-hide">
+                            <div className="p-2 space-y-1">
+                              {LANGUAGES.map((lang) => (
+                                <button
+                                  key={lang.code}
+                                  onClick={() => {
+                                    i18n.changeLanguage(lang.code);
+                                    setShowLanguageDropdown(false);
+                                  }}
+                                  className={`w-full flex items-center gap-3 px-4 py-3.5 rounded-xl transition-all text-left ${
+                                    i18n.language === lang.code 
+                                      ? 'bg-primary/20 text-primary border border-primary/20' 
+                                      : 'hover:bg-white/5 text-zinc-300'
+                                  }`}
+                                >
+                                  <span className="text-xl">{lang.flag}</span>
+                                  <span className="text-[16px] sm:text-xs font-bold tracking-tight">{lang.name}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   </div>
 
                   {/* Butler Settings */}
@@ -477,13 +449,32 @@ export default function MeView({
 
                     {useByok && (
                       <div className="space-y-3 pt-2">
-                        <div className="space-y-1.5">
+                        <div className="space-y-1.5 relative">
                           <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 tracking-widest">{t('settings.model_endpoint')}</label>
-                          <select className="w-full h-11 px-4 rounded-xl bg-black/40 border border-white/10 text-sm font-bold text-white outline-none focus:border-primary appearance-none transition-all">
-                            <option className="bg-zinc-900">DeepSeek Chat (V3)</option>
-                            <option className="bg-zinc-900">GPT-4o (OpenAI)</option>
-                            <option className="bg-zinc-900">Claude 3.5 Sonnet</option>
-                          </select>
+                          <button 
+                            onClick={() => setShowModelDropdown(!showModelDropdown)}
+                            className="w-full h-11 px-4 rounded-xl bg-black/40 border border-white/10 text-base sm:text-sm font-bold text-white outline-none flex items-center justify-between hover:bg-black/60 transition-all"
+                          >
+                            <span>DeepSeek Chat (V3)</span>
+                            <ChevronDown className={`w-4 h-4 text-zinc-500 transition-transform ${showModelDropdown ? 'rotate-180' : ''}`} />
+                          </button>
+                          
+                          {showModelDropdown && (
+                            <>
+                              <div className="fixed inset-0 z-[110]" onClick={() => setShowModelDropdown(false)}></div>
+                              <div className="absolute left-0 top-full mt-1 w-full glass-panel rounded-xl border-white/10 shadow-2xl z-[120] p-1 space-y-1 overflow-hidden">
+                                {['DeepSeek Chat (V3)', 'GPT-4o (OpenAI)', 'Claude 3.5 Sonnet'].map((model) => (
+                                  <button
+                                    key={model}
+                                    onClick={() => setShowModelDropdown(false)}
+                                    className="w-full px-4 py-3 text-[16px] sm:text-sm font-bold text-left text-zinc-300 hover:bg-white/5 rounded-lg transition-colors"
+                                  >
+                                    {model}
+                                  </button>
+                                ))}
+                              </div>
+                            </>
+                          )}
                         </div>
                         <div className="space-y-1.5">
                           <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 tracking-widest">{t('settings.api_key')}</label>
@@ -579,6 +570,58 @@ export default function MeView({
           </div>
         </section>
       </div>
+
+      {/* Rules Modal */}
+      {showRulesModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowRulesModal(null)}></div>
+          <div className="relative w-full max-w-md glass-panel rounded-[2.5rem] p-8 border-white/10 shadow-2xl animate-in fade-in zoom-in duration-300">
+            <button 
+              onClick={() => setShowRulesModal(null)}
+              className="absolute top-6 right-6 p-2 hover:bg-white/5 rounded-full text-zinc-500 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="flex items-center gap-4 mb-8">
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                {showRulesModal === 'points' ? <Star className="w-6 h-6" /> : (showRulesModal === 'renewal' ? <ShieldCheck className="w-6 h-6" /> : <Info className="w-6 h-6" />)}
+              </div>
+              <div>
+                <h3 className="text-xl font-headline font-black text-white uppercase tracking-tight">
+                  {showRulesModal === 'points' ? t('me.points_rules_title') : (showRulesModal === 'renewal' ? t('me.renewal_rules_title') : t('me.rewards_rules_title'))}
+                </h3>
+                <p className="text-[10px] text-primary font-black uppercase tracking-[0.2em] mt-1">Industrial Protocol v3.4</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="p-6 bg-white/5 rounded-3xl border border-white/5">
+                <div className="space-y-4">
+                  {(showRulesModal === 'points' 
+                    ? t('me.points_rules_content') 
+                    : (showRulesModal === 'renewal' ? t('me.renewal_rules_content') : t('me.rewards_rules_content'))
+                  ).split('\n').map((line, i) => (
+                    <div key={i} className="flex gap-3">
+                      <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center border border-primary/20">
+                        {i + 1}
+                      </span>
+                      <p className="text-sm font-bold text-zinc-300 leading-relaxed">{line.replace(/^\d+\.\s*/, '')}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <button 
+                onClick={() => setShowRulesModal(null)}
+                className="w-full py-4 bg-primary text-white rounded-2xl font-black uppercase tracking-[0.2em] hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20"
+              >
+                {t('common.success')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

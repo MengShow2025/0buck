@@ -107,6 +107,16 @@ class UserStreamIdentity(Base):
     stream_token = Column(String(512))
     last_synced_at = Column(DateTime, default=func.now())
 
+class ProcessedWebhookEvent(Base):
+    """
+    v3.4 VCC: Generic Idempotency table for all incoming webhooks.
+    """
+    __tablename__ = "processed_webhook_events"
+
+    event_id = Column(String(100), primary_key=True) # Unique ID from provider (msg_id, order_id, etc.)
+    provider = Column(String(50), index=True) # 'stream', 'shopify', 'whatsapp'
+    processed_at = Column(DateTime, default=func.now())
+
 class AISession(Base):
     __tablename__ = "ai_sessions"
 

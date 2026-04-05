@@ -8,13 +8,11 @@ from app.db.session import get_db
 from app.services.stream_chat import stream_chat_service
 from app.services.agent import agent_executor
 from app.services.reflection_service import run_butler_learning
+from app.models.ledger import ProcessedWebhookEvent
 from langchain_core.messages import HumanMessage
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-
-# v3.4 VCC: Simple in-memory deduplication for webhooks (Use Redis in production)
-PROCESSED_MESSAGES = []
 
 @router.post("/webhook")
 async def stream_webhook(
@@ -41,15 +39,21 @@ async def stream_webhook(
         message = event.get("message", {})
         msg_id = message.get("id")
         
-        # v3.4 VCC: Deduplication Logic
-        if msg_id in PROCESSED_MESSAGES:
+        # v3.4 VCC: Idempotency check via Database
+        existing_event = db.query(ProcessedWebhookEvent).filter_by(event_id=msg_id, provider="stream").first()
+        if existing_event:
             logger.info(f"  [VCC Webhook] Skipping duplicate message: {msg_id}")
             return {"status": "skipped", "reason": "duplicate"}
         
-        PROCESSED_MESSAGES.append(msg_id)
-        # Keep the list size manageable
-        if len(PROCESSED_MESSAGES) > 1000:
-            PROCESSED_MESSAGES.pop(0)
+        # Mark as processed
+        try:
+            new_event = ProcessedWebhookEvent(event_id=msg_id, provider="stream")
+            db.add(new_event)
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logger.warning(f"  [VCC Webhook] Conflict or Error saving msg_id {msg_id}: {e}")
+            return {"status": "skipped", "reason": "processing_or_duplicate"}
 
         user = event.get("user", {})
         channel_id = event.get("channel_id")

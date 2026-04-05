@@ -9,7 +9,12 @@ interface WelcomeViewProps {
 
 export default function WelcomeView({ onEnter }: WelcomeViewProps) {
   const { t } = useTranslation();
-  const slogans = t('welcome.slogans', { returnObjects: true }) as string[];
+  const slogansData = t('welcome.slogans', { returnObjects: true });
+  const slogans = Array.isArray(slogansData) ? slogansData : [
+    "20-Phase Milestone Cashback",
+    "Supplier Penetration Pricing",
+    "Community Powered Growth"
+  ];
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {

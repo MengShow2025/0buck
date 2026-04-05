@@ -26,7 +26,7 @@ import { useDeviceType } from './hooks/useDeviceType';
 import { useTranslation } from 'react-i18next';
 import { Attachment } from 'stream-chat-react';
 
-import 'stream-chat-react/dist/css/v2/index.css';
+import 'stream-chat-react/dist/css/index.css';
 import BAPAttachmentRenderer from './components/BAPAttachmentRenderer';
 import { useStreamVCC } from './hooks/useStreamVCC';
 
@@ -34,25 +34,49 @@ export default function App() {
   const { t } = useTranslation();
   const deviceType = useDeviceType();
   const [showWelcome, setShowWelcome] = useState(true);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [currentUser, setCurrentUser] = useState<any>(null);
-  const [currentView, setCurrentView] = useState<ViewType>('login');
+  const [isAuthenticated, setIsAuthenticated] = useState(() => {
+    return localStorage.getItem('0buck_auth_state') === 'true';
+  });
+  const [currentUser, setCurrentUser] = useState<any>(() => {
+    const saved = localStorage.getItem('0buck_user');
+    try {
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [currentView, setCurrentView] = useState<ViewType>(() => {
+    const isAuth = localStorage.getItem('0buck_auth_state') === 'true';
+    return isAuth ? 'chat' : 'login';
+  });
   const [isUserTyping, setIsUserTyping] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
   // v3.4.3: useStreamVCC Hook for lazy initialization
   const { chatClient, isChatReady, isConnecting, connect, disconnect } = useStreamVCC(isAuthenticated, currentUser);
 
-  const [showAuthModal, setShowShowAuthModal] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [onAuthSuccess, setOnAuthSuccess] = useState<{ callback: () => void } | null>(null);
   const [securePayBackView, setSecurePayBackView] = useState<ViewType>('chat');
   const [securePayPayload, setSecurePayPayload] = useState<SecurePayPayload | null>(null);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [cartItems, setCartItems] = useState<CartItem[]>(() => {
+    const saved = localStorage.getItem('0buck_cart');
+    try {
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [selectedMerchant, setSelectedMerchant] = useState<any>(null);
-  const [agentName, setAgentName] = useState('');
+  const [agentName, setAgentName] = useState(() => localStorage.getItem('butlerName') || '');
   const [previousView, setPreviousView] = useState<ViewType>('prime');
+
+  // Sync cart to localStorage
+  useEffect(() => {
+    localStorage.setItem('0buck_cart', JSON.stringify(cartItems));
+  }, [cartItems]);
 
   // Lazy Initialization Trigger (v3.4.3)
   useEffect(() => {
@@ -110,6 +134,8 @@ export default function App() {
   const handleLogout = useCallback(() => {
     setIsAuthenticated(false);
     setCurrentUser(null);
+    localStorage.removeItem('0buck_auth_state');
+    localStorage.removeItem('0buck_user');
     setSecurePayPayload(null);
     setCartItems([]);
     setCurrentView('login');
@@ -120,7 +146,9 @@ export default function App() {
     const user = { id: email.replace(/[^a-zA-Z0-9]/g, '_'), email };
     setCurrentUser(user);
     setIsAuthenticated(true);
-    setShowShowAuthModal(false);
+    localStorage.setItem('0buck_auth_state', 'true');
+    localStorage.setItem('0buck_user', JSON.stringify(user));
+    setShowAuthModal(false);
     setCurrentView('chat');
     if (onAuthSuccess) {
       onAuthSuccess.callback();
@@ -134,7 +162,7 @@ export default function App() {
     } else {
       setOnAuthSuccess({ callback: action });
       setAuthMode('login');
-      setShowShowAuthModal(true);
+      setShowAuthModal(true);
     }
   }, [isAuthenticated]);
 
@@ -162,7 +190,7 @@ export default function App() {
                     quantity: params.quantity || 1,
                     referrer_id: message?.user?.id // v3.4.4: Pass message sender as referrer for distribution
                   });
-                  setSecurePayBackView(currentView); // Return to whichever social view we were insetSecurePayBackView(currentView);
+                  setSecurePayBackView(currentView); // Return to whichever social view we were in
                   setCurrentView('secure-pay');
                 });
               } else if (action === 'VIEW_PRODUCT') {
@@ -443,7 +471,7 @@ export default function App() {
       case 'me':
         return <MeView 
           isAuthenticated={isAuthenticated} 
-          onLoginClick={() => { setAuthMode('login'); setShowShowAuthModal(true); }} 
+          onLoginClick={() => { setAuthMode('login'); setShowAuthModal(true); }} 
           onLogout={handleLogout} 
           agentName={agentName}
           onAgentNameChange={setAgentName}
@@ -539,7 +567,7 @@ export default function App() {
                 onLogout={handleLogout} 
                 agentName={agentName} 
                 isAuthenticated={isAuthenticated} 
-                onLoginClick={() => { setAuthMode('login'); setShowShowAuthModal(true); }} 
+                onLoginClick={() => { setAuthMode('login'); setShowAuthModal(true); }} 
                 cartItemsCount={cartItems.length}
                 isOpen={isSidebarOpen}
                 onClose={() => setIsSidebarOpen(false)}
@@ -586,7 +614,7 @@ export default function App() {
                   className="w-full max-w-lg relative"
                 >
                   <button 
-                    onClick={() => setShowShowAuthModal(false)}
+                    onClick={() => setShowAuthModal(false)}
                     className="absolute top-4 right-4 z-10 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center backdrop-blur-md transition-colors"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>

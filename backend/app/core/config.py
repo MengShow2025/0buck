@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", 6333))
     MASTER_SECRET_KEY: str = os.getenv("MASTER_SECRET_KEY", "0buck_default_master_key_for_api_keys_32")
+    # For key rotation migration
+    PREVIOUS_MASTER_SECRET_KEY: Optional[str] = os.getenv("PREVIOUS_MASTER_SECRET_KEY")
 
     # Stream Chat SDK
     STREAM_API_KEY: str = os.getenv("STREAM_API_KEY", "")
