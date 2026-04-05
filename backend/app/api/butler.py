@@ -22,7 +22,7 @@ class ChatRequest(BaseModel):
     user_key: Optional[str] = None
 
 class MinimaxChatRequest(BaseModel):
-    user_id: Optional[int] = None
+    user_id: Optional[str] = None
     messages: List[Dict[str, str]]
     butler_name: Optional[str] = "0Buck Butler"
 
@@ -40,8 +40,14 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
         
         # In a real scenario, we'd pass history to Gemini as well. 
         # For this v3.4 fix, we use a simple call to Gemini to ensure availability.
+        # FIX: Ensure user_id is an int for ButlerService (v3.4 fallback logic)
         try:
-            prompt = await service.assemble_persona_prompt(request.user_id or 1)
+            target_user_id = int(request.user_id) if request.user_id and str(request.user_id).isdigit() else 1
+        except:
+            target_user_id = 1
+            
+        try:
+            prompt = await service.assemble_persona_prompt(target_user_id)
             # Add current conversation context
             chat_context = ""
             for msg in request.messages[:-1]:
@@ -129,8 +135,8 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
             response.raise_for_status()
             res_json = response.json()
             
-            # v3.4 VCC: Trigger AI Learning (LTM) for Private Track
-            if request.user_id:
+            # v3.4 VCC: Trigger AI Learning (LTM) only for real user accounts
+            if request.user_id and str(request.user_id).isdigit():
                 try:
                     ai_content = res_json.get("choices", [{}])[0].get("message", {}).get("content", "")
                     user_content = request.messages[-1]["content"] if request.messages else ""
@@ -149,7 +155,7 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
                         finally:
                             db.close()
                             
-                    asyncio.create_task(asyncio.to_thread(background_learning, history, request.user_id))
+                    asyncio.create_task(asyncio.to_thread(background_learning, history, int(request.user_id)))
                 except Exception as e:
                     print(f"LTM Learning Error: {e}")
             
