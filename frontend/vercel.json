@@ -1,12 +1,9 @@
 {
-  "redirects": [
-    {
-      "source": "/test-redirect",
-      "destination": "https://zerobuck-api.onrender.com/api/v1/",
-      "permanent": false
-    }
-  ],
   "rewrites": [
+    {
+      "source": "/server/:match*",
+      "destination": "https://zerobuck-api.onrender.com/api/:match*"
+    },
     {
       "source": "/api/:match*",
       "destination": "https://zerobuck-api.onrender.com/api/:match*"
