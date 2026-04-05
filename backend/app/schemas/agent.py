@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
 from datetime import datetime
 
@@ -16,7 +16,7 @@ class ChatResponse(BaseModel):
     type: str = "text" # text, products, order_status
     products: Optional[List[Dict[str, Any]]] = None
     order_info: Optional[Dict[str, Any]] = None
-    timestamp: datetime = datetime.now()
+    timestamp: datetime = Field(default_factory=datetime.now)
 
 class SessionCreate(BaseModel):
     user_id: str
@@ -26,7 +26,8 @@ class SessionResponse(BaseModel):
     user_id: str
     chat_token: Optional[str] = ""
     chat_api_key: Optional[str] = ""
-    created_at: datetime = datetime.now()
+    status: str = "active"
+    created_at: datetime = Field(default_factory=datetime.now)
 
 class ProductSearchRequest(BaseModel):
     query: str

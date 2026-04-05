@@ -27,6 +27,24 @@ const LANGUAGES = [
   { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
 ];
 
+// v3.4.5: Stable FlipDigit Component
+const FlipDigit = React.memo(({ value, color = "text-white" }: { value: string | number, color?: string }) => (
+  <div className="relative w-7 sm:w-10 h-10 sm:h-14 overflow-hidden">
+    <AnimatePresence mode="popLayout">
+      <motion.div
+        key={value}
+        initial={{ y: "100%", opacity: 0, rotateX: -90 }}
+        animate={{ y: "0%", opacity: 1, rotateX: 0 }}
+        exit={{ y: "-100%", opacity: 0, rotateX: 90 }}
+        transition={{ duration: 0.6, ease: [0.23, 1, 0.32, 1] }}
+        className={`absolute inset-0 flex items-center justify-center text-3xl sm:text-4xl font-headline font-black bg-zinc-900 rounded-lg border border-white/5 shadow-inner ${color}`}
+      >
+        {value}
+      </motion.div>
+    </AnimatePresence>
+  </div>
+));
+
 export default function MeView({ 
   isAuthenticated, 
   onLoginClick, 
@@ -71,25 +89,6 @@ export default function MeView({
   }, []);
 
   const isAgentNameDirty = useMemo(() => draftAgentName.trim() !== agentName.trim(), [agentName, draftAgentName]);
-
-  const FlipDigit = useMemo(() => {
-    return ({ value, color = "text-white" }: { value: string | number, color?: string }) => (
-      <div className="relative w-7 sm:w-10 h-10 sm:h-14 overflow-hidden">
-        <AnimatePresence mode="popLayout">
-          <motion.div
-            key={value}
-            initial={{ y: "100%", opacity: 0, rotateX: -90 }}
-            animate={{ y: "0%", opacity: 1, rotateX: 0 }}
-            exit={{ y: "-100%", opacity: 0, rotateX: 90 }}
-            transition={{ duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-            className={`absolute inset-0 flex items-center justify-center text-3xl sm:text-4xl font-headline font-black bg-zinc-900 rounded-lg border border-white/5 shadow-inner ${color}`}
-          >
-            {value}
-          </motion.div>
-        </AnimatePresence>
-      </div>
-    );
-  }, []);
 
   useEffect(() => {
     setDraftAgentName(agentName);
@@ -137,7 +136,7 @@ export default function MeView({
       <header className="glass-panel rounded-[1rem] sm:rounded-[2.5rem] p-3 sm:p-10 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 blur-[100px] -mr-32 -mt-32 rounded-full"></div>
         
-        <div className="relative z-10 flex flex-col items-center">
+        <div className="relative z-10 flex flex-col items-center w-full">
           <div className="flex items-center gap-4 mb-6 sm:mb-8">
             <div className="w-14 h-14 sm:w-20 sm:h-20 rounded-[1.25rem] sm:rounded-[2rem] bg-zinc-900 border border-white/10 overflow-hidden p-1 flex-shrink-0">
               <div className="w-full h-full rounded-[1rem] sm:rounded-[1.75rem] bg-primary/10 flex items-center justify-center text-primary">
@@ -361,7 +360,14 @@ export default function MeView({
             <tbody className="divide-y divide-white/5">
               {[
                 { id: '0x892...fA2', name: 'Neural Key V2', type: 'Hardware', status: 'In Transit', statusType: 'primary', img: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop' },
-                { id: '0x110...dB5', name: 'Cloud Node 1yr', type: 'Service', status: 'Delivered', statusType: 'success', icon: <Globe className="w-3 h-3 sm:w-5 h-5 text-zinc-600" /> }
+                { id: '0x110...dB5', name: 'Cloud Node 1yr', type: 'Service', status: 'Delivered', statusType: 'success', icon: <Globe className="w-3 h-3 sm:w-5 h-5 text-zinc-600" /> },
+                { id: '0x221...eC3', name: 'Vortex Pass', type: 'License', status: 'Completed', statusType: 'success', img: 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=100&h=100&fit=crop' },
+                { id: '0x332...fD4', name: 'Precision Kit', type: 'Hardware', status: 'Processing', statusType: 'primary', img: 'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=100&h=100&fit=crop' },
+                { id: '0x443...aE5', name: 'Echo Shield', type: 'Security', status: 'Verified', statusType: 'success', img: 'https://images.unsplash.com/photo-1563986768609-322da13575f3?w=100&h=100&fit=crop' },
+                { id: '0x554...bF6', name: 'Quantum Sync', type: 'Service', status: 'Active', statusType: 'success', icon: <TrendingUp className="w-3 h-3 sm:w-5 h-5 text-zinc-600" /> },
+                { id: '0x665...cF7', name: 'Shadow Link', type: 'Protocol', status: 'In Transit', statusType: 'primary', img: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=100&h=100&fit=crop' },
+                { id: '0x776...dG8', name: 'Prism Core', type: 'Hardware', status: 'Verified', statusType: 'success', img: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop' },
+                { id: '0x887...eH9', name: 'Flux Capacitor', type: 'Hardware', status: 'Processing', statusType: 'primary', img: 'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=100&h=100&fit=crop' }
               ].map((order, idx) => (
                 <tr key={idx} className="hover:bg-white/[0.02] transition-colors group">
                   <td className="px-1 sm:px-6 py-3 font-mono text-[9px] sm:text-[11px] text-zinc-400 truncate">{order.id}</td>

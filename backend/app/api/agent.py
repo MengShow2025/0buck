@@ -106,6 +106,7 @@ async def create_session(request: SessionCreate, db: Session = Depends(get_db)):
         
         return SessionResponse(
             session_id=session_id,
+            user_id=request.user_id,
             chat_token=chat_token,
             chat_api_key=chat_api_key,
             status="active"
@@ -114,6 +115,7 @@ async def create_session(request: SessionCreate, db: Session = Depends(get_db)):
         print(f"Error generating chat token: {e}")
         return SessionResponse(
             session_id=session_id,
+            user_id=request.user_id,
             chat_token="",
             chat_api_key="",
             status="error"

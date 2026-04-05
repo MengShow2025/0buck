@@ -9,9 +9,6 @@
       "destination": "https://zerobuck-api.onrender.com/api/:path*"
     },
     {
-      "handle": "filesystem"
-    },
-    {
       "source": "/(.*)",
       "destination": "/index.html"
     }
