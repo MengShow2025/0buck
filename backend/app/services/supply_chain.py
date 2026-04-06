@@ -813,9 +813,8 @@ class SupplyChainService:
             logger.error(f"❌ Approval failed for candidate {candidate_id}: {e}")
             self.db.rollback() # CRITICAL: Reset poisoned transaction
             
-            # Reset status in a fresh transaction
+            # Reset status in a fresh transaction state
             try:
-                self.db.begin() # Start a new clean block
                 candidate = self.db.query(CandidateProduct).filter_by(id=candidate_id).first()
                 if candidate:
                     candidate.status = "new"

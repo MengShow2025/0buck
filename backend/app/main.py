@@ -43,7 +43,7 @@ def sync_db_schema():
     v3.9.7: Hot Schema Migration.
     Automatically adds missing columns to existing tables without Alembic.
     """
-    from sqlalchemy import text
+    from sqlalchemy import DDL
     with engine.connect() as conn:
         # 1. Product Table Updates
         cols_product = {
@@ -54,7 +54,8 @@ def sync_db_schema():
         }
         for col, col_type in cols_product.items():
             try:
-                conn.execute(text(f"ALTER TABLE products ADD COLUMN {col} {col_type}"))
+                # v3.9.8: Use DDL constructor to avoid raw SQL string execution
+                conn.execute(DDL(f"ALTER TABLE products ADD COLUMN {col} {col_type}"))
                 conn.commit()
                 print(f"✅ Added column {col} to products table.")
             except Exception:
@@ -68,7 +69,7 @@ def sync_db_schema():
         }
         for col, col_type in cols_candidate.items():
             try:
-                conn.execute(text(f"ALTER TABLE candidate_products ADD COLUMN {col} {col_type}"))
+                conn.execute(DDL(f"ALTER TABLE candidate_products ADD COLUMN {col} {col_type}"))
                 conn.commit()
                 print(f"✅ Added column {col} to candidate_products table.")
             except Exception:
