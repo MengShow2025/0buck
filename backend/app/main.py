@@ -75,7 +75,8 @@ async def sync_1688_product(product_id: str, db: Session = Depends(get_db)):
 
 @api_router.get("/users/{customer_id}")
 async def get_user_profile(customer_id: str, db: Session = Depends(get_db)):
-    rewards = RewardsService(db)
+    # v3.5.0: Legacy endpoint, using system ID for read-only query
+    rewards = RewardsService(db, current_user_id=1)
     summary = rewards.get_wallet_summary(int(customer_id))
     level_info = rewards.get_user_level(int(customer_id))
     
@@ -94,7 +95,7 @@ async def sync_customer_to_shopify(customer_id: str, db: Session = Depends(get_d
     Force a sync between local database and Shopify for a specific customer.
     Called when user checks balance or level to ensure 100% accuracy.
     """
-    rewards = RewardsService(db)
+    rewards = RewardsService(db, current_user_id=1)
     success = rewards.sync_customer_data_to_shopify(int(customer_id))
     
     if success:

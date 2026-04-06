@@ -43,9 +43,8 @@ def admin_audit(action: str):
             from app.models.ledger import AdminAuditLog
             import json
             
-            # In v3.5 we'd extract admin_id from a global context/JWT
-            # For now, we use a placeholder admin_id
-            admin_id = 1 # System Admin
+            # v3.5.0: Extract admin_id from the service instance
+            admin_id = getattr(self, "current_user_id", None) or 1 # Fallback to System ID if not provided
             
             try:
                 # Extract target_id from args (usually first arg is customer_id)
@@ -68,8 +67,9 @@ def admin_audit(action: str):
     return decorator
 
 class RewardsService:
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, current_user_id: Optional[int] = None):
         self.db = db
+        self.current_user_id = current_user_id
         from app.services.config_service import ConfigService
         self.config_service = ConfigService(db)
 
@@ -648,6 +648,7 @@ class RewardsService:
         plan.status = 'completed'
         self.db.commit()
 
+    @admin_audit(action="ADJUST_WALLET")
     def update_wallet_balance(self, customer_id: int, amount: Decimal, type: str, order_id: Optional[int] = None, description: str = "", status: str = 'completed'):
         """
         v3.5.0: Thread-safe wallet update with row-level locking.

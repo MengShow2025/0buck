@@ -7,6 +7,7 @@ from decimal import Decimal
 from pydantic import BaseModel
 
 from app.db.session import get_db
+from app.api.deps import get_current_admin
 from app.models import UserExt, Wallet, CheckinPlan, SystemConfig
 from app.models.butler import UserButlerProfile, AIContribution, ShadowIDMapping, PersonaTemplate, AIUsageStats, UserMemoryFact
 from app.models.ledger import AvailableCoupon, Order, SourcingOrder
@@ -411,10 +412,16 @@ def adjust_reward_plan(plan_id: str, days: int, status: str = None, db: Session 
     return {"status": "success", "plan_id": plan_id, "new_days": plan.consecutive_days, "new_status": plan.status}
 
 @router.post("/wallet/adjust")
-def adjust_wallet(user_id: int, amount: float, reason: str, db: Session = Depends(get_db)):
+def adjust_wallet(
+    user_id: int, 
+    amount: float, 
+    reason: str, 
+    db: Session = Depends(get_db),
+    admin: UserExt = Depends(get_current_admin)
+):
     """Manual adjustment for user wallet balance"""
     from app.services.rewards import RewardsService
-    rewards = RewardsService(db)
+    rewards = RewardsService(db, current_user_id=admin.customer_id)
     rewards.update_wallet_balance(user_id, Decimal(str(amount)), "admin_adjustment", None, reason)
     return {"status": "success", "message": f"已为用户 {user_id} 调整余额: {amount}"}
 

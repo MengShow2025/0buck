@@ -129,7 +129,8 @@ async def orders_paid_webhook(
         db.commit()
     
     # Logic: Initialize Rewards/Checkin Plan for the order
-    rewards_service = RewardsService(db)
+    # v3.5.0: System ID 1 for automated webhooks
+    rewards_service = RewardsService(db, current_user_id=1)
     timezone = customer.get("timezone", "UTC")
     
     if reward_base > 0:
@@ -233,7 +234,8 @@ async def orders_refunded_webhook(
         db.commit()
         
     # 2. Trigger Full Clawback of rewards
-    rewards_service = RewardsService(db)
+    # v3.5.0: System ID 1 for automated webhooks
+    rewards_service = RewardsService(db, current_user_id=1)
     clawback_res = rewards_service.clawback_rewards_for_order(order_id)
     print(f"Clawback processed for Order {order_id}: {clawback_res}")
     

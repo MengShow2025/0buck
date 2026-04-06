@@ -60,7 +60,7 @@ def rewards_checkin(
     if current_user.customer_id != payload.user_id:
         raise HTTPException(status_code=403, detail="Forbidden: Cannot check-in for another user")
         
-    rewards = RewardsService(db)
+    rewards = RewardsService(db, current_user_id=current_user.customer_id)
     res = rewards.process_checkin(payload.user_id, payload.plan_id)
     if res.get("status") == "error":
         raise HTTPException(status_code=400, detail=res.get("message", "checkin_failed"))
@@ -80,7 +80,7 @@ def rewards_status(
         if current_user.user_type not in ["kol", "admin"]:
             raise HTTPException(status_code=403, detail="Forbidden: Access denied")
             
-    rewards = RewardsService(db)
+    rewards = RewardsService(db, current_user_id=current_user.customer_id)
     wallet = rewards.get_wallet_summary(user_id)
     level = rewards.get_user_level(user_id)
     user_ext = db.query(UserExt).filter_by(customer_id=user_id).first()
@@ -244,7 +244,7 @@ def verify_group_free(
             order.status = "refunded"
             db.commit()
 
-            clawback = RewardsService(db).clawback_rewards_for_order(payload.order_id)
+            clawback = RewardsService(db, current_user_id=current_user.customer_id).clawback_rewards_for_order(payload.order_id)
 
             return {
                 "status": "success",
@@ -376,7 +376,7 @@ def retry_group_free_refund(
         order.status = "refunded"
         db.commit()
 
-        clawback = RewardsService(db).clawback_rewards_for_order(payload.order_id)
+        clawback = RewardsService(db, current_user_id=current_user.customer_id).clawback_rewards_for_order(payload.order_id)
 
         return {
             "status": "success",
@@ -515,5 +515,5 @@ def get_kol_stats(
     if current_user.customer_id != user_id and current_user.user_type != "admin":
          raise HTTPException(status_code=403, detail="Forbidden")
          
-    service = RewardsService(db)
+    service = RewardsService(db, current_user_id=current_user.customer_id)
     return service.get_kol_stats(user_id)
