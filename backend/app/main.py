@@ -8,7 +8,7 @@ import json
 import asyncio
 from app.core.config import settings
 from app.db.session import get_db, engine
-from app.db.base import Base
+from app.models.product import Base
 from app.services.supply_chain import SupplyChainService
 from app.services.sync_shopify import SyncShopifyService
 from app.api.webhooks import router as webhooks_router
