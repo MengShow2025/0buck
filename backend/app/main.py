@@ -7,7 +7,8 @@ from datetime import datetime
 import json
 import asyncio
 from app.core.config import settings
-from app.db.session import get_db
+from app.db.session import get_db, engine
+from app.db.base import Base
 from app.services.supply_chain import SupplyChainService
 from app.services.sync_shopify import SyncShopifyService
 from app.api.webhooks import router as webhooks_router
@@ -34,7 +35,48 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="0Buck Backend", version="3.4")
+# Create tables if they don't exist
+Base.metadata.create_all(bind=engine)
+
+def sync_db_schema():
+    """
+    v3.9.7: Hot Schema Migration.
+    Automatically adds missing columns to existing tables without Alembic.
+    """
+    from sqlalchemy import text
+    with engine.connect() as conn:
+        # 1. Product Table Updates
+        cols_product = {
+            "desire_hook": "TEXT",
+            "desire_logic": "TEXT",
+            "desire_closing": "TEXT",
+            "detail_images": "JSONB DEFAULT '[]'::jsonb"
+        }
+        for col, col_type in cols_product.items():
+            try:
+                conn.execute(text(f"ALTER TABLE products ADD COLUMN {col} {col_type}"))
+                conn.commit()
+                print(f"✅ Added column {col} to products table.")
+            except Exception:
+                pass # Column already exists
+
+        # 2. CandidateProduct Table Updates
+        cols_candidate = {
+            "desire_hook": "TEXT",
+            "desire_logic": "TEXT",
+            "desire_closing": "TEXT"
+        }
+        for col, col_type in cols_candidate.items():
+            try:
+                conn.execute(text(f"ALTER TABLE candidate_products ADD COLUMN {col} {col_type}"))
+                conn.commit()
+                print(f"✅ Added column {col} to candidate_products table.")
+            except Exception:
+                pass # Column already exists
+
+sync_db_schema()
+
+app = FastAPI(title="0Buck Backend", version="3.9.7")
 
 # Set up CORS
 # In production, we allow ALL origins to solve the CORS block permanently.

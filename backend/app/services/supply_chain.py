@@ -757,8 +757,8 @@ class SupplyChainService:
 
     async def approve_candidate(self, candidate_id: int):
         """
-        v3.9.0: Admin Decision - APPROVE.
-        Triggers full translation, Notion backup, and Shopify Sync.
+        v3.9.7: Admin Decision - APPROVE.
+        Enhanced with transaction safety and schema resilience.
         """
         candidate = self.db.query(CandidateProduct).filter_by(id=candidate_id).first()
         if not candidate or candidate.status != "new":
@@ -772,14 +772,13 @@ class SupplyChainService:
             clean_images = [self._ensure_absolute_url(img) for img in candidate.images if img]
             
             # 1. Full AI Enrichment & Translation
-            # Reuse sync_product logic with potential admin overrides
             product = await self.sync_product(
                 source_product_id=candidate.product_id_1688,
                 comp_price_usd=candidate.comp_price_usd,
                 cost_cny=candidate.cost_cny,
                 title=candidate.title_zh,
                 strategy_tag=candidate.discovery_source,
-                category_type="PROFIT", # Default
+                category_type="PROFIT",
                 is_cashback_eligible=True,
                 variants_override=candidate.variants_raw,
                 images_override=clean_images
@@ -791,24 +790,37 @@ class SupplyChainService:
             sync_service.sync_to_shopify(product)
 
             # 3. Notion Backup (Archive)
-            from app.services.notion import NotionService
-            notion = NotionService()
-            await notion.add_product_to_pool({
-                "name": product.title_en,
-                "id_1688": product.product_id_1688,
-                "status": "已同步",
-                "url_1688": f"https://detail.1688.com/offer/{product.product_id_1688}.html",
-                "cost_cny": product.original_price,
-                "comp_price": candidate.comp_price_usd,
-                "shopify_id": product.shopify_product_id,
-                "category": product.category
-            })
+            try:
+                from app.services.notion import NotionService
+                notion = NotionService()
+                await notion.add_product_to_pool({
+                    "name": product.title_en,
+                    "id_1688": product.product_id_1688,
+                    "status": "已同步",
+                    "url_1688": f"https://detail.1688.com/offer/{product.product_id_1688}.html",
+                    "cost_cny": product.original_price,
+                    "comp_price": candidate.comp_price_usd,
+                    "shopify_id": product.shopify_product_id,
+                    "category": product.category
+                })
+            except Exception as e:
+                logger.error(f"Notion backup failed (non-critical): {e}")
 
             candidate.status = "synced"
             self.db.commit()
             return True
         except Exception as e:
-            logger.error(f"Failed to approve candidate {candidate_id}: {e}")
-            candidate.status = "new" # Rollback status
-            self.db.commit()
+            logger.error(f"❌ Approval failed for candidate {candidate_id}: {e}")
+            self.db.rollback() # CRITICAL: Reset poisoned transaction
+            
+            # Reset status in a fresh transaction
+            try:
+                self.db.begin() # Start a new clean block
+                candidate = self.db.query(CandidateProduct).filter_by(id=candidate_id).first()
+                if candidate:
+                    candidate.status = "new"
+                    candidate.audit_notes = f"Sync Error: {str(e)[:200]}"
+                    self.db.commit()
+            except:
+                pass
             raise e

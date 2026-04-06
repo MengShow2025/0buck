@@ -197,17 +197,17 @@ const AdminDashboard: React.FC = () => {
   };
 
   const handleApprove = async (id: number) => {
-    if (!confirm(`确认同步并上架此候选商品吗？`)) return;
+    if (!confirm(`确认同步并上架此候选商品吗？\n(注意：这可能需要 5-15 秒，请耐心等待)`)) return;
     try {
       const res = await fetch(`/api/v1/admin/sourcing/candidates/${id}/approve`, { method: 'POST' });
       const data = await res.json();
-      if (data.status === 'success') {
+      if (res.ok && data.status === 'success') {
         alert('上架成功！已同步至 Shopify 并备份到 Notion');
         fetchAuditQueue();
       } else {
         alert(`上架失败: ${data.detail || '未知错误'}`);
       }
-    } catch (e) { alert('请求失败'); }
+    } catch (e) { alert('请求超时或网络错误，请稍后刷新重试。'); }
   };
 
   const handleReject = async (id: number) => {
