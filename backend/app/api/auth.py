@@ -355,6 +355,40 @@ async def verify_payment_password_endpoint(
         remaining = 5 - current_user.payment_pass_failed_attempts
         raise HTTPException(status_code=400, detail=f"Invalid payment password. {remaining} attempts remaining.")
 
+@router.post("/payment-password/reset-with-2fa")
+async def reset_payment_password_2fa(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user)
+):
+    """
+    v3.8.0: Automated Reset via 2FA (Primary Recovery Path).
+    Principle: Auto > AI > Human.
+    """
+    data = await request.json()
+    code_2fa = data.get("code_2fa")
+    new_password = data.get("new_password")
+
+    if not current_user.is_two_factor_enabled:
+        raise HTTPException(status_code=400, detail="2FA must be enabled to use auto-reset. Please contact Dumbo AI.")
+
+    if not code_2fa or not new_password or len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Invalid input or password too short")
+
+    # Verify 2FA
+    totp = pyotp.TOTP(current_user.two_factor_secret)
+    if not totp.verify(code_2fa):
+        raise HTTPException(status_code=400, detail="Invalid 2FA code")
+
+    # Auto-Reset
+    from app.core.security import get_password_hash
+    current_user.hashed_payment_password = get_password_hash(new_password)
+    current_user.payment_pass_failed_attempts = 0
+    current_user.payment_pass_locked_until = None
+    db.commit()
+
+    return {"status": "success", "message": "Payment password reset automatically via 2FA."}
+
 @router.get("/login/{provider}")
 async def login(provider: str, request: Request):
     if provider not in ['google', 'apple', 'facebook']:
