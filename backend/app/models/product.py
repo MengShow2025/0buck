@@ -74,6 +74,11 @@ class Product(Base):
     is_melted = Column(Boolean, default=False)
     melting_reason = Column(String, nullable=True)
     melted_at = Column(DateTime, nullable=True) # Timestamp of the melt event
+
+    # v4.0: Desire Engine Snippets
+    desire_hook = Column(String, nullable=True)
+    desire_logic = Column(String, nullable=True)
+    desire_closing = Column(String, nullable=True)
     last_stable_cost = Column(Float, nullable=True) # Cost before melting
     price_fluctuation_threshold = Column(Float, default=0.15)
     scan_priority = Column(Integer, default=2) # 1: High (Hourly), 2: Med (4h), 3: Low (12h)
@@ -140,6 +145,11 @@ class CandidateProduct(Base):
     # AI Polish Preview (Generated during candidate phase)
     title_en_preview = Column(String, nullable=True)
     description_en_preview = Column(String, nullable=True)
+    
+    # v4.0: Desire Engine Snippets
+    desire_hook = Column(String, nullable=True) # The Hook: Zapping the pain point
+    desire_logic = Column(String, nullable=True) # The Logic: Brand tax deconstruction
+    desire_closing = Column(String, nullable=True) # The Closing: FOMO & Ritual
     
     # Metadata
     category = Column(String)

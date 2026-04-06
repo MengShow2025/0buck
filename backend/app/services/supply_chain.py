@@ -70,24 +70,30 @@ class SupplyChainService:
             }
         }
 
-    async def translate_and_enrich(self, product_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def translate_and_enrich(self, product_data: Dict[str, Any], strategy_tag: str = "IDS_FOLLOWING") -> Dict[str, Any]:
         """
-        Use AI to translate title/description AND desensitize content.
+        v4.0: The Desire Engine - AI Enrichment.
+        Produces a three-part desire script: Hook, Logic, Closing.
         Optimization (v3.1.5): Localized elegance and dispute-proof details.
         """
         system_prompt = (
-            "You are a luxury lifestyle copywriter for 0Buck, a premium e-commerce platform. "
+            "You are the 'Desire Engine' for 0Buck, a luxury lifestyle copywriter. "
             "Your task is to transform technical supply chain data into elegant, persuasive "
             "English listings tailored for American and Middle Eastern high-end consumers. "
             "STRICT RULES:\n"
             "1. NEVER mention '1688', 'Alibaba', 'Taobao', or specific Chinese factory names.\n"
             "2. Use terms like 'Heritage Workshop' or 'Direct Sourcing' to describe the origin.\n"
             "3. Tone: Sophisticated, minimal, and high-vibe. Focus on 'the life you live with this product'.\n"
-            "4. Content: Include a 'Why it matters' section and a structured 'Parameters' section.\n"
-            "5. Return ONLY a JSON object with keys: 'title_en' and 'description_en'."
+            "4. Content: Produce a JSON object with four keys: 'title_en', 'hook', 'logic', 'closing'.\n"
+            "   - 'hook': Scene-based pain point zapping using Loss Aversion.\n"
+            "   - 'logic': Brand tax deconstruction (Why it's cheaper without middleman vanity).\n"
+            "   - 'closing': FOMO & Ritualistic Rebate framing (Connect 500-day check-in to a reward).\n"
+            "5. Context: Use strategy tag to adjust tone. Spy mode = brand contrast; Following = social trend.\n"
+            "Return ONLY the JSON object."
         )
         
         user_input = (
+            f"Strategy: {strategy_tag}\n"
             f"Original Title: {product_data.get('title')}\n"
             f"Original Description: {product_data.get('description')}\n"
             f"Category: {product_data.get('category')}"
@@ -111,16 +117,19 @@ class SupplyChainService:
                     json_str = json_match.group(0)
                     enriched = json.loads(json_str)
                     product_data["title_en"] = enriched.get("title_en", f"Premium {product_data['title']}")
-                    product_data["description_en"] = enriched.get("description_en", product_data['description'])
+                    product_data["desire_hook"] = enriched.get("hook", "Elevate your daily ritual.")
+                    product_data["desire_logic"] = enriched.get("logic", "Sourced directly for the elite.")
+                    product_data["desire_closing"] = enriched.get("closing", "Join the 500-day discipline.")
+                    product_data["description_en"] = f"{product_data['desire_hook']}\n\n{product_data['desire_logic']}\n\n{product_data['desire_closing']}"
                 except Exception as e:
-                    print(f"  AI Enrichment JSON Error: {e}")
+                    logger.error(f"  AI Enrichment JSON Error: {e}")
                     product_data["title_en"] = f"Premium {product_data['title']}"
                     product_data["description_en"] = product_data["description"]
             else:
                 product_data["title_en"] = f"Premium {product_data['title']}"
                 product_data["description_en"] = product_data["description"]
         except Exception as e:
-            print(f"  AI Enrichment Error: {e}")
+            logger.error(f"  AI Enrichment Error: {e}")
             product_data["title_en"] = f"Translated: {product_data['title']}"
             product_data["description_en"] = f"Translated: {product_data['description']}"
             
@@ -565,7 +574,7 @@ class SupplyChainService:
         if title:
             raw_data["title"] = title
         
-        enriched_data = await self.translate_and_enrich(raw_data)
+        enriched_data = await self.translate_and_enrich(raw_data, strategy_tag)
         
         # Enforce Red-line Margin
         pricing_result = self.calculate_price(raw_data["price"], comp_price_usd, category_type)
@@ -599,11 +608,17 @@ class SupplyChainService:
             product = Product(product_id_1688=source_product_id)
             self.db.add(product)
             
-        product.title_zh = enriched_data["title"]
+        product.title_zh = raw_data.get("title")
         product.title_en = enriched_data["title_en"]
-        product.description_zh = enriched_data["description"]
+        product.description_zh = raw_data.get("description")
         product.description_en = enriched_data["description_en"]
-        product.original_price = enriched_data["price"]
+        
+        # v4.0: Desire Engine Snippets
+        product.desire_hook = enriched_data.get("desire_hook")
+        product.desire_logic = enriched_data.get("desire_logic")
+        product.desire_closing = enriched_data.get("desire_closing")
+        
+        product.original_price = raw_data.get("price")
         product.source_cost_usd = pricing_result["cost_usd_buffered"]
         product.sale_price = pricing_result["sale_price"]
         product.compare_at_price = pricing_result.get("display_price")
@@ -655,20 +670,18 @@ class SupplyChainService:
         comp_price = float(data.get("comp_price", 0.0))
         pricing = self.calculate_price(cost_cny, comp_price, data.get("category_type", "PROFIT"))
         
-        # 2. AI Polish Preview (Do it early to show in Admin Dashboard)
-        # v3.9.1: Enhanced preview logic using basic translation if enrichment is not yet fully run
-        preview_title = f"Premium {data.get('name')}"
-        if "(" in preview_title: # Clean up 1688 brackets
-            preview_title = preview_title.split("(")[0].strip()
-            
-        preview_desc = f"Discover the ultimate {data.get('name')}. Sourced for quality and value."
-        if data.get("description_zh"):
-            preview_desc = f"AI Summary: {data.get('description_zh')[:100]}..." # Placeholder for real translation
+        # 2. AI Polish Preview (v4.0 Desire Engine)
+        strategy_tag = data.get("strategy_tag", "IDS_FOLLOWING")
+        enriched_preview = await self.translate_and_enrich({
+            "title": data.get("name"),
+            "description": data.get("description_zh"),
+            "category": data.get("category")
+        }, strategy_tag)
         
         candidate = CandidateProduct(
             product_id_1688=product_id_1688,
             status="new",
-            discovery_source=data.get("strategy_tag", "IDS_FOLLOWING"),
+            discovery_source=strategy_tag,
             discovery_evidence=data.get("discovery_evidence", {}),
             title_zh=data.get("name"),
             description_zh=data.get("description_zh", ""),
@@ -680,8 +693,11 @@ class SupplyChainService:
             profit_ratio=pricing.get("sale_price") / pricing.get("cost_usd_buffered") if pricing.get("cost_usd_buffered") else 0,
             supplier_id_1688=data.get("supplier_id_1688"),
             supplier_info=data.get("supplier_info", {}),
-            title_en_preview=preview_title,
-            description_en_preview=preview_desc,
+            title_en_preview=enriched_preview["title_en"],
+            description_en_preview=enriched_preview["description_en"],
+            desire_hook=enriched_preview.get("desire_hook"),
+            desire_logic=enriched_preview.get("desire_logic"),
+            desire_closing=enriched_preview.get("desire_closing"),
             category=data.get("category", "General"),
             audit_notes=data.get("audit_notes")
         )

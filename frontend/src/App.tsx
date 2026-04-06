@@ -43,8 +43,8 @@ export default function App() {
   const navigate = useNavigate();
   
   const [showWelcome, setShowWelcome] = useState(() => {
-    // Skip welcome if accessing admin directly
-    return !window.location.pathname.startsWith('/admin');
+    // Skip welcome if accessing command center directly
+    return !window.location.pathname.startsWith('/command');
   });
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('0buck_auth_state') === 'true';
@@ -58,16 +58,16 @@ export default function App() {
     }
   });
   const [currentView, setCurrentView] = useState<ViewType>(() => {
-    // v3.9.1: URL Path-based routing for Admin
-    if (window.location.pathname === '/admin') return 'admin';
+    // v3.9.1: URL Path-based routing for Command Center
+    if (window.location.pathname === '/command') return 'admin';
     
     const isAuth = localStorage.getItem('0buck_auth_state') === 'true';
     return isAuth ? 'chat' : 'login';
   });
 
-  // Sync currentView with URL for Admin
+  // Sync currentView with URL for Command Center
   useEffect(() => {
-    if (location.pathname === '/admin' && currentView !== 'admin') {
+    if (location.pathname === '/command' && currentView !== 'admin') {
       setCurrentView('admin');
       setShowWelcome(false);
     }
@@ -642,7 +642,7 @@ export default function App() {
             transition={{ duration: 0.5 }}
             className="h-full w-full relative"
           >
-            {!['login', 'register', 'admin'].includes(currentView) && (
+            {!['login', 'register', 'admin'].includes(currentView) && location.pathname !== '/command' && (
               <Sidebar 
                 currentView={currentView} 
                 onViewChange={setCurrentView} 
@@ -655,7 +655,7 @@ export default function App() {
                 onClose={() => setIsSidebarOpen(false)}
               />
             )}
-            <main className={`${!['login', 'register', 'admin'].includes(currentView) ? 'lg:ml-20' : ''} h-screen flex flex-col relative overflow-hidden`}>
+            <main className={`${!['login', 'register', 'admin'].includes(currentView) && location.pathname !== '/command' ? 'lg:ml-20' : ''} h-screen flex flex-col relative overflow-hidden`}>
               <TopBar 
                 {...getHeaderProps()} 
                 currentView={currentView} 

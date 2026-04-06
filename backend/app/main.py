@@ -149,7 +149,7 @@ if os.path.exists(frontend_path):
 
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
-        # v3.9.1: Correctly allow non-API routes like /admin to be handled by React Router
+        # v3.9.1: Correctly allow non-API routes like /command to be handled by React Router
         if full_path.startswith("api/") or full_path.startswith("v1/"):
              return {"detail": "Not Found"}
              
