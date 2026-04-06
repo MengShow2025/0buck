@@ -150,12 +150,17 @@ def check_rate_limit(email: str) -> bool:
     now = datetime.now()
     if HAS_REDIS:
         key = f"ratelimit:login:{email}"
-        data = redis_client.get(key)
-        if data:
-            attempts = json.loads(data)
-            # If more than 5 failed attempts in last 5 minutes, block
-            if attempts["count"] >= 5 and (now - datetime.fromisoformat(attempts["last_attempt"])).seconds < 300:
-                return True
+        try:
+            data = redis_client.get(key)
+            if data:
+                attempts = json.loads(data)
+                last_attempt = datetime.fromisoformat(attempts["last_attempt"])
+                # If more than 5 failed attempts in last 5 minutes, block
+                if attempts["count"] >= 5 and (now - last_attempt).seconds < 300:
+                    return True
+        except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+            # If data is corrupted or Redis fails, treat as no attempts to avoid locking users out
+            pass
         return False
     else:
         with login_attempts_lock:
@@ -169,20 +174,30 @@ def record_login_attempt(email: str, success: bool):
     now = datetime.now()
     if HAS_REDIS:
         key = f"ratelimit:login:{email}"
-        if success:
-            redis_client.delete(key)
-        else:
-            data = redis_client.get(key)
-            attempts = json.loads(data) if data else {"count": 0, "last_attempt": now.isoformat()}
-            
-            # Reset if old
-            if (now - datetime.fromisoformat(attempts["last_attempt"])).seconds > 300:
-                attempts["count"] = 1
+        try:
+            if success:
+                redis_client.delete(key)
             else:
-                attempts["count"] += 1
-            
-            attempts["last_attempt"] = now.isoformat()
-            redis_client.setex(key, 900, json.dumps(attempts)) # Keep record for 15 mins
+                data = redis_client.get(key)
+                try:
+                    attempts = json.loads(data) if data else {"count": 0, "last_attempt": now.isoformat()}
+                    last_attempt = datetime.fromisoformat(attempts["last_attempt"])
+                except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+                    # Fallback if data is corrupted
+                    attempts = {"count": 0, "last_attempt": now.isoformat()}
+                    last_attempt = now
+                
+                # Reset if old (more than 5 mins ago)
+                if (now - last_attempt).seconds > 300:
+                    attempts["count"] = 1
+                else:
+                    attempts["count"] += 1
+                
+                attempts["last_attempt"] = now.isoformat()
+                redis_client.setex(key, 900, json.dumps(attempts)) # Keep record for 15 mins
+        except Exception as e:
+            # Log Redis error but don't crash the auth flow
+            print(f"Redis Rate Limit Error: {e}")
     else:
         with login_attempts_lock:
             if success:
