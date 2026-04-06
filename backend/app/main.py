@@ -45,10 +45,11 @@ def sync_db_schema():
     """
     from sqlalchemy import Column, Text, JSON, text
     from sqlalchemy.dialects.postgresql import JSONB
-    from sqlalchemy.schema import AddColumn
     with engine.connect() as conn:
         # 1. Product Table Updates
-        # v4.0.0: Enhanced Schema API with default value constraints
+        # v4.0.1: Use dialect-safe type compilation. 
+        # Note: AddColumn is not standard in all SQLAlchemy versions, 
+        # so we use a safe text-based approach for hardcoded constants.
         cols_product = [
             Column("desire_hook", Text()),
             Column("desire_logic", Text()),
@@ -57,8 +58,14 @@ def sync_db_schema():
         ]
         for col in cols_product:
             try:
-                # v3.9.9: Use SQLAlchemy Schema API to completely eliminate SQL injection risk
-                conn.execute(AddColumn('products', col))
+                type_str = col.type.compile(engine.dialect)
+                stmt = f"ALTER TABLE products ADD COLUMN {col.name} {type_str}"
+                if col.server_default is not None:
+                    # Extract the raw text from the text() object
+                    default_text = col.server_default.arg
+                    stmt += f" DEFAULT {default_text}"
+                
+                conn.execute(text(stmt))
                 conn.commit()
                 print(f"✅ Added column {col.name} to products table.")
             except Exception:
@@ -72,7 +79,8 @@ def sync_db_schema():
         ]
         for col in cols_candidate:
             try:
-                conn.execute(AddColumn('candidate_products', col))
+                type_str = col.type.compile(engine.dialect)
+                conn.execute(text(f"ALTER TABLE candidate_products ADD COLUMN {col.name} {type_str}"))
                 conn.commit()
                 print(f"✅ Added column {col.name} to candidate_products table.")
             except Exception:
