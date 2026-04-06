@@ -284,6 +284,77 @@ async def verify_login_2fa(request: Request, db: Session = Depends(get_db)):
         record_login_attempt(email, success=False)
         raise HTTPException(status_code=400, detail="Invalid verification code.")
 
+@router.post("/payment-password/set")
+async def set_payment_password(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user)
+):
+    """
+    v3.8.0: Initial set of payment password.
+    Requires 2FA verification if 2FA is enabled.
+    """
+    data = await request.json()
+    new_password = data.get("password")
+    code_2fa = data.get("code_2fa")
+
+    if not new_password or len(new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 digits")
+
+    # If 2FA is enabled, MUST verify code before setting password
+    if current_user.is_two_factor_enabled:
+        if not code_2fa:
+            raise HTTPException(status_code=400, detail="2FA code required to set payment password")
+        totp = pyotp.TOTP(current_user.two_factor_secret)
+        if not totp.verify(code_2fa):
+            raise HTTPException(status_code=400, detail="Invalid 2FA code")
+
+    from app.core.security import get_password_hash
+    current_user.hashed_payment_password = get_password_hash(new_password)
+    db.commit()
+    return {"status": "success", "message": "Payment password set successfully"}
+
+@router.post("/payment-password/verify")
+async def verify_payment_password_endpoint(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user)
+):
+    """
+    v3.8.0: Internal verification for sensitive actions.
+    Includes brute-force protection (5 attempts).
+    """
+    data = await request.json()
+    password = data.get("password")
+
+    if not current_user.hashed_payment_password:
+        raise HTTPException(status_code=400, detail="Payment password not set")
+
+    # Check lockout
+    now = datetime.utcnow()
+    if current_user.payment_pass_locked_until and current_user.payment_pass_locked_until > now:
+        diff = (current_user.payment_pass_locked_until - now).seconds // 60
+        raise HTTPException(status_code=429, detail=f"Too many failed attempts. Locked for {diff} more minutes.")
+
+    from app.core.security import verify_password
+    if verify_password(password, current_user.hashed_payment_password):
+        # Reset failed attempts on success
+        current_user.payment_pass_failed_attempts = 0
+        current_user.payment_pass_locked_until = None
+        db.commit()
+        return {"status": "success"}
+    else:
+        # Increment failed attempts
+        current_user.payment_pass_failed_attempts += 1
+        if current_user.payment_pass_failed_attempts >= 5:
+            current_user.payment_pass_locked_until = now + timedelta(hours=24)
+            db.commit()
+            raise HTTPException(status_code=429, detail="5 failed attempts. Account locked for 24 hours.")
+        
+        db.commit()
+        remaining = 5 - current_user.payment_pass_failed_attempts
+        raise HTTPException(status_code=400, detail=f"Invalid payment password. {remaining} attempts remaining.")
+
 @router.get("/login/{provider}")
 async def login(provider: str, request: Request):
     if provider not in ['google', 'apple', 'facebook']:

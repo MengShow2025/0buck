@@ -510,20 +510,41 @@ def payment_pre_check(
     current_user: UserExt = Depends(get_current_user)
 ):
     """
-    v3.5.0: Pre-check inventory and freeze balance before Draft Order creation.
+    v3.8.0: Pre-check inventory, balance, and PAYMENT PASSWORD.
     """
     customer_id = current_user.customer_id
-    items = payload.get("items", [])
     balance_to_use = Decimal(str(payload.get("balance_to_use", "0")))
+    payment_password = payload.get("payment_password")
     
     if balance_to_use > 0:
+        # 1. v3.8.0 MUST check payment password if balance is used
+        if not current_user.hashed_payment_password:
+            raise HTTPException(status_code=400, detail="Payment password not set. Please set it in security settings.")
+        
+        from app.core.security import verify_password
+        # Check lockout
+        now = datetime.utcnow()
+        if current_user.payment_pass_locked_until and current_user.payment_pass_locked_until > now:
+            raise HTTPException(status_code=429, detail="Payment password locked due to multiple failures.")
+
+        if not payment_password or not verify_password(payment_password, current_user.hashed_payment_password):
+            current_user.payment_pass_failed_attempts += 1
+            if current_user.payment_pass_failed_attempts >= 5:
+                current_user.payment_pass_locked_until = now + timedelta(hours=24)
+            db.commit()
+            raise HTTPException(status_code=400, detail="Invalid payment password")
+
+        # 2. Reset failed attempts on success
+        current_user.payment_pass_failed_attempts = 0
+        db.commit()
+
+        # 3. Attempt to freeze balance
         rewards = RewardsService(db, current_user_id=customer_id)
-        # Attempt to freeze balance
         success = rewards.freeze_balance(customer_id, balance_to_use, "PENDING_ORDER")
         if not success:
             raise HTTPException(status_code=400, detail="Insufficient balance or freeze failed")
             
-    return {"status": "success", "message": "Balance frozen, proceed to order creation"}
+    return {"status": "success", "message": "Verification successful, balance frozen."}
 
 from app.services.smart_business import SmartBusinessService
 

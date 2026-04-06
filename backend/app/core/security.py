@@ -8,6 +8,18 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 from .config import settings
 
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def get_password_hash(password: str) -> str:
+    """v3.8.0: Create a secure hash for payment passwords."""
+    return pwd_context.hash(password)
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    """v3.8.0: Verify a payment password against its hash."""
+    return pwd_context.verify(plain_password, hashed_password)
+
 # JWT Configuration
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
