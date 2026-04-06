@@ -80,49 +80,42 @@ class SocialAutomationService:
             except Exception as e:
                 logger.error(f"Failed to notify Group Buy update to Stream: {e}")
 
-    async def send_checkin_reminders(self):
+    async def notify_plan_eligible(self, plan_id: str):
         """
-        v3.4: Scan for users who haven't checked in today and send reminders.
-        Runs daily at 8 PM (local time per user).
+        v3.4.8: Notify user when an order is past return window and check-in starts tomorrow.
         """
-        # 1. Fetch active plans
-        active_plans = self.db.query(CheckinPlan).filter(
-            CheckinPlan.status == "active_checkin"
-        ).all()
-        
-        reminded_count = 0
-        for plan in active_plans:
-            # Check if user already checked in today in their timezone
-            # (Simplified: using plan.timezone)
-            import pytz
-            user_tz = pytz.timezone(plan.timezone or "UTC")
-            user_now = datetime.now(user_tz)
-            
-            # If it's after 8 PM in user's timezone and they haven't checked in
-            if user_now.hour >= 20:
-                last_checkin = plan.last_checkin_at
-                if not last_checkin or last_checkin < user_now.date():
-                    # Send reminder
-                    try:
-                        # 1. Stream Concierge nudge
-                        concierge = stream_chat_service.server_client.channel("concierge", f"butler_{plan.user_id}")
-                        concierge.send_message({
-                            "text": "⏰ Don't forget your daily 0Buck check-in! Keep your streak alive to secure your cashback.",
-                            "attachments": [{
-                                "type": "0B_CARD_V3",
-                                "component": "0B_RENEWAL_ALERT",
-                                "data": {"type": "reminder", "deadline": "4 hours remaining"}
-                            }]
-                        }, user_id="0buck_system")
-                        
-                        # 2. WhatsApp Backup (if phone exists)
-                        # await send_whatsapp_message(user_phone, "...")
-                        
-                        reminded_count += 1
-                    except Exception as e:
-                        logger.error(f"Failed to send check-in reminder to user {plan.user_id}: {e}")
-        
-        return reminded_count
+        plan = self.db.query(CheckinPlan).filter_by(id=plan_id).first()
+        if not plan: return
+
+        msg = f"🚀 Good news! Your order #{plan.order_id} is now officially effective. Your 500-day cashback injection protocol starts TOMORROW. Don't miss it!"
+        try:
+            concierge = stream_chat_service.server_client.channel("concierge", f"butler_{plan.user_id}")
+            concierge.send_message({
+                "text": msg,
+                "attachments": [{
+                    "type": "0B_CARD_V3",
+                    "component": "0B_CASHBACK_START",
+                    "data": {"order_id": plan.order_id, "start_date": "Tomorrow"}
+                }]
+            }, user_id="0buck_system")
+        except Exception as e:
+            logger.error(f"Failed to notify plan eligibility to Stream: {e}")
+
+    async def notify_group_buy_nudge(self, campaign_id: str):
+        """
+        v3.4.8: Dumbo nudge for group buy that is close to success or expiring.
+        """
+        campaign = self.db.query(GroupBuyCampaign).filter_by(id=campaign_id).first()
+        if not campaign or campaign.status != "open": return
+
+        remaining = campaign.required_count - campaign.current_count
+        if remaining > 0:
+            msg = f"⚡ Almost there! Your Group Buy for Item {campaign.product_id} needs just {remaining} more person to trigger a free item refund. Share your link now!"
+            try:
+                concierge = stream_chat_service.server_client.channel("concierge", f"butler_{campaign.owner_order_id}")
+                concierge.send_message({"text": msg}, user_id="0buck_system")
+            except Exception as e:
+                logger.error(f"Failed to send GB nudge: {e}")
 
     def map_bap_to_whatsapp(self, card_type: str, data: dict) -> dict:
         """

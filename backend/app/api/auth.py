@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.core.config import settings
+from app.core.security import create_access_token # Added
 from authlib.integrations.starlette_client import OAuth
 from starlette.responses import RedirectResponse
 import json
@@ -82,7 +83,7 @@ async def setup_2fa(request: Request, db: Session = Depends(get_db)):
     # Generate QR Code
     img = qrcode.make(provisioning_uri)
     buf = io.BytesIO()
-    img.save(buf)
+    img.save(buf, format="PNG")
     qr_base64 = base64.b64encode(buf.getvalue()).decode()
 
     return {
@@ -127,12 +128,34 @@ async def disable_2fa(request: Request, db: Session = Depends(get_db)):
     else:
         raise HTTPException(status_code=400, detail="Invalid verification code")
 
+# v3.5.0: Simple In-Memory Rate Limiter for Brute-Force Defense
+# In production, this should be replaced by Redis
+login_attempts = {}
+
 @router.post("/2fa/verify-login")
 async def verify_login_2fa(request: Request, db: Session = Depends(get_db)):
+    """
+    v3.5.0: Secure 2FA verification with Rate Limiting and JWT issuance.
+    """
     data = await request.json()
     email = data.get("email")
     code = data.get("code")
     
+    if not email:
+        raise HTTPException(status_code=400, detail="Email required")
+        
+    # 1. Rate Limiting Check
+    now = datetime.now()
+    attempts = login_attempts.get(email, {"count": 0, "last_attempt": now})
+    
+    # If more than 5 failed attempts in last 5 minutes, block for 15 mins
+    if attempts["count"] >= 5 and (now - attempts["last_attempt"]).seconds < 300:
+        raise HTTPException(status_code=429, detail="Too many attempts. Please try again in 5 minutes.")
+    
+    # Reset count if last attempt was long ago
+    if (now - attempts["last_attempt"]).seconds > 300:
+        attempts["count"] = 0
+
     # In a real app, find user by email. Here we use 8829.
     user = db.query(UserExt).filter(UserExt.customer_id == 8829).first()
     if not user or not user.is_two_factor_enabled:
@@ -140,9 +163,30 @@ async def verify_login_2fa(request: Request, db: Session = Depends(get_db)):
 
     totp = pyotp.TOTP(user.two_factor_secret)
     if totp.verify(code):
-        return {"status": "success"}
+        # Success! Reset attempts
+        login_attempts[email] = {"count": 0, "last_attempt": now}
+        
+        # Issue JWT for v3.5.0 Security
+        access_token = create_access_token(subject=user.customer_id)
+        
+        response = Response(content=json.dumps({"status": "success", "user_id": user.customer_id}), media_type="application/json")
+        
+        # Set HttpOnly Cookie for Secure Auth
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            max_age=60 * 24 * 7 * 60,
+            samesite="lax",
+            secure=True
+        )
+        return response
     else:
-        raise HTTPException(status_code=400, detail="Invalid verification code")
+        # Failed attempt: Increment count
+        attempts["count"] += 1
+        attempts["last_attempt"] = now
+        login_attempts[email] = attempts
+        raise HTTPException(status_code=400, detail=f"Invalid verification code. {5 - attempts['count']} attempts remaining.")
 
 @router.get("/login/{provider}")
 async def login(provider: str, request: Request):
@@ -183,5 +227,19 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
         # Redirect to 2FA verification page on frontend
         return RedirectResponse(url=f"{frontend_url}/?2fa_required=true&email={email}&provider={provider}")
 
+    # Generate JWT Token for v3.5.0 Security
+    access_token = create_access_token(subject=user.customer_id if user else 8829)
+    
     response = RedirectResponse(url=f"{frontend_url}/?auth_success=true&email={email}")
+    
+    # Set HttpOnly Cookie for Secure Auth
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        max_age=60 * 24 * 7 * 60, # 7 days
+        expires=60 * 24 * 7 * 60,
+        samesite="lax",
+        secure=True # Set to True in production with HTTPS
+    )
     return response

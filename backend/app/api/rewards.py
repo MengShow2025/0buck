@@ -45,17 +45,41 @@ def _normalize_plan_status(status: str) -> str:
     return status
 
 
+from app.api.deps import get_current_user, get_current_admin
+from app.models.ledger import UserExt, WalletTransaction, PointTransaction, PointSource
+
 @router.post("/checkin")
-def rewards_checkin(payload: RewardsCheckinRequest, db: Session = Depends(get_db)):
+def rewards_checkin(
+    payload: RewardsCheckinRequest, 
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user)
+):
+    """
+    v3.5.0: Secure Check-in with JWT Enforcement.
+    """
+    if current_user.customer_id != payload.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden: Cannot check-in for another user")
+        
     rewards = RewardsService(db)
     res = rewards.process_checkin(payload.user_id, payload.plan_id)
     if res.get("status") == "error":
         raise HTTPException(status_code=400, detail=res.get("message", "checkin_failed"))
     return res
 
-
 @router.get("/status/{user_id}")
-def rewards_status(user_id: int, db: Session = Depends(get_db)):
+def rewards_status(
+    user_id: int, 
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user)
+):
+    """
+    v3.5.0: Secure Status view with IDOR protection.
+    """
+    if current_user.customer_id != user_id:
+        # Check if current_user is admin
+        if current_user.user_type not in ["kol", "admin"]:
+            raise HTTPException(status_code=403, detail="Forbidden: Access denied")
+            
     rewards = RewardsService(db)
     wallet = rewards.get_wallet_summary(user_id)
     level = rewards.get_user_level(user_id)
@@ -123,7 +147,23 @@ def rewards_status(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/group-free/verify")
-def verify_group_free(payload: GroupFreeVerifyRequest, db: Session = Depends(get_db)):
+def verify_group_free(
+    payload: GroupFreeVerifyRequest, 
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user)
+):
+    """
+    v3.5.0: Secure Group Buy Refund Verification.
+    STRICT: Order owner must match current JWT user.
+    """
+    if current_user.customer_id != payload.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden: IDOR protection triggered")
+
+    # Ensure the order belongs to this user
+    order = db.query(Order).filter_by(shopify_order_id=payload.order_id).first()
+    if order and order.user_id != payload.user_id:
+         raise HTTPException(status_code=403, detail="Forbidden: Order ownership mismatch")
+
     plan = db.query(CheckinPlan).filter(CheckinPlan.user_id == payload.user_id, CheckinPlan.order_id == payload.order_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="plan_not_found")
@@ -263,7 +303,21 @@ def verify_group_free(payload: GroupFreeVerifyRequest, db: Session = Depends(get
 
 
 @router.post("/group-free/retry")
-def retry_group_free_refund(payload: GroupFreeRetryRequest, db: Session = Depends(get_db)):
+def retry_group_free_refund(
+    payload: GroupFreeRetryRequest, 
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user)
+):
+    """
+    v3.5.0: Secure Refund Retry.
+    """
+    if not payload.user_id:
+        payload.user_id = current_user.customer_id
+        
+    if current_user.customer_id != payload.user_id:
+        if current_user.user_type not in ["kol", "admin"]:
+            raise HTTPException(status_code=403, detail="Forbidden: Admin only")
+            
     order = (
         db.query(Order)
         .filter_by(shopify_order_id=payload.order_id)
@@ -362,7 +416,11 @@ def group_free_refund_retry_queue(
     error_status_code: Optional[int] = None,
     cursor: Optional[str] = None,
     db: Session = Depends(get_db),
+    admin: UserExt = Depends(get_current_admin)
 ):
+    """
+    v3.5.0: Admin-only refund queue access.
+    """
     n = max(1, min(int(limit), 500))
     statuses = ["refund_retry_needed"]
     if include_failed:
@@ -417,93 +475,45 @@ def group_free_refund_retry_queue(
     return {"status": "ok", "count": len(items), "next_cursor": next_cursor, "items": items}
 
 
-@router.post("/group-free/retry-batch")
-def retry_group_free_refund_batch(payload: GroupFreeRetryBatchRequest, db: Session = Depends(get_db)):
-    limit = max(1, min(int(payload.limit), 200))
+@router.get("/transactions/{user_id}")
+def get_transactions(
+    user_id: int, 
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user)
+):
+    """
+    v3.5.0: Secure transaction history with IDOR protection.
+    """
+    if current_user.customer_id != user_id and current_user.user_type not in ["kol", "admin"]:
+         raise HTTPException(status_code=403, detail="Forbidden")
+         
+    from app.models.ledger import WalletTransaction
+    txs = db.query(WalletTransaction).filter(WalletTransaction.user_id == user_id).order_by(WalletTransaction.created_at.desc()).all()
+    return [
+        {
+            "id": str(tx.id),
+            "amount": float(tx.amount),
+            "type": tx.type,
+            "status": tx.status,
+            "order_id": tx.order_id,
+            "description": tx.description,
+            "created_at": tx.created_at.isoformat()
+        }
+        for tx in txs
+    ]
 
-    q = db.query(Order)
-    if payload.force:
-        q = q.filter(Order.refund_status.in_(["refund_retry_needed", "failed"]))
-    else:
-        q = q.filter(Order.refund_status == "refund_retry_needed")
-
-    orders = (
-        q.order_by(Order.last_refund_attempt_at.asc().nullsfirst(), Order.updated_at.asc())
-        .with_for_update(skip_locked=True)
-        .limit(limit)
-        .all()
-    )
-
-    results: List[Dict[str, Any]] = []
-    counts = {"selected": len(orders), "succeeded": 0, "failed": 0, "skipped": 0}
-
-    for order in orders:
-        if order.refund_status in {"pending", "refunded"}:
-            counts["skipped"] += 1
-            results.append({"order_id": order.shopify_order_id, "status": "skipped", "refund_status": order.refund_status})
-            continue
-
-        plan = db.query(CheckinPlan).filter_by(order_id=order.shopify_order_id).first()
-        if plan and plan.status in {"pending_choice", "active_checkin", "active_groupbuy"}:
-            plan.status = "free_refunded"
-
-        gb = db.query(GroupBuyCampaign).filter_by(owner_order_id=order.shopify_order_id).first()
-        if gb and gb.status != "success":
-            gb.status = "success"
-
-        order.refund_status = "pending"
-        order.refund_attempts = (order.refund_attempts or 0) + 1
-        order.last_refund_attempt_at = datetime.utcnow()
-        db.commit()
-
-        try:
-            _, res = refund_order_full(order_id=int(order.shopify_order_id))
-            refund = res.get("refund") if isinstance(res, dict) else None
-
-            txn_id = None
-            if isinstance(refund, dict):
-                txs = refund.get("transactions") or []
-                if txs and isinstance(txs, list) and isinstance(txs[0], dict):
-                    txn_id = txs[0].get("id")
-
-            order.refund_status = "refunded"
-            order.refund_txn_id = str(txn_id) if txn_id is not None else order.refund_txn_id
-            order.refund_error = None
-            order.refunded_at = datetime.utcnow()
-            order.status = "refunded"
-            db.commit()
-
-            clawback = RewardsService(db).clawback_rewards_for_order(int(order.shopify_order_id))
-
-            counts["succeeded"] += 1
-            results.append(
-                {
-                    "order_id": order.shopify_order_id,
-                    "status": "success",
-                    "refund_status": order.refund_status,
-                    "refund_txn_id": order.refund_txn_id,
-                    "attempts": order.refund_attempts,
-                    "reward_clawback": clawback,
-                }
-            )
-        except ShopifyRefundError as e:
-            order.refund_error = {"message": str(e), "status_code": e.status_code, "details": e.details}
-            if e.status_code == 429 or (e.status_code is not None and e.status_code >= 500):
-                order.refund_status = "refund_retry_needed"
-            else:
-                order.refund_status = "failed"
-            db.commit()
-
-            counts["failed"] += 1
-            results.append(
-                {
-                    "order_id": order.shopify_order_id,
-                    "status": "refund_failed",
-                    "refund_status": order.refund_status,
-                    "refund_txn_id": order.refund_txn_id,
-                    "attempts": order.refund_attempts,
-                    "error": {"status_code": e.status_code},
-                }
-            )
-
-    return {"status": "done", "counts": counts, "results": results}
+@router.get("/kol/stats/{user_id}")
+def get_kol_stats(
+    user_id: int, 
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user)
+):
+    """
+    v3.4.8: Get performance stats for KOL Dashboard.
+    Secure access for KOL owners or admins.
+    """
+    if current_user.customer_id != user_id and current_user.user_type != "admin":
+         raise HTTPException(status_code=403, detail="Forbidden")
+         
+    service = RewardsService(db)
+    return service.get_kol_stats(user_id)

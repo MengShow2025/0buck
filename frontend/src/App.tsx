@@ -29,6 +29,7 @@ import { Attachment } from 'stream-chat-react';
 import 'stream-chat-react/dist/css/v2/index.css';
 import BAPAttachmentRenderer from './components/BAPAttachmentRenderer';
 import { useStreamVCC } from './hooks/useStreamVCC';
+import { useRewards } from './hooks/useRewards';
 
 import { getApiUrl } from './utils/api';
 
@@ -285,6 +286,8 @@ export default function App() {
     };
   }, [isAuthenticated, requireAuth, currentView, currentUser?.id]);
 
+  const { status, isLoading: isRewardsLoading, checkIn, fetchStatus } = useRewards(currentUser?.id);
+
   const renderView = () => {
     switch (currentView) {
       case 'login':
@@ -531,6 +534,7 @@ export default function App() {
           onAgentNameChange={setAgentName}
           deviceType={deviceType}
           onMenuClick={() => setIsSidebarOpen(true)}
+          status={status}
         />;
       default:
         return (

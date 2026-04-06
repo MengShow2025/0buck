@@ -59,7 +59,9 @@ class CheckinPlan(Base):
     status = Column(String, default="pending_choice") # 'pending_choice', 'active_checkin', 'active_groupbuy', 'completed', 'free_refunded', 'forfeited'
     total_earned = Column(Numeric(12, 2), default=0.0)
     last_checkin_at = Column(Date, nullable=True)
-    timezone = Column(String(50), default="UTC") # Added timezone field
+    last_checkin_utc = Column(DateTime, nullable=True) # v3.5.0: For 20h cooldown defense
+    payout_eligible_at = Column(DateTime, nullable=True) # Fulfillment + Return Period
+    timezone = Column(String(50), default="UTC")
     plan_config = Column(JSON, nullable=True) # v3.0: Stores the randomized 20-phase roadmap
 
 class CheckinLog(Base):
@@ -70,6 +72,17 @@ class CheckinLog(Base):
     checkin_date = Column(Date, default=func.current_date())
     period_num = Column(Integer)
     day_num = Column(Integer)
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    admin_id = Column(BigInteger, index=True)
+    action = Column(String(100)) # e.g. 'APPROVE_KOL', 'VERDICT_FRAUD'
+    target_id = Column(String(100), nullable=True) # ID of the resource affected
+    payload = Column(JSON, nullable=True) # Data sent in request
+    ip_address = Column(String(50), nullable=True)
+    created_at = Column(DateTime, default=func.now())
 
 class ReferralRelationship(Base):
     __tablename__ = "referral_relationships"
@@ -84,9 +97,13 @@ class GroupBuyCampaign(Base):
     __tablename__ = "group_buy_campaigns"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    owner_order_id = Column(BigInteger, unique=True, index=True)
+    owner_order_id = Column(BigInteger, index=True) # Changed from unique=True to support multiple items per order
+    product_id = Column(BigInteger, nullable=True) # Shopify Product ID
+    variant_id = Column(BigInteger, nullable=True) # Shopify Variant ID
+    purchased_quantity = Column(Integer, default=1) # Total quantity purchased
+    refunded_quantity = Column(Integer, default=0) # Number of items already refunded/freed
     share_code = Column(String(20), unique=True, index=True)
-    required_count = Column(Integer, default=3)
+    required_count = Column(Integer, default=3) # quantity * 3
     current_count = Column(Integer, default=0)
     status = Column(String, default="open") # 'open', 'success', 'expired'
     created_at = Column(DateTime, default=func.now())
@@ -145,6 +162,7 @@ class Order(Base):
     # Fulfillment Tracking
     tracking_number = Column(String, nullable=True)
     fulfillment_status = Column(String, default="unfulfilled") # 'unfulfilled', 'partial', 'fulfilled', 'restocked'
+    delivered_at = Column(DateTime, nullable=True) # Actual signing/delivery date
     
     # Lifecycle Status
     status = Column(String, default="paid") # 'paid', 'shipped', 'completed', 'refunded', 'cancelled'

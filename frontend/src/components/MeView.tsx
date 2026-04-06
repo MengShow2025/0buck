@@ -54,7 +54,8 @@ export default function MeView({
   agentName,
   onAgentNameChange,
   deviceType = 'web',
-  onMenuClick
+  onMenuClick,
+  status
 }: { 
   isAuthenticated: boolean; 
   onLoginClick: () => void; 
@@ -63,6 +64,7 @@ export default function MeView({
   onAgentNameChange: (name: string) => void;
   deviceType?: string;
   onMenuClick?: () => void;
+  status?: any;
 }) {
   const { t, i18n } = useTranslation();
   const { resolvedTheme } = useTheme();
@@ -70,7 +72,7 @@ export default function MeView({
   const [showSettings, setShowSettings] = useState(false);
   const [showLanguageDropdown, setShowLanguageDropdown] = useState(false);
   const [showModelDropdown, setShowModelDropdown] = useState(false);
-  const [showRulesModal, setShowRulesModal] = useState<'points' | 'renewal' | 'rewards' | null>(null);
+  const [showRulesModal, setShowRulesModal] = useState<'points' | 'renewal' | 'rewards' | 'withdrawal' | null>(null);
   const [show2FAModal, setShow2FAModal] = useState(false);
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
   const [twoFactorData, setTwoFactorData] = useState<{qr_code: string, secret: string} | null>(null);
@@ -209,7 +211,7 @@ export default function MeView({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6 w-full">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-6 w-full">
             {/* Wallet Card 1: Cash */}
             <div className="glass-panel rounded-[1.25rem] sm:rounded-[2rem] p-3 sm:p-6 relative overflow-hidden group">
               <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
@@ -219,19 +221,20 @@ export default function MeView({
                 <div className="flex justify-between items-start mb-4 sm:mb-6">
                   <div>
                     <p className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-widest font-black">{t('me.cash_balance')}</p>
-                    <h2 className="text-2xl sm:text-3xl font-headline font-black text-white mt-1">$12,480.<span className="text-zinc-500 text-lg sm:text-xl">50</span></h2>
+                    <h2 className="text-xl sm:text-2xl font-headline font-black text-white mt-1">
+                      ${status?.wallet?.available?.toFixed(2) || '0.00'}
+                    </h2>
+                    {status?.wallet?.pending > 0 && (
+                      <p className="text-[9px] text-zinc-500 mt-1 uppercase font-bold">
+                        Pending: ${status.wallet.pending.toFixed(2)}
+                      </p>
+                    )}
                   </div>
                   <span className="px-2 py-1 bg-green-500/10 text-green-500 text-[9px] sm:text-[10px] font-black rounded uppercase">USD</span>
                 </div>
                 <div className="flex gap-2">
-                  <button className="flex-1 py-2 sm:py-2.5 bg-white/5 border border-white/5 hover:border-primary/50 transition-all rounded-xl text-[10px] sm:text-[10px] font-black text-zinc-300 uppercase tracking-widest">{t('me.details')}</button>
-                  <button className="flex-1 py-2 sm:py-2.5 bg-white/5 border border-white/5 hover:border-primary/50 transition-all rounded-xl text-[10px] sm:text-[10px] font-black text-zinc-300 uppercase tracking-widest">{t('me.withdraw')}</button>
-                  <button 
-                    onClick={() => setShowRulesModal('renewal')}
-                    className="px-3 sm:px-4 py-2 sm:py-2.5 bg-white/5 border border-white/5 hover:bg-white/10 transition-all rounded-xl"
-                  >
-                    <HelpCircle className="w-3.5 h-3.5 sm:w-4 h-4 text-zinc-500" />
-                  </button>
+                  <button className="flex-1 py-2 bg-white/5 border border-white/5 hover:border-primary/50 transition-all rounded-xl text-[9px] font-black text-zinc-300 uppercase tracking-widest">{t('me.details')}</button>
+                  <button className="flex-1 py-2 bg-white/5 border border-white/5 hover:border-primary/50 transition-all rounded-xl text-[9px] font-black text-zinc-300 uppercase tracking-widest">{t('me.withdraw')}</button>
                 </div>
               </div>
             </div>
@@ -245,18 +248,46 @@ export default function MeView({
                 <div className="flex justify-between items-start mb-4 sm:mb-6">
                   <div>
                     <p className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-widest font-black">{t('me.precision_points')}</p>
-                    <h2 className="text-2xl sm:text-3xl font-headline font-black text-primary mt-1">45,200 <span className="text-zinc-500 text-sm sm:text-xl font-medium uppercase text-xs">0BK</span></h2>
+                    <h2 className="text-xl sm:text-2xl font-headline font-black text-primary mt-1">
+                      {status?.wallet?.points?.toLocaleString() || '0'}
+                    </h2>
+                    {status?.wallet?.pending_points > 0 && (
+                      <p className="text-[9px] text-zinc-500 mt-1 uppercase font-bold">
+                        Frozen: {status.wallet.pending_points.toLocaleString()}
+                      </p>
+                    )}
                   </div>
-                  <span className="px-2 py-1 bg-primary/10 text-primary text-[9px] sm:text-[10px] font-black rounded uppercase">Tier 1</span>
+                  <span className="px-2 py-1 bg-primary/10 text-primary text-[9px] sm:text-[10px] font-black rounded uppercase">0BK</span>
                 </div>
                 <div className="flex gap-2">
-                  <button className="flex-1 py-2 sm:py-2.5 bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all rounded-xl text-[10px] sm:text-[10px] font-black text-primary uppercase tracking-widest">{t('me.details')}</button>
-                  <button className="flex-1 py-2 sm:py-2.5 bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all rounded-xl text-[10px] sm:text-[10px] font-black text-primary uppercase tracking-widest">{t('me.redeem')}</button>
+                  <button className="flex-1 py-2 bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all rounded-xl text-[9px] font-black text-primary uppercase tracking-widest">{t('me.details')}</button>
+                  <button className="flex-1 py-2 bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-all rounded-xl text-[9px] font-black text-primary uppercase tracking-widest">{t('me.redeem')}</button>
+                </div>
+              </div>
+            </div>
+
+            {/* Wallet Card 3: Renewal Cards */}
+            <div className="glass-panel rounded-[1.25rem] sm:rounded-[2rem] p-3 sm:p-6 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <ShieldCheck className="w-12 h-12 sm:w-16 sm:h-16" />
+              </div>
+              <div className="relative z-10">
+                <div className="flex justify-between items-start mb-4 sm:mb-6">
+                  <div>
+                    <p className="text-[9px] sm:text-[10px] text-zinc-500 uppercase tracking-widest font-black">{t('me.renewal_rules_title')}</p>
+                    <h2 className="text-xl sm:text-2xl font-headline font-black text-orange-400 mt-1">
+                      {status?.wallet?.renewal_cards || 0} <span className="text-zinc-500 text-xs font-medium uppercase tracking-widest">Cards</span>
+                    </h2>
+                  </div>
+                  <span className="px-2 py-1 bg-orange-400/10 text-orange-400 text-[9px] sm:text-[10px] font-black rounded uppercase">Active</span>
+                </div>
+                <div className="flex gap-2">
+                  <button className="flex-1 py-2 bg-orange-400/10 border border-orange-400/20 hover:bg-orange-400/20 transition-all rounded-xl text-[9px] font-black text-orange-400 uppercase tracking-widest">{t('me.details')}</button>
                   <button 
-                    onClick={() => setShowRulesModal('points')}
-                    className="px-3 sm:px-4 py-2 sm:py-2.5 bg-white/5 border border-white/5 hover:bg-white/10 transition-all rounded-xl"
+                    onClick={() => setShowRulesModal('renewal')}
+                    className="px-3 py-2 bg-white/5 border border-white/5 hover:bg-white/10 transition-all rounded-xl"
                   >
-                    <Info className="w-3.5 h-3.5 sm:w-4 h-4 text-zinc-500" />
+                    <Info className="w-3.5 h-3.5 text-zinc-500" />
                   </button>
                 </div>
               </div>
@@ -714,11 +745,11 @@ export default function MeView({
             
             <div className="flex items-center gap-4 mb-8">
               <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
-                {showRulesModal === 'points' ? <Star className="w-6 h-6" /> : (showRulesModal === 'renewal' ? <ShieldCheck className="w-6 h-6" /> : <Info className="w-6 h-6" />)}
+                {showRulesModal === 'points' ? <Star className="w-6 h-6" /> : (showRulesModal === 'renewal' ? <ShieldCheck className="w-6 h-6" /> : (showRulesModal === 'withdrawal' ? <Wallet className="w-6 h-6" /> : <Info className="w-6 h-6" />))}
               </div>
               <div>
                 <h3 className="text-xl font-headline font-black text-white uppercase tracking-tight">
-                  {showRulesModal === 'points' ? t('me.points_rules_title') : (showRulesModal === 'renewal' ? t('me.renewal_rules_title') : t('me.rewards_rules_title'))}
+                  {showRulesModal === 'points' ? t('me.points_rules_title') : (showRulesModal === 'renewal' ? t('me.renewal_rules_title') : (showRulesModal === 'withdrawal' ? t('me.withdrawal_rules_title') : t('me.rewards_rules_title')))}
                 </h3>
                 <p className="text-[10px] text-primary font-black uppercase tracking-[0.2em] mt-1">Industrial Protocol v3.4</p>
               </div>
@@ -729,7 +760,7 @@ export default function MeView({
                 <div className="space-y-4">
                   {(showRulesModal === 'points' 
                     ? t('me.points_rules_content') 
-                    : (showRulesModal === 'renewal' ? t('me.renewal_rules_content') : t('me.rewards_rules_content'))
+                    : (showRulesModal === 'renewal' ? t('me.renewal_rules_content') : (showRulesModal === 'withdrawal' ? t('me.withdrawal_rules_content') : t('me.rewards_rules_content')))
                   ).split('\n').map((line, i) => (
                     <div key={i} className="flex gap-3">
                       <span className="flex-shrink-0 w-5 h-5 rounded-full bg-primary/10 text-primary text-[10px] font-black flex items-center justify-center border border-primary/20">

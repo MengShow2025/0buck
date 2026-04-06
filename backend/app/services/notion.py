@@ -71,6 +71,10 @@ class NotionService:
             
         return results
 
+    async def update_database_properties(self, database_id: str, properties: Dict[str, Any]) -> Dict[str, Any]:
+        """Updates a database's properties (schema)."""
+        return await self._request("PATCH", f"/databases/{database_id}", {"properties": properties})
+
     async def get_viral_signals(self) -> List[Dict[str, Any]]:
         """Fetches candidates from the '0Buck: 爆点信号捕捉' (Viral Signals) database."""
         database_id = None
@@ -259,6 +263,8 @@ class NotionService:
             "时间": {"date": {"start": datetime.now().strftime("%Y-%m-%d")}},
             "审核状态": {"select": {"name": data.get("status", "待审核")}},
             "商品名": {"title": [{"text": {"content": data.get("name", "New Product")}}]},
+            "功能描述": {"rich_text": [{"text": {"content": data.get("description_zh", "")}}]},
+            "热门趋势介绍": {"rich_text": [{"text": {"content": data.get("trend_insights", "")}}]},
             "选品理由 (团队)": {"rich_text": [{"text": {"content": data.get("reason_team", "符合趋势爆款")}}]},
             "1688 链接": {"url": data.get("url_1688") if data.get("url_1688") else None},
             "1688 拿货价格": {"number": cost_cny},

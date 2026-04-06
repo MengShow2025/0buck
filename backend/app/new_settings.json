@@ -1,0 +1,28 @@
+{
+  "current": {
+    "sections": {
+      "hero_jVaWmY": {
+        "settings": {
+          "image_1": "shopify://assets/hero-banner-gold.png",
+          "text": "<h1>THE BLACK & GOLD STANDARD</h1><p>Curated Intelligence. Global Supply. 100% Rewards.</p>",
+          "color_scheme": "scheme-1"
+        }
+      }
+    },
+    "color_schemes": {
+      "scheme-1": {
+        "settings": {
+          "background": "#000000",
+          "foreground": "#D4AF37",
+          "foreground_heading": "#D4AF37",
+          "primary": "#D4AF37",
+          "primary_hover": "#FFFFFF",
+          "primary_button_background": "#D4AF37",
+          "primary_button_text": "#000000",
+          "secondary_button_text": "#D4AF37",
+          "secondary_button_border": "#D4AF37"
+        }
+      }
+    }
+  }
+}

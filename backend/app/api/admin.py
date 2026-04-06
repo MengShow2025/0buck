@@ -508,49 +508,22 @@ async def get_ids_audit_queue():
     candidates = [p for p in all_products if p.get("audit_status") in ["待审核", "草稿", "分析中"]]
     return candidates
 
-@router.post("/ids/approve")
-async def approve_ids_product(name: str, db: Session = Depends(get_db)):
-    """v3.0 Approve a product: Update Notion status and sync to Shopify"""
-    from app.services.notion import NotionService
-    from app.services.supply_chain import SupplyChainService
-    from app.services.sync_shopify import SyncShopifyService
-    
-    notion = NotionService()
-    sc_service = SupplyChainService(db)
-    shopify_service = SyncShopifyService()
-    
-    try:
-        all_products = await notion.get_product_pool()
-        target = next((p for p in all_products if p['name'] == name), None)
-        
-        if not target:
-            raise HTTPException(status_code=404, detail="Product not found in Notion")
-            
-        id_1688 = target.get("id_1688")
-        if not id_1688:
-            raise HTTPException(status_code=400, detail="Missing 1688 ID")
-            
-        # 1. Sync to Local DB and Enforce Pricing
-        product_obj = await sc_service.sync_product(
-            id_1688, 
-            comp_price_usd=target.get("comp_price"),
-            is_cashback_eligible=target.get("is_cashback_eligible"),
-            strategy_tag=target.get("strategy_tag", "IDS_FOLLOWING")
-        )
-        
-        if isinstance(product_obj, dict) and product_obj.get("error"):
-             return {"status": "failed", "reason": product_obj.get("error")}
-             
-        # 2. Sync to Shopify
-        shopify_service.sync_to_shopify(product_obj)
-        
-        # 3. Update Notion Status to '审核通过'
-        # Note: NotionService needs update_audit_status method
-        if "page_id" in target:
-            await notion.update_page_properties(target["page_id"], {
-                "审核状态": {"select": {"name": "审核通过"}}
-            })
-            
-        return {"status": "success", "product_id": product_obj.id}
-    finally:
-        shopify_service.close_session()
+class FraudVerdictRequest(BaseModel):
+    relationship_id: str
+    verdict: str # PASS, REJECT, BAN
+    admin_note: Optional[str] = None
+
+# --- Fraud & Anti-Fraud (v3.4.8) ---
+
+@router.get("/fraud/alerts")
+def get_fraud_alerts(db: Session = Depends(get_db)):
+    """v3.4.8 List suspicious relationships for manual review"""
+    # This would query a 'fraud_alerts' table or dynamic logic
+    # For now, return a placeholder structure
+    return []
+
+@router.post("/fraud/verdict")
+def fraud_verdict(data: FraudVerdictRequest, db: Session = Depends(get_db)):
+    """v3.4.8 Admin final verdict on suspicious relationships"""
+    # Logic to update relationship status and potentially block payouts
+    return {"status": "success", "relationship_id": data.relationship_id, "verdict": data.verdict}

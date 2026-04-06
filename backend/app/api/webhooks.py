@@ -145,7 +145,7 @@ async def orders_paid_webhook(
     if referral_code:
         print(f"Referral Code Detected: {referral_code}")
         rewards_service.record_referral(customer_id, referral_code)
-        rewards_service.process_referral_commissions(customer_id, order_id, reward_base)
+        rewards_service.process_referral_commissions(customer_id, order_id, reward_base, referral_code)
     
     # v3.4: Multi-channel Social Automation
     from app.services.social_automation import SocialAutomationService
@@ -215,6 +215,29 @@ async def orders_fulfilled_webhook(
             await send_whatsapp_message(phone, msg)
             
     return {"status": "ok"}
+
+@router.post("/shopify/orders/refunded")
+async def orders_refunded_webhook(
+    request: Request,
+    db: Session = Depends(get_db)
+):
+    data = await request.body()
+    payload = json.loads(data)
+    order_id = payload.get("id")
+    print(f"Webhook Received: Order Refunded {order_id}")
+    
+    # 1. Update local order status
+    order = db.query(Order).filter_by(shopify_order_id=order_id).first()
+    if order:
+        order.status = "refunded"
+        db.commit()
+        
+    # 2. Trigger Full Clawback of rewards
+    rewards_service = RewardsService(db)
+    clawback_res = rewards_service.clawback_rewards_for_order(order_id)
+    print(f"Clawback processed for Order {order_id}: {clawback_res}")
+    
+    return {"status": "ok", "clawback": clawback_res}
 
 # --- WhatsApp Cloud API Webhooks ---
 

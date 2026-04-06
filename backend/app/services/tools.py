@@ -192,18 +192,33 @@ def search_coupons(user_id: int, category: str, reason: str, min_spend: float = 
         db.close()
 
 @tool
-async def get_order_status(order_id: str) -> Dict[str, Any]:
+def get_order_status(user_id: int, order_id: str) -> Dict[str, Any]:
     """
     Retrieve the current status of a Shopify order and its fulfillment status.
+    
+    Args:
+        user_id: The ID of the current user (Verified by System).
+        order_id: The Shopify Order ID or Order Number.
     """
-    # Placeholder for Shopify + fulfillment tracking
-    return {
-        "order_id": order_id,
-        "status": "fulfilled",
-        "tracking_number": "YT1234567890",
-        "carrier": "Yanwen",
-        "estimated_delivery": "2026-04-10",
-        "items": [
-            {"title": "Smart AI Glasses", "quantity": 1}
-        ]
-    }
+    db = SessionLocal()
+    try:
+        from app.models.ledger import Order
+        # STRICT v3.5.0: Check if order belongs to the user
+        order = db.query(Order).filter(
+            (Order.shopify_order_id == order_id) | (Order.order_number == order_id),
+            Order.user_id == user_id
+        ).first()
+        
+        if not order:
+            return {"error": "Order not found or access denied. You can only check your own orders."}
+            
+        return {
+            "order_id": order_id,
+            "status": order.status or "processing",
+            "tracking_number": order.tracking_number or "Pending",
+            "carrier": order.carrier or "Standard",
+            "estimated_delivery": order.delivered_at.isoformat() if order.delivered_at else "Calculating...",
+            "items": [{"title": "Items in Order", "quantity": 1}] # Simplified
+        }
+    finally:
+        db.close()

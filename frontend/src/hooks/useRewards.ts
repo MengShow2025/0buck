@@ -11,7 +11,10 @@ export interface RewardStatus {
   fan_rate: number;
   wallet: {
     available: number;
+    pending: number;
     points: number;
+    pending_points: number;
+    renewal_cards: number;
     currency: string;
   };
   level: {
@@ -62,13 +65,13 @@ export function useRewards(userId: number | null) {
     }
   }, [userId]);
 
-  const checkIn = useCallback(async (planId: string) => {
+  const checkIn = useCallback(async (planId?: string) => {
     if (!userId) return;
     try {
       const url = getApiUrl('/v1/rewards/checkin');
       const res = await axios.post(url, {
         user_id: userId,
-        plan_id: planId
+        plan_id: planId // Optional: if omitted, backend does batch check-in
       });
       await fetchStatus(); // Refresh status after check-in
       return res.data;

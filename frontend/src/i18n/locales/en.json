@@ -259,6 +259,8 @@
     "signin": "Checkn",
     "rewards_rules_title": "Reward Claim Rules",
     "rewards_rules_content": "1. Daily rewards must be claimed manually before midnight.\n2. Claimed amounts are added directly to your cash balance.\n3. The system automatically updates your total reclaimed amount upon success.\n4. Higher streaks increase the potential reward cap per claim.",
+    "withdrawal_rules_title": "Withdrawal & Fees Protocol",
+    "withdrawal_rules_content": "1. Minimum withdrawal amount is $50 USD.\n2. Virtual Currency (USDC/USDT): Flat $2 fee (Strongly encouraged, best value).\n3. Other methods (PayPal): 3.2% + $2 processing fee.\n4. All fees are deducted directly from the withdrawal amount.\n5. Rewards must pass the 15-day return window to become withdrawable.",
     "total_reclaimed": "Total Reclaimed",
     "vs_phase": "+12.4% vs Phase 03",
     "order_history": "Order History (Phase 04)",

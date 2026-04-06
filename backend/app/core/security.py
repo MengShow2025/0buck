@@ -1,9 +1,36 @@
 import base64
 import os
+from datetime import datetime, timedelta
+from typing import Any, Union
+from jose import jwt
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import padding
 from .config import settings
+
+# JWT Configuration
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+
+def create_access_token(subject: Union[str, Any], expires_delta: timedelta = None) -> str:
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    
+    to_encode = {"exp": expire, "sub": str(subject)}
+    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+def verify_token(token: str) -> str:
+    """Verifies a JWT token and returns the subject (user_id)."""
+    try:
+        decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=[ALGORITHM])
+        return decoded_token["sub"]
+    except jwt.JWTError:
+        return None
+
+# --- Existing AES Encryption ---
 
 # Use the master key from settings, ensure it is 32 bytes for AES-256
 MASTER_KEY_DEFAULT = settings.MASTER_SECRET_KEY.encode().ljust(32, b'\0')[:32]

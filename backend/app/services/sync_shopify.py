@@ -149,8 +149,6 @@ class SyncShopifyService:
             return []
             
         cdn_urls = []
-        import httpx
-        import asyncio
         
         # Shopify GraphQL Endpoint
         url = f"https://{self.shop_url}/admin/api/{self.api_version}/graphql.json"
@@ -196,8 +194,17 @@ class SyncShopifyService:
                 response = requests.post(url, headers=headers, json={"query": mutation, "variables": variables})
                 data = response.json()
                 
+                # GraphQL Error Handling
+                if "errors" in data:
+                    logging.error(f"GraphQL Errors: {data['errors']}")
+                    continue
+
                 if data.get("data", {}).get("fileCreate", {}).get("files"):
                     files = data["data"]["fileCreate"]["files"]
+                    user_errors = data.get("data", {}).get("fileCreate", {}).get("userErrors", [])
+                    if user_errors:
+                        logging.warning(f"GraphQL UserErrors: {user_errors}")
+                        
                     if files and "image" in files[0] and files[0]["image"]:
                         cdn_urls.append(files[0]["image"]["url"])
                 else:

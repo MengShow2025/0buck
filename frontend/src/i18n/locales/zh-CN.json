@@ -258,6 +258,8 @@
     "signin": "Checkn",
     "rewards_rules_title": "奖励领取规则",
     "rewards_rules_content": "1. 签到奖励需在当日内手动领取，逾期将失效。\n2. 奖励金额直接进入您的现金账户余额。\n3. 领取成功后，系统会自动更新您的累计已领取金额。\n4. 连续签到天数越多，单次领取的奖励上限越高。",
+    "withdrawal_rules_title": "提现与手续费说明",
+    "withdrawal_rules_content": "1. 最小提现金额为 $50 USD。\n2. 虚拟货币提现 (USDC/USDT)：每次仅收 $2 固定手续费 (平台强烈鼓励使用，更划算)。\n3. 其他提现方式 (如 PayPal)：手续费为 3.2% + $2。\n4. 所有手续费均直接从提现金额内扣除。\n5. 订单需过 15 天退货期后，相关奖励方可结算提现。",
     "total_reclaimed": "累计已领取",
     "vs_phase": "较阶段 03 增长 12.4%",
     "order_history": "订单记录（阶段 04）",

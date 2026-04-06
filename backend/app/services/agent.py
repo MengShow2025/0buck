@@ -94,8 +94,28 @@ async def supervisor(state: AgentState):
     response = await llm_with_tools.ainvoke(messages)
     db.close()
     
+    # --- v3.5.0 AI Safety Sandbox: Enforce user_id in tool calls ---
     if response.tool_calls:
-        return {"messages": [response], "next_node": "tools"}
+        new_tool_calls = []
+        for tc in response.tool_calls:
+            # If the tool takes a user_id, overwrite it with the verified user_id from state
+            if "user_id" in tc["args"]:
+                tc["args"]["user_id"] = user_id
+            # Special case for tools that SHOULD have user_id but the LLM forgot or hallucinated
+            # We can't easily check the tool signature here without importing them, 
+            # but we know which tools in tools.py need user_id.
+            if tc["name"] in ["get_order_status", "search_coupons", "update_butler_settings", "trigger_wishing_well"]:
+                tc["args"]["user_id"] = user_id
+            new_tool_calls.append(tc)
+        
+        # Create a new response with the modified tool calls
+        from langchain_core.messages import AIMessage
+        safe_response = AIMessage(
+            content=response.content,
+            tool_calls=new_tool_calls,
+            id=response.id
+        )
+        return {"messages": [safe_response], "next_node": "tools"}
     
     return {"messages": [response], "next_node": END}
 
