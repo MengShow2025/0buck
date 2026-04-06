@@ -649,22 +649,83 @@ class RewardsService:
         self.db.commit()
 
     @admin_audit(action="ADJUST_WALLET")
+    def freeze_balance(self, customer_id: int, amount: Decimal, order_ref: str) -> bool:
+        """
+        v3.5.0: Atomic Balance Freeze for Payment (Schema B/C).
+        Locks balance_available and moves it to balance_locked.
+        """
+        wallet = self.db.query(Wallet).filter_by(user_id=customer_id).with_for_update().first()
+        if not wallet or wallet.balance_available < amount:
+            return False
+            
+        wallet.balance_available -= amount
+        wallet.balance_locked += amount
+        
+        # Log the pending transaction
+        from app.models.ledger import WalletTransaction
+        tx = WalletTransaction(
+            user_id=customer_id,
+            amount=-amount, # Negative to show deduction from available
+            type="payment_freeze",
+            description=f"Payment for Order {order_ref}",
+            status="pending_payment"
+        )
+        self.db.add(tx)
+        return True
+
+    def unfreeze_balance(self, customer_id: int, amount: Decimal, order_ref: str):
+        """
+        v3.5.0: Release frozen balance back to available (on cancellation).
+        """
+        wallet = self.db.query(Wallet).filter_by(user_id=customer_id).with_for_update().first()
+        if wallet:
+            wallet.balance_available += amount
+            wallet.balance_locked -= amount
+            
+            from app.models.ledger import WalletTransaction
+            # Find and mark the freeze transaction as cancelled
+            tx = self.db.query(WalletTransaction).filter_by(
+                user_id=customer_id, 
+                type="payment_freeze",
+                status="pending_payment"
+            ).order_by(WalletTransaction.created_at.desc()).first()
+            if tx:
+                tx.status = "cancelled"
+
+    def finalize_payment(self, customer_id: int, amount: Decimal, order_id: str):
+        """
+        v3.5.0: Confirm payment and clear the frozen balance.
+        """
+        wallet = self.db.query(Wallet).filter_by(user_id=customer_id).with_for_update().first()
+        if wallet:
+            wallet.balance_locked -= amount
+            
+            from app.models.ledger import WalletTransaction
+            tx = self.db.query(WalletTransaction).filter_by(
+                user_id=customer_id, 
+                type="payment_freeze",
+                status="pending_payment"
+            ).order_by(WalletTransaction.created_at.desc()).first()
+            if tx:
+                tx.status = "completed"
+                tx.order_id = order_id
+
     def update_wallet_balance(self, customer_id: int, amount: Decimal, type: str, order_id: Optional[int] = None, description: str = "", status: str = 'completed'):
         """
-        v3.5.0: Thread-safe wallet update with row-level locking.
+        v3.5.0: Generic wallet update for rewards/refunds (Not for Payment Freeze).
         """
         wallet = self.db.query(Wallet).filter_by(user_id=customer_id).with_for_update().first()
         if not wallet:
             wallet = Wallet(user_id=customer_id, balance_available=Decimal('0.0'), balance_locked=Decimal('0.0'))
             self.db.add(wallet)
-            self.db.flush() # Ensure it's in DB before continuing
+            self.db.flush()
         
-        # Only add to available if status is 'completed'
         if status == 'completed':
             wallet.balance_available += amount
         else:
             wallet.balance_locked += amount
 
+        from app.models.ledger import WalletTransaction
         tx = WalletTransaction(
             user_id=customer_id,
             amount=amount,

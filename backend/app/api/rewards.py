@@ -503,18 +503,54 @@ def get_transactions(
         for tx in txs
     ]
 
-@router.get("/kol/stats/{user_id}")
-def get_kol_stats(
-    user_id: int, 
+@router.post("/payment/pre-check")
+def payment_pre_check(
+    payload: Dict[str, Any], 
     db: Session = Depends(get_db),
     current_user: UserExt = Depends(get_current_user)
 ):
     """
-    v3.4.8: Get performance stats for KOL Dashboard.
-    Secure access for KOL owners or admins.
+    v3.5.0: Pre-check inventory and freeze balance before Draft Order creation.
     """
-    if current_user.customer_id != user_id and current_user.user_type != "admin":
-         raise HTTPException(status_code=403, detail="Forbidden")
-         
-    service = RewardsService(db, current_user_id=current_user.customer_id)
-    return service.get_kol_stats(user_id)
+    customer_id = current_user.customer_id
+    items = payload.get("items", [])
+    balance_to_use = Decimal(str(payload.get("balance_to_use", "0")))
+    
+    if balance_to_use > 0:
+        rewards = RewardsService(db, current_user_id=customer_id)
+        # Attempt to freeze balance
+        success = rewards.freeze_balance(customer_id, balance_to_use, "PENDING_ORDER")
+        if not success:
+            raise HTTPException(status_code=400, detail="Insufficient balance or freeze failed")
+            
+    return {"status": "success", "message": "Balance frozen, proceed to order creation"}
+
+@router.post("/payment/create-order")
+def create_payment_order(
+    payload: Dict[str, Any], 
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user)
+):
+    """
+    v3.5.0: Create Draft Order (B) or Direct Order (C).
+    """
+    from app.services.shopify_payment_service import ShopifyDraftOrderService
+    payment_service = ShopifyDraftOrderService()
+    
+    customer_id = current_user.customer_id
+    items = payload.get("items", [])
+    balance_used = Decimal(str(payload.get("balance_used", "0")))
+    referral_code = payload.get("referral_code")
+    
+    # Calculate Total from Price Firewall logic (simplified here as we call service)
+    # Service will do the actual firewalling
+    
+    if payload.get("is_full_payment"):
+        # Schema C: Direct Order
+        res = payment_service.create_final_order_direct(customer_id, items, balance_used, referral_code)
+    else:
+        # Schema B: Draft Order
+        res = payment_service.create_draft_order(customer_id, items, balance_used, referral_code)
+        
+    payment_service.close()
+    return res

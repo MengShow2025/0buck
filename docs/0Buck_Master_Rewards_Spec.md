@@ -219,7 +219,57 @@
 
 ---
 
-## 8. 数据库模型建议
+## 8. 支付引擎与余额支付架构 (Payment Engine & Wallet Integration v3.5.0)
+
+为了确保 0Buck 的强金融属性与安全性，系统采用 **Shopify Draft Order API (方案 B)** 作为核心支付路径，并针对全额余额支付采用 **内部结算回写 (方案 C)**。
+
+### 8.1 支付路径选择逻辑 (The Decision Tree)
+
+1.  **部分余额抵扣 (Partial Balance Payment)** $\rightarrow$ **方案 B (Draft Order API)**
+    *   用户在 0Buck 前端选择使用部分余额（例如 $10）。
+    *   后端生成 Shopify 草稿订单，应用 `applied_discount`。
+    *   用户跳转至 Shopify 支付剩余现金。
+2.  **全额余额支付 (Full Balance Payment)** $\rightarrow$ **方案 C (Internal Settlement)**
+    *   用户余额足以覆盖订单全额（$0 现金支出）。
+    *   后端直接扣款，通过 `Order API` 以 `financial_status: "paid"` 身份向 Shopify 回写正式订单。
+    *   **优势**：绕过支付网关，零手续费，极致体验。
+
+### 8.2 核心安全机制：价格防火墙 (Price Firewall)
+
+*   **原则**：**绝对禁止信任前端传来的商品价格、运费或折扣金额。**
+*   **执行流**：
+    1.  前端仅发送 `product_id` 和 `quantity`。
+    2.  后端根据数据库 `Product.sale_price` 重新计算总价。
+    3.  后端计算 0.5% 的汇率 Buffer。
+    4.  后端生成 Draft Order，确保支付金额由服务器端锁定。
+
+### 8.3 余额“冻结-核销”闭环 (Freeze-Settle Cycle)
+
+为了防止“双花”攻击（Double-Spending），系统执行以下金融原子操作：
+
+1.  **冻结 (Freeze)**：
+    *   用户点击“去支付”时，后端通过 `.with_for_update()` 锁定钱包。
+    *   将待支付金额从 `balance_available` 移动到 `balance_locked`。
+    *   记录 `WalletTransaction` 状态为 `pending_payment`。
+2.  **核销 (Settle)**：
+    *   当 Webhook 收到 `orders/paid` 或 Draft Order 支付完成信号时。
+    *   将 `balance_locked` 中的对应金额正式扣除（销账）。
+    *   更新 `WalletTransaction` 状态为 `completed`。
+3.  **释放 (Release)**：
+    *   若用户取消订单或 Draft Order 超时未支付（默认 2 小时）。
+    *   将 `balance_locked` 中的金额退回到 `balance_available`。
+    *   标记 `WalletTransaction` 为 `cancelled`。
+
+### 8.4 余额支付的返现规则 (Rebate on Rebate)
+
+*   **原则**：**允许使用奖励金额进行再购物，并产生新的返现。**
+*   **返现基数计算**：
+    *   新订单的返现基数（`reward_base`）= **订单总金额（含余额支付部分） - 运费 - 税费**。
+    *   *注：余额支付部分被视为等同于现金的有效投入。*
+
+---
+
+## 9. 数据库模型扩展 (Database Extensions)
 *   **Referrals表**：记录 `inviter_id`, `invitee_id`, `expiry_date`, `type (USER/KOL)`。
 *   **RewardPhases表**：记录每个订单的 20 期执行状态。
 *   **Points表**：记录用户积分，用于兑换"续签卡"。

@@ -128,7 +128,17 @@ async def orders_paid_webhook(
         db.add(new_order)
         db.commit()
     
-    # Logic: Initialize Rewards/Checkin Plan for the order
+    # 1. v3.5.0: Check for Balance Deduction in note_attributes
+    note_attributes = payload.get("note_attributes", [])
+    balance_deducted = next((Decimal(str(attr.get("value", "0"))) for attr in note_attributes if attr.get("name") == "balance_deducted"), Decimal("0"))
+    
+    if balance_deducted > 0:
+        print(f"  💰 Balance Deduction Detected: {balance_deducted}. Finalizing payment...")
+        # v3.5.0: System ID 1 for automated webhooks
+        rewards_service = RewardsService(db, current_user_id=1)
+        rewards_service.finalize_payment(customer_id, balance_deducted, str(order_id))
+
+    # 2. Initialize Rewards/Checkin Plan for the order
     # v3.5.0: System ID 1 for automated webhooks
     rewards_service = RewardsService(db, current_user_id=1)
     timezone = customer.get("timezone", "UTC")
