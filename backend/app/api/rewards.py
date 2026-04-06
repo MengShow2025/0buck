@@ -46,7 +46,8 @@ def _normalize_plan_status(status: str) -> str:
 
 
 from app.api.deps import get_current_user, get_current_admin
-from app.models.ledger import UserExt, WalletTransaction, PointTransaction, PointSource
+from app.models.ledger import UserExt, WalletTransaction
+from app.models.rewards import PointTransaction, PointSource
 
 @router.post("/checkin")
 def rewards_checkin(
