@@ -117,7 +117,32 @@ class SocialAutomationService:
             except Exception as e:
                 logger.error(f"Failed to send GB nudge: {e}")
 
-    def map_bap_to_whatsapp(self, card_type: str, data: dict) -> dict:
+    async def notify_abandoned_draft(self, user_id: int, invoice_url: str):
+        """
+        v3.6.0: AI Nudge for abandoned Draft Orders.
+        """
+        user = self.db.query(UserExt).filter_by(customer_id=user_id).first()
+        if not user: return
+
+        # Dumbo AI Personality-driven message
+        msg = f"Hey {user.first_name or 'there'}, I noticed you locked in some amazing 1688 finds but didn't finish the final step. Your wallet balance is ready to be applied! ✨ Click here to secure your items and start your 500-day cashback: {invoice_url}"
+        
+        # 1. Send to Stream Concierge
+        try:
+            concierge = stream_chat_service.server_client.channel("concierge", f"butler_{user_id}")
+            concierge.send_message({"text": msg}, user_id="0buck_system")
+        except Exception as e:
+            logger.error(f"Failed to send abandoned nudge to Stream: {e}")
+
+        # 2. Sync to Square Feed (Private)
+        activity = SquareActivity(
+            user_id=user_id,
+            type="payment_reminder",
+            content="🕒 Your items are reserved! Complete payment to activate rewards.",
+            metadata_json={"invoice_url": invoice_url}
+        )
+        self.db.add(activity)
+        self.db.commit()
         """
         v3.4 Bridge: Convert React BAP cards to WhatsApp Interactive Messages (Buttons/Lists).
         """

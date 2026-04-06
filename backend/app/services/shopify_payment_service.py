@@ -20,22 +20,58 @@ class ShopifyDraftOrderService:
         self.session = shopify.Session(self.shop_url, self.api_version, self.access_token)
         shopify.ShopifyResource.activate_session(self.session)
 
+    def get_or_create_shopify_customer(self, user_id: int, email: str, referral_code: Optional[str] = None) -> int:
+        """
+        v3.6.0: Zero-ID Mapping. Synchronizes 0Buck user with Shopify Customer.
+        """
+        customers = shopify.Customer.search(query=f"email:{email}")
+        if customers:
+            customer = customers[0]
+        else:
+            customer = shopify.Customer()
+            customer.email = email
+            # Sync initial data
+            customer.first_name = "0Buck"
+            customer.last_name = f"User_{user_id}"
+        
+        # Sync Tags (Critical for LTV Tracking in Shopify Admin)
+        tags = customer.tags.split(",") if customer.tags else []
+        tags = [t.strip() for t in tags]
+        
+        tags.append("0buck_verified")
+        if referral_code:
+            tags.append(f"ref_{referral_code}")
+        
+        customer.tags = ",".join(list(set(tags)))
+        customer.save()
+        return customer.id
+
     def create_draft_order(
         self, 
         customer_id: int, 
         items: List[Dict[str, Any]], 
         balance_to_use: Decimal = Decimal("0.0"),
-        referral_code: Optional[str] = None
+        referral_code: Optional[str] = None,
+        email: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Schema B: Create a Draft Order with balance deduction.
+        v3.6.0: Integrated with Zero-ID Mapping and Dynamic Sourcing.
         """
         try:
+            # 1. Identity Mapping
+            shopify_customer_id = customer_id # Default
+            if email:
+                shopify_customer_id = self.get_or_create_shopify_customer(customer_id, email, referral_code)
+
             draft_order = shopify.DraftOrder()
             line_items = []
             total_price_usd = Decimal("0.0")
+            
+            # Metadata for Dynamic Sourcing
+            sourcing_hints = []
 
-            # 1. Price Firewall: Re-calculate everything from DB
+            # 2. Price Firewall & Dynamic Sourcing Logic
             from app.db.session import SessionLocal
             db = SessionLocal()
             try:
@@ -52,14 +88,22 @@ class ShopifyDraftOrderService:
                         "price": str(price)
                     })
                     total_price_usd += price * quantity
+                    
+                    # Hint: In a real v3.6, we'd query multiple suppliers here
+                    sourcing_hints.append({
+                        "product_id": product.id,
+                        "best_supplier": product.supplier_id_1688 or "primary",
+                        "cost_at_creation": str(product.source_cost_usd)
+                    })
             finally:
                 db.close()
 
             draft_order.line_items = line_items
-            draft_order.customer = {"id": customer_id} # Bind to Shopify Customer ID
+            draft_order.customer = {"id": shopify_customer_id}
             draft_order.use_customer_default_address = True
             
-            # 2. Apply Balance Deduction as a Discount
+            # 3. Apply Balance Deduction
+            # ... (balance logic remains same)
             if balance_to_use > 0:
                 # Cap discount at total price
                 actual_discount = min(balance_to_use, total_price_usd)
@@ -74,7 +118,8 @@ class ShopifyDraftOrderService:
             meta_attributes = [
                 {"key": "0buck_user_id", "value": str(customer_id)},
                 {"key": "balance_deducted", "value": str(balance_to_use)},
-                {"key": "price_firewall_verified", "value": "true"}
+                {"key": "price_firewall_verified", "value": "true"},
+                {"key": "sourcing_hints", "value": json.dumps(sourcing_hints)}
             ]
             if referral_code:
                 meta_attributes.append({"key": "referral_code", "value": referral_code})

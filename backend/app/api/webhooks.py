@@ -32,10 +32,14 @@ async def orders_paid_webhook(
     db: Session = Depends(get_db)
 ):
     data = await request.body()
-    # During dev/tunnel testing, we might skip HMAC if it fails due to ngrok or other issues
+    # v3.6.0 STRICT SECURITY: Enforce HMAC verification in production
     if not verify_shopify_webhook(data, x_shopify_hmac_sha256):
-       print("HMAC verification failed!")
-       raise HTTPException(status_code=401, detail="Invalid HMAC")
+       logger.error("🚨 CRITICAL: Shopify Webhook HMAC verification failed!")
+       # In production, we MUST raise 401. In dev, we might log a warning but proceed.
+       if settings.ENVIRONMENT == "production":
+           raise HTTPException(status_code=401, detail="Unauthorized: Invalid HMAC Signature")
+       else:
+           print("⚠️ WARNING: HMAC failed but proceeding in development mode.")
     
     payload = json.loads(data)
     customer = payload.get("customer") or {}

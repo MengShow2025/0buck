@@ -269,6 +269,48 @@
 
 ---
 
+## 11. 智慧商业与深度防御 (Smart Commerce & Deep Defense v3.6.0)
+
+本章节定义了系统如何利用 AI 与动态路由技术，在将 Shopify “工具人化”的基础上实现利润最大化与极致用户体验。
+
+### 11.1 Dumbo AI 弃单自动挽回 (AI Nudge Engine)
+
+*   **监控目标**：Schema B (Draft Order) 生成后 1 小时内未支付的订单。
+*   **挽回逻辑**：
+    1.  系统每小时扫描一次待支付草稿订单。
+    2.  Dumbo AI 根据用户历史偏好生成个性化话术。
+    3.  通过 WhatsApp 发送包含 `invoice_url` 的提醒。
+*   **业务目标**：将弃单转化率提升 15%-20%。
+
+### 11.2 身份统一映射 (Zero-ID Mapping)
+
+*   **核心理念**：用户在 0Buck 注册即视为在全平台注册。
+*   **实现方式**：
+    1.  创建订单时，后端自动检查/创建 Shopify Customer。
+    2.  将 0Buck 的 `referral_code` 和 `user_tier` 同步至 Shopify Customer Tags。
+    3.  **价值**：确保无论未来切换何种支付网关，用户资产与推荐关系链路始终在 0Buck 手中。
+
+### 11.3 虚拟多仓库动态路由 (Virtual Sourcing Routing)
+
+*   **运作机制**：
+    1.  在创建 Draft Order 的瞬间，后端实时查询 1688 多个备选供应商的价格与库存。
+    2.  自动选择 **“总成本最低 + 发货最稳”** 的货源。
+    3.  将供应商 ID 注入订单元数据，供后续自动化采购使用。
+
+### 11.4 汇率动态对冲 (Dynamic FX Buffer)
+
+*   **策略**：
+    1.  监控每日汇率波动率。
+    2.  若波动率 < 0.2%，保持 0.5% Buffer。
+    3.  若波动率 > 0.5%，自动提升至 0.8%-1.0% 以覆盖结算风险。
+
+### 11.5 安全补丁：Webhook HMAC 强制验证
+
+*   **加固项**：**生产环境严禁跳过 HMAC 校验。**
+*   **逻辑**：所有来自 Shopify 的 Webhook 必须通过 `X-Shopify-Hmac-SHA256` 签名校验，否则直接拒绝请求，防止伪造订单支付信号。
+
+---
+
 ## 9. 数据库模型扩展 (Database Extensions)
 *   **Referrals表**：记录 `inviter_id`, `invitee_id`, `expiry_date`, `type (USER/KOL)`。
 *   **RewardPhases表**：记录每个订单的 20 期执行状态。

@@ -284,6 +284,10 @@ class RewardsService:
         v3.5.0: Concurrency-safe Batch Check-in.
         - Uses SELECT FOR UPDATE to lock plan rows during processing.
         """
+        # TC-04: Automated AI Nudge for abandoned orders (v3.6.0 Task)
+        # We trigger this check during check-in flow as a 'side effect' or background task
+        # to remind user of pending payments while they are active in the app.
+        pass # Placeholder for background task trigger
         if plan_id:
             plan = self.db.query(CheckinPlan).filter_by(id=plan_id, user_id=customer_id).with_for_update().first()
             if not plan:

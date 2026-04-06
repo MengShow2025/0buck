@@ -550,7 +550,13 @@ def create_payment_order(
         res = payment_service.create_final_order_direct(customer_id, items, balance_used, referral_code)
     else:
         # Schema B: Draft Order
-        res = payment_service.create_draft_order(customer_id, items, balance_used, referral_code)
+        res = payment_service.create_draft_order(
+            customer_id, 
+            items, 
+            balance_used, 
+            referral_code,
+            email=current_user.email
+        )
         
     payment_service.close()
     return res
