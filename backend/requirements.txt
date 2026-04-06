@@ -16,8 +16,8 @@ pydantic
 asyncio
 stream-chat
 python-multipart
-jose
-passlib
+python-jose[cryptography]
+passlib[bcrypt]
 bcrypt
 authlib
 itsdangerous
