@@ -23,3 +23,4 @@ authlib
 itsdangerous
 pyotp
 qrcode[pil]
+redis

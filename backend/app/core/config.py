@@ -70,6 +70,20 @@ class Settings(BaseSettings):
     EXCHANGE_RATE: float = 0.14 # 1 CNY to USD
     EXCHANGE_BUFFER: float = 0.005 # 0.5% buffer for fluctuations
 
+    # Redis
+    REDIS_URL: Optional[str] = os.getenv("REDIS_URL")
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", 6379))
+    REDIS_PASSWORD: Optional[str] = os.getenv("REDIS_PASSWORD")
+
+    @property
+    def REDIS_URI(self) -> str:
+        if self.REDIS_URL:
+            return self.REDIS_URL
+        if self.REDIS_PASSWORD:
+            return f"redis://:{self.REDIS_PASSWORD}@{self.REDIS_HOST}:{self.REDIS_PORT}/0"
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/0"
+
     # Environment
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development") # "development" or "production"
     COOKIE_DOMAIN: Optional[str] = os.getenv("COOKIE_DOMAIN")

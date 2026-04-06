@@ -129,18 +129,77 @@ async def disable_2fa(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Invalid verification code")
 
 import threading
+import redis
+import json
 from datetime import datetime, timedelta
 
-# v3.5.0: In-Memory Rate Limiter for Brute-Force Defense
-# NOTE: In production, this MUST be replaced by Redis to support multi-process deployments.
-# Thread-safe dictionary for single-process rate limiting
-login_attempts = {}
-login_attempts_lock = threading.Lock()
+# v3.5.0: Redis-based Global Rate Limiter for Brute-Force Defense
+# Supports multi-process deployments (e.g. Railway, Docker)
+try:
+    redis_client = redis.from_url(settings.REDIS_URI, decode_responses=True)
+    redis_client.ping()
+    HAS_REDIS = True
+except Exception:
+    HAS_REDIS = False
+    # Fallback to In-Memory for dev if Redis is missing
+    login_attempts = {}
+    login_attempts_lock = threading.Lock()
+
+def check_rate_limit(email: str) -> bool:
+    """Returns True if user is blocked, False otherwise."""
+    now = datetime.now()
+    if HAS_REDIS:
+        key = f"ratelimit:login:{email}"
+        data = redis_client.get(key)
+        if data:
+            attempts = json.loads(data)
+            # If more than 5 failed attempts in last 5 minutes, block
+            if attempts["count"] >= 5 and (now - datetime.fromisoformat(attempts["last_attempt"])).seconds < 300:
+                return True
+        return False
+    else:
+        with login_attempts_lock:
+            attempts = login_attempts.get(email, {"count": 0, "last_attempt": now})
+            if attempts["count"] >= 5 and (now - attempts["last_attempt"]).seconds < 300:
+                return True
+            return False
+
+def record_login_attempt(email: str, success: bool):
+    """Updates the login attempt counter."""
+    now = datetime.now()
+    if HAS_REDIS:
+        key = f"ratelimit:login:{email}"
+        if success:
+            redis_client.delete(key)
+        else:
+            data = redis_client.get(key)
+            attempts = json.loads(data) if data else {"count": 0, "last_attempt": now.isoformat()}
+            
+            # Reset if old
+            if (now - datetime.fromisoformat(attempts["last_attempt"])).seconds > 300:
+                attempts["count"] = 1
+            else:
+                attempts["count"] += 1
+            
+            attempts["last_attempt"] = now.isoformat()
+            redis_client.setex(key, 900, json.dumps(attempts)) # Keep record for 15 mins
+    else:
+        with login_attempts_lock:
+            if success:
+                login_attempts[email] = {"count": 0, "last_attempt": now}
+            else:
+                attempts = login_attempts.get(email, {"count": 0, "last_attempt": now})
+                if (now - attempts["last_attempt"]).seconds > 300:
+                    attempts["count"] = 1
+                else:
+                    attempts["count"] += 1
+                attempts["last_attempt"] = now
+                login_attempts[email] = attempts
 
 @router.post("/2fa/verify-login")
 async def verify_login_2fa(request: Request, db: Session = Depends(get_db)):
     """
-    v3.5.0: Secure 2FA verification with Rate Limiting and JWT issuance.
+    v3.5.0: Secure 2FA verification with Global Redis Rate Limiting.
     """
     data = await request.json()
     email = data.get("email")
@@ -149,19 +208,9 @@ async def verify_login_2fa(request: Request, db: Session = Depends(get_db)):
     if not email:
         raise HTTPException(status_code=400, detail="Email required")
         
-    # 1. Thread-safe Rate Limiting Check
-    now = datetime.now()
-    with login_attempts_lock:
-        attempts = login_attempts.get(email, {"count": 0, "last_attempt": now})
-        
-        # If more than 5 failed attempts in last 5 minutes, block for 5 mins
-        if attempts["count"] >= 5 and (now - attempts["last_attempt"]).seconds < 300:
-            raise HTTPException(status_code=429, detail="Too many attempts. Please try again in 5 minutes.")
-        
-        # Reset count if last attempt was long ago
-        if (now - attempts["last_attempt"]).seconds > 300:
-            attempts["count"] = 0
-            login_attempts[email] = attempts
+    # 1. Global Rate Limiting Check
+    if check_rate_limit(email):
+        raise HTTPException(status_code=429, detail="Too many attempts. Please try again in 5 minutes.")
 
     # In a real app, find user by email. Here we use 8829.
     user = db.query(UserExt).filter(UserExt.customer_id == 8829).first()
@@ -170,9 +219,8 @@ async def verify_login_2fa(request: Request, db: Session = Depends(get_db)):
 
     totp = pyotp.TOTP(user.two_factor_secret)
     if totp.verify(code):
-        # Success! Reset attempts in thread-safe manner
-        with login_attempts_lock:
-            login_attempts[email] = {"count": 0, "last_attempt": now}
+        # Success! Reset attempts
+        record_login_attempt(email, success=True)
         
         # Issue JWT for v3.5.0 Security
         access_token = create_access_token(subject=user.customer_id)
@@ -186,6 +234,7 @@ async def verify_login_2fa(request: Request, db: Session = Depends(get_db)):
             value=access_token,
             httponly=True,
             max_age=60 * 24 * 7 * 60, # 7 days
+            expires=60 * 24 * 7 * 60,
             samesite="lax",
             secure=is_prod, # Only enforce secure over HTTPS in production
             path="/",
@@ -193,15 +242,9 @@ async def verify_login_2fa(request: Request, db: Session = Depends(get_db)):
         )
         return response
     else:
-        # Failed attempt: Increment count in thread-safe manner
-        with login_attempts_lock:
-            attempts = login_attempts.get(email, {"count": 0, "last_attempt": now})
-            attempts["count"] += 1
-            attempts["last_attempt"] = now
-            login_attempts[email] = attempts
-        
-        remaining = 5 - attempts['count']
-        raise HTTPException(status_code=400, detail=f"Invalid verification code. {max(0, remaining)} attempts remaining.")
+        # Failed attempt: Record it
+        record_login_attempt(email, success=False)
+        raise HTTPException(status_code=400, detail="Invalid verification code.")
 
 @router.get("/login/{provider}")
 async def login(provider: str, request: Request):
