@@ -43,37 +43,38 @@ def sync_db_schema():
     v3.9.7: Hot Schema Migration.
     Automatically adds missing columns to existing tables without Alembic.
     """
-    from sqlalchemy import Column, Text, JSON
+    from sqlalchemy import Column, Text, JSON, text
     from sqlalchemy.dialects.postgresql import JSONB
     from sqlalchemy.schema import AddColumn
     with engine.connect() as conn:
         # 1. Product Table Updates
-        cols_product = {
-            "desire_hook": Text(),
-            "desire_logic": Text(),
-            "desire_closing": Text(),
-            "detail_images": JSONB()
-        }
-        for col_name, col_type in cols_product.items():
+        # v4.0.0: Enhanced Schema API with default value constraints
+        cols_product = [
+            Column("desire_hook", Text()),
+            Column("desire_logic", Text()),
+            Column("desire_closing", Text()),
+            Column("detail_images", JSONB(), server_default=text("'[]'::jsonb"))
+        ]
+        for col in cols_product:
             try:
                 # v3.9.9: Use SQLAlchemy Schema API to completely eliminate SQL injection risk
-                conn.execute(AddColumn('products', Column(col_name, col_type)))
+                conn.execute(AddColumn('products', col))
                 conn.commit()
-                print(f"✅ Added column {col_name} to products table.")
+                print(f"✅ Added column {col.name} to products table.")
             except Exception:
                 pass # Column already exists
 
         # 2. CandidateProduct Table Updates
-        cols_candidate = {
-            "desire_hook": Text(),
-            "desire_logic": Text(),
-            "desire_closing": Text()
-        }
-        for col_name, col_type in cols_candidate.items():
+        cols_candidate = [
+            Column("desire_hook", Text()),
+            Column("desire_logic", Text()),
+            Column("desire_closing", Text())
+        ]
+        for col in cols_candidate:
             try:
-                conn.execute(AddColumn('candidate_products', Column(col_name, col_type)))
+                conn.execute(AddColumn('candidate_products', col))
                 conn.commit()
-                print(f"✅ Added column {col_name} to candidate_products table.")
+                print(f"✅ Added column {col.name} to candidate_products table.")
             except Exception:
                 pass # Column already exists
 
