@@ -11,10 +11,10 @@ from app.api.deps import get_current_admin
 from app.models import UserExt, Wallet, CheckinPlan, SystemConfig
 from app.models.butler import UserButlerProfile, AIContribution, ShadowIDMapping, PersonaTemplate, AIUsageStats, UserMemoryFact
 from app.models.ledger import AvailableCoupon, Order, SourcingOrder
-from app.models.product import Product
-from app.models.c2m import UserWish, DemandInsight, OrderCustomization
+from app.models.product import Product, CandidateProduct
 from app.services.discount_service import DiscountSyncService
 from app.services.c2m_service import C2MService
+from app.services.supply_chain import SupplyChainService
 
 router = APIRouter()
 
@@ -282,6 +282,39 @@ def update_persona_template(data: PersonaTemplateUpdate, db: Session = Depends(g
     
     db.commit()
     return {"status": "success", "template_id": data.id}
+
+# --- Autonomous Sourcing Decision Engine (v3.9.0) ---
+
+@router.get("/sourcing/candidates")
+def list_sourcing_candidates(status: Optional[str] = "new", db: Session = Depends(get_db)):
+    """v3.9.0: List products discovered by AI waiting for admin review"""
+    candidates = db.query(CandidateProduct).filter_by(status=status).order_by(CandidateProduct.created_at.desc()).all()
+    return candidates
+
+@router.post("/sourcing/candidates/{candidate_id}/approve")
+async def approve_sourcing_candidate(candidate_id: int, db: Session = Depends(get_db)):
+    """v3.9.0: Admin Decision - Approve candidate for polishing and Shopify sync"""
+    sc_service = SupplyChainService(db)
+    try:
+        success = await sc_service.approve_candidate(candidate_id)
+        if success:
+            return {"status": "success", "message": "Candidate approved and synced to Shopify/Notion."}
+        else:
+            raise HTTPException(status_code=400, detail="Candidate not found or already processed.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Approval failed: {str(e)}")
+
+@router.post("/sourcing/candidates/{candidate_id}/reject")
+def reject_sourcing_candidate(candidate_id: int, reason: str, db: Session = Depends(get_db)):
+    """v3.9.0: Admin Decision - Reject candidate with reason"""
+    candidate = db.query(CandidateProduct).filter_by(id=candidate_id).first()
+    if not candidate:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+    
+    candidate.status = "rejected"
+    candidate.audit_notes = reason
+    db.commit()
+    return {"status": "success"}
 
 @router.get("/ai/usage-stats")
 def get_ai_usage_stats(db: Session = Depends(get_db)):

@@ -4,7 +4,7 @@ from decimal import Decimal
 from datetime import datetime
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from app.models.product import Product, Supplier
+from app.models.product import Product, Supplier, CandidateProduct
 from app.core.config import settings
 from app.core.logistics import find_closest_warehouse
 from app.services.finance_engine import calculate_final_price
@@ -214,20 +214,20 @@ class SupplyChainService:
                 print(f"  ✅ IDS Match found: {cand['name']} (Profit: {cand['data']['comp_price']*0.6 / ((cand['data']['cost_cny']*1.04)*0.14):.1f}x)")
                 
                 best_sup = cand["suppliers"][0]
-                await notion.add_product_to_pool({
+                # v3.9.0: Direct Ingest to local candidate pool instead of Notion
+                await self.ingest_to_candidate_pool({
                     "name": prod_name,
                     "id_1688": best_sup["id"],
-                    "reason_team": f"{cand.get('reason_prefix', '')}IDS Signal ({cand['data']['growth']}% growth on {', '.join(cand['data']['platforms'])})",
-                    "url_1688": f"https://detail.1688.com/offer/{best_sup['id']}.html",
-                    "url_comp": f"https://www.google.com/search?q={cand['name'].replace(' ', '+')}",
-                    "comp_price": cand["data"]["comp_price"],
+                    "strategy_tag": "IDS_FOLLOWING",
                     "cost_cny": cand["data"]["cost_cny"],
-                    "status": "草稿",
-                    "is_cashback_eligible": is_cashback_eligible,
-                    "product_category_type": "PROFIT" if is_cashback_eligible else "TRAFFIC",
+                    "comp_price": cand["data"]["comp_price"],
                     "category": "IDS Hot Trend",
-                    "strategy_tag": "IDS_FOLLOWING", # Tag for v3.0 strategy
-                    "audit_notes": f"Verified Suppliers: {len(cand['suppliers'])} Found (Top 3 Locked)"
+                    "supplier_id_1688": best_sup["id"],
+                    "supplier_info": best_sup,
+                    "discovery_evidence": {
+                        "growth": cand["data"]["growth"],
+                        "platforms": cand["data"]["platforms"]
+                    }
                 })
                 
                 # Update Signal Status in Notion to mark as "分析中" (processed/moved)
@@ -305,20 +305,21 @@ class SupplyChainService:
                     suppliers = await self._find_and_audit_suppliers(item["name"])
                     best_sup = suppliers[0]
                     
-                    await notion.add_product_to_pool({
+                    # v3.9.0: Direct Ingest to local candidate pool
+                    await self.ingest_to_candidate_pool({
                         "name": prod_name,
                         "id_1688": best_sup["id"],
-                        "reason_team": f"[{category_type}] {reason}",
-                        "url_1688": f"https://detail.1688.com/offer/{best_sup['id']}.html",
-                        "url_comp": target["url"],
-                        "comp_price": item["comp_price"],
-                        "cost_cny": item["cost_cny"],
-                        "status": "草稿",
-                        "category": "Spy Discovery",
                         "strategy_tag": "IDS_SPY",
-                        "is_cashback_eligible": is_cashback_eligible,
-                        "product_category_type": category_type,
-                        "audit_notes": f"Source: {target['platform']} | Detection Type: {item['type']}"
+                        "cost_cny": item["cost_cny"],
+                        "comp_price": item["comp_price"],
+                        "category": "Spy Discovery",
+                        "supplier_id_1688": best_sup["id"],
+                        "supplier_info": best_sup,
+                        "discovery_evidence": {
+                            "competitor_name": target["name"],
+                            "detection_type": item["type"],
+                            "url": target["url"]
+                        }
                     })
                     count += 1
                     
@@ -633,3 +634,107 @@ class SupplyChainService:
         
         self.db.commit()
         return product
+
+    async def ingest_to_candidate_pool(self, data: Dict[str, Any]):
+        """
+        v3.9.0: The 'Decision Engine' entry point.
+        Instead of Notion, we push to local CandidateProduct first.
+        """
+        product_id_1688 = data.get("id_1688")
+        if not product_id_1688: return
+
+        # Check if already exists in candidates or products
+        exists = self.db.query(CandidateProduct).filter_by(product_id_1688=product_id_1688).first()
+        if exists: return
+        
+        prod_exists = self.db.query(Product).filter_by(product_id_1688=product_id_1688).first()
+        if prod_exists: return
+
+        # 1. Calculate Financials
+        cost_cny = float(data.get("cost_cny", 0.0))
+        comp_price = float(data.get("comp_price", 0.0))
+        pricing = self.calculate_price(cost_cny, comp_price, data.get("category_type", "PROFIT"))
+        
+        # 2. AI Polish Preview (Do it early to show in Admin Dashboard)
+        # We simulate the enrichment here for the preview
+        preview_title = f"Premium {data.get('name')}"
+        preview_desc = f"Discover the ultimate {data.get('name')}. Sourced for quality and value."
+        
+        candidate = CandidateProduct(
+            product_id_1688=product_id_1688,
+            status="new",
+            discovery_source=data.get("strategy_tag", "IDS_FOLLOWING"),
+            discovery_evidence=data.get("discovery_evidence", {}),
+            title_zh=data.get("name"),
+            description_zh=data.get("description_zh", ""),
+            images=data.get("images", []),
+            variants_raw=data.get("variants", []),
+            cost_cny=cost_cny,
+            comp_price_usd=comp_price,
+            estimated_sale_price=pricing.get("sale_price"),
+            profit_ratio=pricing.get("sale_price") / pricing.get("cost_usd_buffered") if pricing.get("cost_usd_buffered") else 0,
+            supplier_id_1688=data.get("supplier_id_1688"),
+            supplier_info=data.get("supplier_info", {}),
+            title_en_preview=preview_title,
+            description_en_preview=preview_desc,
+            category=data.get("category", "General"),
+            audit_notes=data.get("audit_notes")
+        )
+        
+        self.db.add(candidate)
+        self.db.commit()
+        logger.info(f"✅ Candidate Product {product_id_1688} ingested for Admin Review.")
+        return candidate
+
+    async def approve_candidate(self, candidate_id: int):
+        """
+        v3.9.0: Admin Decision - APPROVE.
+        Triggers full translation, Notion backup, and Shopify Sync.
+        """
+        candidate = self.db.query(CandidateProduct).filter_by(id=candidate_id).first()
+        if not candidate or candidate.status != "new":
+            return False
+
+        candidate.status = "reviewing"
+        self.db.commit()
+
+        try:
+            # 1. Full AI Enrichment & Translation
+            # Reuse sync_product logic
+            product = await self.sync_product(
+                source_product_id=candidate.product_id_1688,
+                comp_price_usd=candidate.comp_price_usd,
+                cost_cny=candidate.cost_cny,
+                title=candidate.title_zh,
+                strategy_tag=candidate.discovery_source,
+                category_type="PROFIT", # Default
+                is_cashback_eligible=True
+            )
+
+            # 2. Sync to Shopify
+            from app.services.sync_shopify import SyncShopifyService
+            sync_service = SyncShopifyService()
+            sync_service.sync_to_shopify(product)
+
+            # 3. Notion Backup (Archive)
+            from app.services.notion import NotionService
+            notion = NotionService()
+            await notion.add_product_to_pool({
+                "name": product.title_en,
+                "id_1688": product.product_id_1688,
+                "status": "已同步",
+                "url_1688": f"https://detail.1688.com/offer/{product.product_id_1688}.html",
+                "cost_cny": product.original_price,
+                "comp_price": candidate.comp_price_usd,
+                "shopify_id": product.shopify_product_id,
+                "category": product.category
+            })
+
+            candidate.status = "synced"
+            self.db.commit()
+            return True
+        except Exception as e:
+            logger.error(f"Failed to approve candidate {candidate_id}: {e}")
+            candidate.status = "new" # Rollback status
+            self.db.commit()
+            raise e

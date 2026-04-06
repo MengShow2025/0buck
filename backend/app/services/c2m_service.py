@@ -169,18 +169,20 @@ class C2MService:
         
         match_id = "840389952720" # Mock 1688 ID
         
-        from app.services.notion import NotionService
-        notion = NotionService()
-        
-        await notion.add_product_to_pool({
+        # v3.9.0: Ingest to candidate pool instead of direct Notion
+        await self.sc_service.ingest_to_candidate_pool({
             "name": f"[C2M_WISH] {wish.description[:50]}",
             "id_1688": match_id,
-            "reason_team": f"C2M Wishing Well: Matched from user wish {wish_id}",
-            "url_1688": f"https://detail.1688.com/offer/{match_id}.html",
-            "status": "待审核",
-            "category": "待定",
             "strategy_tag": "C2M_WISH",
-            "is_cashback_eligible": True
+            "cost_cny": 50.0, # Mock
+            "comp_price": 400.0, # Mock
+            "category": "C2M Custom",
+            "supplier_id_1688": "sup_c2m_123",
+            "discovery_evidence": {
+                "wish_id": wish.id,
+                "user_id": wish.user_id,
+                "vote_count": wish.vote_count
+            }
         })
         
         wish.status = "found"

@@ -105,3 +105,45 @@ class ProductVector(Base):
     qdrant_point_id = Column(String, unique=True)
     embedding_model = Column(String) # e.g., SigLIP
     last_updated = Column(DateTime, default=func.now())
+
+class CandidateProduct(Base):
+    """
+    v3.9.0: Autonomous Sourcing Pipeline - Candidate Stage.
+    Status Flow: new -> reviewing -> approved/rejected -> synced (Product)
+    """
+    __tablename__ = "candidate_products"
+
+    id = Column(Integer, primary_key=True, index=True)
+    product_id_1688 = Column(String, unique=True, index=True)
+    status = Column(String, default="new", index=True) # 'new', 'reviewing', 'approved', 'rejected', 'synced'
+    
+    # AI Discovery Proof (The Evidence Chain)
+    discovery_source = Column(String) # 'IDS_FOLLOWING', 'IDS_SPY', 'C2M_WISH'
+    discovery_evidence = Column(JSON) # { "tiktok_url": "...", "trend_score": 95, "comp_images": ["..."] }
+    
+    # Raw Sourcing Data
+    title_zh = Column(String)
+    description_zh = Column(String)
+    images = Column(JSON)
+    variants_raw = Column(JSON)
+    
+    # Financial Analysis (Pre-audit)
+    cost_cny = Column(Float)
+    comp_price_usd = Column(Float)
+    estimated_sale_price = Column(Float)
+    profit_ratio = Column(Float)
+    
+    # Supplier Context
+    supplier_id_1688 = Column(String)
+    supplier_info = Column(JSON) # { "name": "...", "rating": 4.8, "is_strength": true }
+    
+    # AI Polish Preview (Generated during candidate phase)
+    title_en_preview = Column(String, nullable=True)
+    description_en_preview = Column(String, nullable=True)
+    
+    # Metadata
+    category = Column(String)
+    audit_notes = Column(String, nullable=True)
+    
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

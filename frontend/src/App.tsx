@@ -33,10 +33,19 @@ import { useRewards } from './hooks/useRewards';
 
 import { getApiUrl } from './utils/api';
 
+import AdminDashboard from './pages/AdminDashboard';
+import { useLocation, useNavigate } from 'react-router-dom';
+
 export default function App() {
   const { t } = useTranslation();
   const deviceType = useDeviceType();
-  const [showWelcome, setShowWelcome] = useState(true);
+  const location = useLocation();
+  const navigate = useNavigate();
+  
+  const [showWelcome, setShowWelcome] = useState(() => {
+    // Skip welcome if accessing admin directly
+    return !window.location.pathname.startsWith('/admin');
+  });
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('0buck_auth_state') === 'true';
   });
@@ -49,9 +58,20 @@ export default function App() {
     }
   });
   const [currentView, setCurrentView] = useState<ViewType>(() => {
+    // v3.9.1: URL Path-based routing for Admin
+    if (window.location.pathname === '/admin') return 'admin';
+    
     const isAuth = localStorage.getItem('0buck_auth_state') === 'true';
     return isAuth ? 'chat' : 'login';
   });
+
+  // Sync currentView with URL for Admin
+  useEffect(() => {
+    if (location.pathname === '/admin' && currentView !== 'admin') {
+      setCurrentView('admin');
+      setShowWelcome(false);
+    }
+  }, [location.pathname]);
   const [isUserTyping, setIsUserTyping] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -536,6 +556,8 @@ export default function App() {
           onMenuClick={() => setIsSidebarOpen(true)}
           status={status}
         />;
+      case 'admin':
+        return <AdminDashboard />;
       default:
         return (
           <div className="flex items-center justify-center h-full text-on-surface-variant">
@@ -586,6 +608,8 @@ export default function App() {
         return { title: t('nav.square'), subtitle: t('square.subtitle') };
       case 'me':
         return { hideHeader: true, showSearch: false };
+      case 'admin':
+        return { title: '0Buck Admin', subtitle: 'Global Decision Engine', showSearch: false };
       case 'product-detail':
         return { hideHeader: true };
       case 'login':
@@ -618,7 +642,7 @@ export default function App() {
             transition={{ duration: 0.5 }}
             className="h-full w-full relative"
           >
-            {!['login', 'register'].includes(currentView) && (
+            {!['login', 'register', 'admin'].includes(currentView) && (
               <Sidebar 
                 currentView={currentView} 
                 onViewChange={setCurrentView} 
@@ -631,7 +655,7 @@ export default function App() {
                 onClose={() => setIsSidebarOpen(false)}
               />
             )}
-            <main className={`${!['login', 'register'].includes(currentView) ? 'lg:ml-20' : ''} h-screen flex flex-col relative overflow-hidden`}>
+            <main className={`${!['login', 'register', 'admin'].includes(currentView) ? 'lg:ml-20' : ''} h-screen flex flex-col relative overflow-hidden`}>
               <TopBar 
                 {...getHeaderProps()} 
                 currentView={currentView} 

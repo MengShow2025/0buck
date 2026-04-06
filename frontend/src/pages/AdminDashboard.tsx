@@ -81,14 +81,18 @@ interface DemandInsight {
 }
 
 interface AuditCandidate {
+  id: number;
   name: string;
-  id_1688: string;
+  product_id_1688: string;
   cost_cny: number;
-  comp_price: number;
+  comp_price_usd: number;
+  estimated_sale_price: number;
   profit_ratio: number;
-  audit_status: string;
-  reason_team: string;
-  strategy_tag: string;
+  status: string;
+  discovery_source: string;
+  discovery_evidence: any;
+  title_en_preview: string;
+  images: string[];
 }
 
 const AdminDashboard: React.FC = () => {
@@ -155,7 +159,7 @@ const AdminDashboard: React.FC = () => {
 
   const fetchAuditQueue = async () => {
     try {
-      const res = await fetch('/api/v1/admin/ids/audit-queue');
+      const res = await fetch('/api/v1/admin/sourcing/candidates?status=new');
       setAuditQueue(await res.json());
     } catch (e) { console.error(e); }
   };
@@ -167,18 +171,30 @@ const AdminDashboard: React.FC = () => {
     } catch (e) { console.error(e); }
   };
 
-  const handleApprove = async (name: string) => {
-    if (!confirm(`确认同步并上架 ${name} 吗？`)) return;
+  const handleApprove = async (id: number) => {
+    if (!confirm(`确认同步并上架此候选商品吗？`)) return;
     try {
-      const res = await fetch(`/api/v1/admin/ids/approve?name=${encodeURIComponent(name)}`, { method: 'POST' });
+      const res = await fetch(`/api/v1/admin/sourcing/candidates/${id}/approve`, { method: 'POST' });
       const data = await res.json();
       if (data.status === 'success') {
-        alert('上架成功！已同步至 Shopify');
+        alert('上架成功！已同步至 Shopify 并备份到 Notion');
         fetchAuditQueue();
       } else {
-        alert(`上架失败: ${data.reason || '未知错误'}`);
+        alert(`上架失败: ${data.detail || '未知错误'}`);
       }
     } catch (e) { alert('请求失败'); }
+  };
+
+  const handleReject = async (id: number) => {
+    const reason = prompt('请输入拒绝原因:');
+    if (!reason) return;
+    try {
+      const res = await fetch(`/api/v1/admin/sourcing/candidates/${id}/reject?reason=${encodeURIComponent(reason)}`, { method: 'POST' });
+      if (res.ok) {
+        alert('已拒绝并归档');
+        fetchAuditQueue();
+      }
+    } catch (e) { alert('操作失败'); }
   };
 
   const fetchPersonaTemplates = async () => {
@@ -409,25 +425,38 @@ const AdminDashboard: React.FC = () => {
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {auditQueue.map((item) => (
-                        <tr key={item.name} className="hover:bg-gray-50/50 transition-colors">
+                        <tr key={item.id} className="hover:bg-gray-50/50 transition-colors">
                           <td className="px-6 py-4">
-                            <p className="font-black text-sm">{item.name}</p>
-                            <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
-                              item.strategy_tag === 'IDS_SPY' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'
-                            }`}>
-                              {item.strategy_tag}
-                            </span>
+                            <div className="flex items-center gap-3">
+                              {item.images && item.images.length > 0 && (
+                                <img src={item.images[0]} alt="prod" className="w-10 h-10 rounded-lg object-cover bg-gray-100" />
+                              )}
+                              <div>
+                                <p className="font-black text-sm">{item.name}</p>
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${
+                                  item.discovery_source === 'IDS_SPY' ? 'bg-orange-100 text-orange-600' : 'bg-blue-100 text-blue-600'
+                                }`}>
+                                  {item.discovery_source}
+                                </span>
+                              </div>
+                            </div>
                           </td>
                           <td className="px-6 py-4 font-bold text-gray-500">¥{item.cost_cny}</td>
-                          <td className="px-6 py-4 font-black text-black">${item.comp_price ? (item.comp_price * 0.6).toFixed(2) : 'N/A'}</td>
+                          <td className="px-6 py-4 font-black text-black">${item.estimated_sale_price?.toFixed(2) || 'N/A'}</td>
                           <td className="px-6 py-4">
                             <span className={`font-black ${item.profit_ratio >= 4.0 ? 'text-green-600' : 'text-orange-600'}`}>
                               {item.profit_ratio ? item.profit_ratio.toFixed(1) : 'N/A'}x
                             </span>
                           </td>
-                          <td className="px-6 py-4 text-right">
+                          <td className="px-6 py-4 text-right flex gap-2 justify-end">
                             <button 
-                              onClick={() => handleApprove(item.name)}
+                              onClick={() => handleReject(item.id)}
+                              className="text-gray-400 hover:text-red-600 px-3 py-1.5 rounded-lg text-xs font-black transition-colors"
+                            >
+                              拒绝
+                            </button>
+                            <button 
+                              onClick={() => handleApprove(item.id)}
                               className="bg-black text-white px-4 py-1.5 rounded-lg text-xs font-black hover:bg-gray-800 transition-colors"
                             >
                               批准并同步

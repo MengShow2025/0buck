@@ -35,6 +35,7 @@ export type ViewType =
   | 'square'
   | 'product-detail'
   | 'merchant-detail'
+  | 'admin'
   | 'me';
 
 export interface Channel {
