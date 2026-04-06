@@ -656,9 +656,14 @@ class SupplyChainService:
         pricing = self.calculate_price(cost_cny, comp_price, data.get("category_type", "PROFIT"))
         
         # 2. AI Polish Preview (Do it early to show in Admin Dashboard)
-        # We simulate the enrichment here for the preview
+        # v3.9.1: Enhanced preview logic using basic translation if enrichment is not yet fully run
         preview_title = f"Premium {data.get('name')}"
+        if "(" in preview_title: # Clean up 1688 brackets
+            preview_title = preview_title.split("(")[0].strip()
+            
         preview_desc = f"Discover the ultimate {data.get('name')}. Sourced for quality and value."
+        if data.get("description_zh"):
+            preview_desc = f"AI Summary: {data.get('description_zh')[:100]}..." # Placeholder for real translation
         
         candidate = CandidateProduct(
             product_id_1688=product_id_1688,

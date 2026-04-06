@@ -286,9 +286,16 @@ def update_persona_template(data: PersonaTemplateUpdate, db: Session = Depends(g
 # --- Autonomous Sourcing Decision Engine (v3.9.0) ---
 
 @router.get("/sourcing/candidates")
-def list_sourcing_candidates(status: Optional[str] = "new", db: Session = Depends(get_db)):
-    """v3.9.0: List products discovered by AI waiting for admin review"""
-    candidates = db.query(CandidateProduct).filter_by(status=status).order_by(CandidateProduct.created_at.desc()).all()
+def list_sourcing_candidates(
+    status: Optional[str] = "new", 
+    skip: int = 0, 
+    limit: int = 50, 
+    db: Session = Depends(get_db)
+):
+    """v3.9.0: List products discovered by AI waiting for admin review with pagination"""
+    candidates = db.query(CandidateProduct).filter_by(status=status)\
+        .order_by(CandidateProduct.created_at.desc())\
+        .offset(skip).limit(limit).all()
     return candidates
 
 @router.post("/sourcing/candidates/{candidate_id}/approve")

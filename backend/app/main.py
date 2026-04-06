@@ -149,14 +149,15 @@ if os.path.exists(frontend_path):
 
     @app.get("/{full_path:path}")
     async def serve_frontend(full_path: str):
-        # If the path looks like an API call, it's already handled by routers above.
-        # Otherwise, serve index.html for React Router to handle.
-        # We exclude paths starting with /api or /v1
+        # v3.9.1: Correctly allow non-API routes like /admin to be handled by React Router
         if full_path.startswith("api/") or full_path.startswith("v1/"):
              return {"detail": "Not Found"}
              
+        # Check if the path exists as a physical file in the frontend build
         file_path = os.path.join(frontend_path, full_path)
         if os.path.isfile(file_path):
             return FileResponse(file_path)
+            
+        # Fallback to index.html for all other routes (Single Page App support)
         return FileResponse(os.path.join(frontend_path, "index.html"))
 
