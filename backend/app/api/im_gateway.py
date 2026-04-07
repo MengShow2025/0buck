@@ -1,8 +1,5 @@
-from fastapi import APIRouter, Request, Header, HTTPException, Depends, Query
-from fastapi.responses import JSONResponse
-from sqlalchemy.orm import Session
-from typing import Any
-from app.db.session import get_db
+import os
+from app.db.session import get_db, SessionLocal
 from app.models.butler import UserIMBinding
 from app.services.agent import run_agent
 from app.core.config import settings
@@ -15,299 +12,290 @@ import base64
 import hashlib
 import hmac
 from datetime import datetime
+from typing import Any, Optional
+from fastapi import APIRouter, Request, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse, PlainTextResponse
+from sqlalchemy.orm import Session
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 
 logger = logging.getLogger(__name__)
 
+# --- 1. CORE UTILITIES ---
+
 def detect_language(text: str) -> str:
-    """v5.5.26: Refined Language Heuristic (Handles Japanese correctly)."""
-    # Check for Japanese specific characters (Hiragana and Katakana)
-    # Hiragana: \u3040-\u309f, Katakana: \u30a0-\u30ff
+    """v5.6.0: Universal Language Heuristic."""
     if any('\u3040' <= c <= '\u309f' or '\u30a0' <= c <= '\u30ff' for c in text):
-        return "ja" # Will fallback to English for system messages but allows AI to know it's Japanese
-        
-    # Check for Chinese characters
+        return "ja"
     if any('\u4e00' <= c <= '\u9fff' for c in text):
         return "zh"
-        
-    # Default to English
     return "en"
 
-async def get_feishu_tenant_access_token():
-    """v5.5.10: Fetch Tenant Access Token for Lark API."""
-    # v5.5.11: Strip whitespace/newlines for robustness
-    app_id = settings.FEISHU_APP_ID.strip() if settings.FEISHU_APP_ID else ""
-    app_secret = settings.FEISHU_APP_SECRET.strip() if settings.FEISHU_APP_SECRET else ""
-    
-    if not app_id or not app_secret:
-        logger.error("❌ Feishu APP_ID or APP_SECRET is missing in environment!")
-        return None
-
-    url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
-    payload = {
-        "app_id": app_id,
-        "app_secret": app_secret
-    }
-    async with httpx.AsyncClient() as client:
-        try:
-            response = await client.post(url, json=payload)
-            data = response.json()
-            if data.get("code") == 0:
-                return data.get("tenant_access_token")
-            logger.error(f"❌ Failed to get Feishu token: {data}")
-        except Exception as e:
-            logger.error(f"❌ Feishu Token Error: {str(e)}")
-    return None
-
-async def send_feishu_message(receive_id: str, receive_id_type: str, content: str, msg_type: str = "text"):
-    """v5.5.10: Send a message back to the user via Lark API."""
-    logger.info(f"📤 Attempting to send Feishu message to {receive_id}...")
-    token = await get_feishu_tenant_access_token()
-    if not token:
-        logger.error("❌ Aborting send: No tenant_access_token")
-        return
-        
-    url = f"https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type={receive_id_type}"
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Content-Type": "application/json; charset=utf-8"
-    }
-    
-    # Text content must be JSON stringified for Feishu
-    if msg_type == "text":
-        payload_content = json.dumps({"text": content})
-    else:
-        payload_content = content # Assume cards are already JSON strings
-        
-    payload = {
-        "receive_id": receive_id,
-        "msg_type": msg_type,
-        "content": payload_content
-    }
-    
-    async with httpx.AsyncClient() as client:
-        try:
-            res = await client.post(url, json=payload, headers=headers)
-            res_data = res.json()
-            if res_data.get("code") == 0:
-                logger.info(f"✅ Feishu Message Sent Successfully to {receive_id}")
-            else:
-                logger.error(f"❌ Feishu API Error: {res_data}")
-        except Exception as e:
-            logger.error(f"❌ Feishu Send Error: {str(e)}")
-
 def generate_binding_sig(platform: str, uid: str) -> str:
-    """v5.5.8: Generate a secure HMAC signature for identity binding."""
+    """v5.5.8: Generate a secure HMAC signature for identity bridge."""
     msg = f"{platform}:{uid}".encode()
     return hmac.new(settings.SECRET_KEY.encode(), msg, hashlib.sha256).hexdigest()
 
-class AESCipher:
-    def __init__(self, key):
-        self.key = hashlib.sha256(key.encode("utf-8")).digest()
+# --- 2. MULTI-PLATFORM BRAIN PROXY ---
 
-    def decrypt(self, encrypt_text):
+async def generic_brain_process(platform: str, platform_uid: str, text: str, chat_id: str, chat_type: str, send_func):
+    """
+    v5.6.0: Unified Brain Proxy for all IM platforms.
+    Handles Guest Mode, Identity Bridge, and AI Processing.
+    """
+    db = SessionLocal()
+    try:
+        lang = detect_language(text)
+        binding = db.query(UserIMBinding).filter_by(platform=platform, platform_uid=platform_uid, is_active=True).first()
+        
+        user_id = binding.user_id if binding else 1
+        is_guest = binding is None
+        
+        sig = generate_binding_sig(platform, platform_uid)
+        base_url = settings.BACKEND_URL.rstrip("/")
+        bind_url = f"{base_url}/auth/bind?platform={platform}&uid={platform_uid}&sig={sig}"
+        
+        # Composite Session for Persona Projection
+        session_id = f"{platform}_{chat_id}_{platform_uid}" if chat_type == "group" else f"{platform}_{platform_uid}"
+        
+        # 1. Send Immediate Thinking Status
+        thinking_msg = "🔍 0Buck 智脑正在深度思考中，请稍等片刻..." if lang == "zh" else "🔍 0Buck AI Brain is thinking deeply, please wait a moment..."
+        await send_func(platform_uid, thinking_msg)
+        
+        # 2. Call AI Brain
+        logger.info(f"🧠 [{platform.upper()}] Process for {platform_uid} (Guest={is_guest})")
         try:
-            encrypt_bytes = base64.b64decode(encrypt_text)
-            iv = encrypt_bytes[:16]
-            cipher = Cipher(algorithms.AES(self.key), modes.CBC(iv), backend=default_backend())
-            decryptor = cipher.decryptor()
-            plaintext = decryptor.update(encrypt_bytes[16:]) + decryptor.finalize()
-            # Remove PKCS7 padding
-            padding_len = plaintext[-1]
-            return plaintext[:-padding_len].decode("utf-8")
-        except Exception as e:
-            logger.error(f"Decryption failed: {str(e)}")
-            return None
+            ai_response = await run_agent(content=text, user_id=user_id, session_id=session_id)
+            main_reply = ai_response.get("content")
+            if not main_reply or main_reply.strip() == "":
+                main_reply = "AI Brain is currently resting..." if lang == "en" else "0Buck 智脑暂时没有想好如何回复，请稍后再试。"
+        except Exception as ai_err:
+            logger.error(f"AI Agent Error: {ai_err}")
+            main_reply = f"⚠️ 0Buck 智脑暂时无法响应: {str(ai_err)}" if lang == "zh" else f"⚠️ 0Buck AI Brain error: {str(ai_err)}"
+        
+        # 3. Append Binding Link for Guests
+        if is_guest:
+            if lang == "zh":
+                footer = f"\n\n---\n💡 提示：检测到您尚未登录。点击 [登录获得完整服务]({bind_url})，即可解锁订单跟踪和专属生意记忆功能。"
+            else:
+                footer = f"\n\n---\n💡 Tip: Guest mode active. [Login for full service]({bind_url}) to unlock order tracking and personalized business memory."
+            main_reply += footer
+            
+        await send_func(platform_uid, main_reply)
+        logger.info(f"✅ [{platform.upper()}] Response complete for {platform_uid}")
+        
+    except Exception as e:
+        logger.error(f"❌ [{platform.upper()}] Brain Process Error: {str(e)}")
+    finally:
+        db.close()
 
-# In-memory store for deduplication
+# --- 3. PLATFORM ADAPTERS ---
+
+# --- FEISHU (LARK) ---
+async def get_feishu_tenant_access_token():
+    app_id = settings.FEISHU_APP_ID.strip().replace("`", "") if settings.FEISHU_APP_ID else ""
+    app_secret = settings.FEISHU_APP_SECRET.strip().replace("`", "") if settings.FEISHU_APP_SECRET else ""
+    if not app_id or not app_secret: return None
+    url = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
+    async with httpx.AsyncClient() as client:
+        try:
+            res = await client.post(url, json={"app_id": app_id, "app_secret": app_secret})
+            return res.json().get("tenant_access_token")
+        except: return None
+
+async def send_feishu_message(receive_id: str, content: str):
+    token = await get_feishu_tenant_access_token()
+    if not token: return
+    url = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"}
+    payload = {"receive_id": receive_id, "msg_type": "text", "content": json.dumps({"text": content})}
+    async with httpx.AsyncClient() as client:
+        await client.post(url, json=payload, headers=headers)
+
+# --- TELEGRAM ---
+async def send_telegram_message(chat_id: str, content: str):
+    """v5.6.0: Telegram Send Adapter"""
+    token = settings.TELEGRAM_BOT_TOKEN
+    if not token: return
+    url = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {"chat_id": chat_id, "text": content, "parse_mode": "Markdown"}
+    async with httpx.AsyncClient() as client:
+        await client.post(url, json=payload)
+
+# --- WHATSAPP ---
+async def send_whatsapp_message(to_number: str, content: str):
+    """v5.6.0: WhatsApp (Meta Cloud API) Send Adapter"""
+    token = settings.WHATSAPP_API_TOKEN
+    phone_id = settings.WHATSAPP_PHONE_NUMBER_ID
+    if not token or not phone_id: return
+    url = f"https://graph.facebook.com/v17.0/{phone_id}/messages"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    payload = {"messaging_product": "whatsapp", "to": to_number, "type": "text", "text": {"body": content}}
+    async with httpx.AsyncClient() as client:
+        await client.post(url, json=payload, headers=headers)
+
+# --- DISCORD ---
+async def send_discord_message(channel_id: str, content: str):
+    """v5.6.0: Discord Send Adapter"""
+    token = settings.DISCORD_BOT_TOKEN
+    if not token: return
+    url = f"https://discord.com/api/v10/channels/{channel_id}/messages"
+    headers = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
+    payload = {"content": content}
+    async with httpx.AsyncClient() as client:
+        await client.post(url, json=payload, headers=headers)
+
+# --- 4. SHARED STATE ---
 processed_events = set()
+
+def is_duplicate(platform: str, event_id: str) -> bool:
+    """v5.6.0: Global IM event deduplication."""
+    if not event_id: return False
+    key = f"{platform}:{event_id}"
+    if key in processed_events: return True
+    processed_events.add(key)
+    # Simple memory cleanup: keep last 1000 events
+    if len(processed_events) > 1000:
+        # Pop a few items (not efficient but keeps memory in check)
+        for _ in range(10):
+            try: processed_events.pop()
+            except: pass
+    return False
 
 router = APIRouter()
 
+# --- 5. WEBHOOK ENDPOINTS ---
+
+@router.get("/test")
 @router.get("/feishu/test")
-async def test_feishu_connectivity():
-    """v5.5.18: Ultra-Robust Diagnostic with Auto-Cleaning for Boss"""
-    # v5.5.18: Force cleaning for UI-entered values with backticks or spaces
-    app_id = settings.FEISHU_APP_ID.strip().replace("`", "") if settings.FEISHU_APP_ID else ""
-    app_secret = settings.FEISHU_APP_SECRET.strip().replace("`", "") if settings.FEISHU_APP_SECRET else ""
-    backend_url = settings.BACKEND_URL.strip().replace("`", "") if settings.BACKEND_URL else ""
+async def test_im_connectivity():
+    """v5.6.1: Unified IM & AI Brain Diagnostic"""
+    from app.services.config_service import ConfigService
+    from app.db.session import SessionLocal
+    
+    db = SessionLocal()
+    config_service = ConfigService(db)
+    ai_key = config_service.get_api_key("GOOGLE_API_KEY")
+    db.close()
     
     return {
-        "version": "v5.5.18-AUTO-CLEAN",
+        "version": "v5.6.1-DIAGNOSTIC",
         "timestamp": datetime.now().isoformat(),
-        "status": "ok", 
-        "credentials_status": {
-            "FEISHU_APP_ID": "✅ SET" if app_id else "❌ MISSING",
-            "FEISHU_APP_SECRET": "✅ SET" if app_secret else "❌ MISSING",
-            "BACKEND_URL": f"✅ {backend_url}" if backend_url else "❌ MISSING"
+        "status": "ok",
+        "ai_brain": {
+            "google_api_key_set": bool(ai_key),
+            "key_prefix": ai_key[:5] if ai_key else "None"
         },
-        "instruction": "If you see ❌, please go to Railway Variables, ADD the key, and click REDEPLOY."
+        "platforms": {
+            "feishu": bool(settings.FEISHU_APP_ID),
+            "telegram": bool(settings.TELEGRAM_BOT_TOKEN),
+            "whatsapp": bool(settings.WHATSAPP_API_TOKEN),
+            "discord": bool(settings.DISCORD_BOT_TOKEN)
+        }
     }
 
 @router.post("/feishu")
-@router.post("/feishu/") # v5.5.4: Handle trailing slash variants
+@router.post("/feishu/")
 async def feishu_webhook(request: Request):
-    """
-    v5.5.15: Ultra-Robust Feishu Webhook Handler with Full Payload Logging.
-    """
     try:
         raw_body = await request.body()
-        if not raw_body:
-            logger.warning("⚠️ Received empty body from Feishu")
-            return JSONResponse(content={"status": "empty"}, status_code=200)
-            
         payload = json.loads(raw_body)
-        logger.info(f"📡 Incoming Feishu Webhook Payload: {json.dumps(payload)[:500]}...") # Log first 500 chars
-        
-        # 0. HANDLE ENCRYPTION (v5.5.5) - NOW OPTIONAL (v5.5.6)
-        if "encrypt" in payload:
-            if not settings.FEISHU_ENCRYPT_KEY:
-                # If encrypted but no key, we try to see if it's a legacy plain request mistakenly wrapped
-                # (unlikely, but we log and fail gracefully)
-                logger.error("❌ Feishu payload is encrypted but FEISHU_ENCRYPT_KEY is missing!")
-                return JSONResponse(content={"status": "error", "msg": "Please set FEISHU_ENCRYPT_KEY or disable encryption in Feishu"}, status_code=200)
-            
-            cipher = AESCipher(settings.FEISHU_ENCRYPT_KEY)
-            decrypted_str = cipher.decrypt(payload["encrypt"])
-            if not decrypted_str:
-                return JSONResponse(content={"status": "error", "msg": "decryption_failed"}, status_code=200)
-            
-            payload = json.loads(decrypted_str)
-            logger.info("✅ Feishu payload decrypted successfully")
-        else:
-            # v5.5.6: Zero-Config Path - Plain JSON (Encryption Disabled in Feishu)
-            logger.debug("ℹ️ Processing plain (unencrypted) Feishu payload")
-
-        # 0.5. VERIFY TOKEN (v5.5.5) - OPTIONAL
-        if settings.FEISHU_VERIFY_TOKEN:
-            received_token = payload.get("token") or payload.get("header", {}).get("token")
-            if received_token and received_token != settings.FEISHU_VERIFY_TOKEN:
-                logger.warning(f"⚠️ Feishu token mismatch: expected {settings.FEISHU_VERIFY_TOKEN[:4]}..., got {received_token}")
-                # We won't block yet, but we'll log it clearly.
-
-        # 1. IMMEDIATE CHALLENGE RESPONSE (Highest Priority)
         if payload.get("type") == "url_verification":
-            challenge = payload.get("challenge")
-            return JSONResponse(content={"challenge": challenge}, status_code=200)
+            return JSONResponse(content={"challenge": payload.get("challenge")}, status_code=200)
         
-        # v5.5.20: DUPLICATE PREVENTION
         event_id = payload.get("header", {}).get("event_id")
-        if event_id:
-            if event_id in processed_events:
-                logger.info(f"♻️ Skipping duplicate Feishu Event: {event_id}")
-                return JSONResponse(content={"status": "duplicate_ignored"}, status_code=200)
-            
-            # Add to set and keep it reasonably sized
-            processed_events.add(event_id)
-            if len(processed_events) > 1000:
-                processed_events.clear() # Simple rotation
-            logger.info(f"🆔 Processing Feishu Event: {event_id}")
-
-        # 2. EVENT PROCESSING
+        if is_duplicate("feishu", event_id): return JSONResponse(content={"status": "dup"}, status_code=200)
+        
         event = payload.get("event", {})
+        sender_id = event.get("sender", {}).get("sender_id", {}).get("open_id")
         message = event.get("message", {})
-        sender = event.get("sender", {})
-        
-        # v5.5.7: Capture both Sender and Chat Context
-        sender_id = sender.get("sender_id", {}).get("open_id")
-        chat_id = message.get("chat_id")
-        chat_type = message.get("chat_type") # 'p2p' or 'group'
-        
-        if not sender_id or not message:
-            return JSONResponse(content={"status": "ignored"}, status_code=200)
-
-        # 2.5. GROUP FILTER (v5.5.7)
-        # In groups, we only respond if explicitly mentioned (unless it's a P2P chat)
+        chat_type = message.get("chat_type")
         content_raw = message.get("content", "{}")
-        try:
-            content_obj = json.loads(content_raw)
-            text_content = content_obj.get("text", "").strip()
-        except:
-            text_content = ""
+        text = json.loads(content_raw).get("text", "").strip()
+        
+        if sender_id and text:
+            asyncio.create_task(generic_brain_process("feishu", sender_id, text, message.get("chat_id"), chat_type, send_feishu_message))
+        return JSONResponse(content={"status": "ok"}, status_code=200)
+    except: return JSONResponse(content={"status": "err"}, status_code=200)
 
-        if chat_type == "group":
-            # Check for @mentions in Feishu event
-            mentions = message.get("mentions", [])
-            is_mentioned = any(m.get("name") == settings.PROJECT_NAME or m.get("id", {}).get("open_id") == settings.FEISHU_APP_ID for m in mentions)
-            
-            # If not mentioned, we still record the interaction silently (Optional: for individual profiling)
-            if not is_mentioned and not text_content.startswith("/"):
-                logger.debug(f"🤫 Silent profiling for {sender_id} in group {chat_id}")
-                # Future: run_butler_learning silently here
-                return JSONResponse(content={"status": "silent_recorded"}, status_code=200)
-
-        if not text_content:
-            return JSONResponse(content={"status": "no_text"}, status_code=200)
-
-        # 3. BRAIN ROUTING
-        from app.db.session import SessionLocal
-        db = SessionLocal()
-        try:
-            # v5.5.23: Detect language for initial responses
-            lang = detect_language(text_content)
-            
-            binding = db.query(UserIMBinding).filter_by(platform="feishu", platform_uid=sender_id, is_active=True).first()
-            
-            # v5.5.27: "Try-Before-You-Buy" Architecture
-            # We NO LONGER block unauthenticated users. 
-            # We allow them to use basic AI but remind them to bind for private data.
-            user_id = binding.user_id if binding else 1 # Default to User 1 (Public/Admin profile) for guests
-            is_guest = binding is None
-            
-            sig = generate_binding_sig("feishu", sender_id)
-            base_url = settings.BACKEND_URL.rstrip("/")
-            bind_url = f"{base_url}/auth/bind?platform=feishu&uid={sender_id}&sig={sig}"
-            
-            session_id = f"feishu_{chat_id}_{sender_id}" if chat_type == "group" else f"feishu_{sender_id}"
-            
-            # v5.5.12: Background Task Execution
-            async def background_ai_process(text, uid, sid, u_id, language, guest_mode):
-                try:
-                    # v5.5.13: Provide immediate visual feedback
-                    thinking_msg = "🔍 0Buck 智脑正在深度思考中，请稍等片刻..." if language == "zh" else "🔍 0Buck AI Brain is thinking deeply, please wait a moment..."
-                    await send_feishu_message(uid, "open_id", thinking_msg)
-                    
-                    logger.info(f"🧠 AI Brain starting {'GUEST' if guest_mode else 'PRIVATE'} process for {uid} ({language})")
-                    
-                    # Call AI Brain
-                    ai_response = await run_agent(
-                        content=text, 
-                        user_id=u_id,
-                        session_id=sid
-                    )
-                    
-                    main_reply = ai_response.get("content", "Brain is thinking...")
-                    
-                    # v5.5.27: Append a gentle binding reminder for guests
-                    if guest_mode:
-                        if language == "zh":
-                            footer = f"\n\n---\n💡 提示：检测到您尚未登录。点击 [登录获得完整服务]({bind_url})，即可解锁订单跟踪和专属生意记忆功能。"
-                        else:
-                            footer = f"\n\n---\n💡 Tip: Guest mode active. [Login for full service]({bind_url}) to unlock order tracking and personalized business memory."
-                        main_reply += footer
-                        
-                    await send_feishu_message(uid, "open_id", main_reply)
-                    logger.info(f"✅ AI Brain response sent to {uid}")
-                except Exception as ex:
-                    logger.error(f"❌ Background AI Process Error: {str(ex)}")
-
-            asyncio.create_task(background_ai_process(text_content, sender_id, session_id, user_id, lang, is_guest))
-            
-            return JSONResponse(content={"status": "processing_started", "guest_mode": is_guest}, status_code=200)
-        finally:
-            db.close()
-
-    except Exception as e:
-        logger.error(f"❌ Feishu Critical Error: {str(e)}")
-        # Still return 200 to Feishu to avoid retries, but log the error
-        return JSONResponse(content={"status": "error", "msg": str(e)}, status_code=200)
+@router.post("/telegram")
+async def telegram_webhook(request: Request):
+    """v5.6.0: Telegram Unified Webhook"""
+    try:
+        payload = await request.json()
+        update_id = str(payload.get("update_id"))
+        if is_duplicate("telegram", update_id): return {"status": "dup"}
+        
+        message = payload.get("message", {})
+        chat = message.get("chat", {})
+        sender_id = str(chat.get("id"))
+        text = message.get("text", "")
+        if sender_id and text:
+            chat_type = "p2p" if chat.get("type") == "private" else "group"
+            asyncio.create_task(generic_brain_process("telegram", sender_id, text, sender_id, chat_type, send_telegram_message))
+        return {"status": "ok"}
+    except: return {"status": "error"}
 
 @router.post("/whatsapp")
-async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
-    """v5.5: Unified IM Gateway - WhatsApp Adapter (Refactored)"""
-    # ... logic similar to Feishu but using WhatsApp Cloud API format ...
-    return {"status": "ok"}
+@router.get("/whatsapp")
+async def whatsapp_webhook(request: Request):
+    """v5.6.0: WhatsApp Unified Webhook"""
+    params = request.query_params
+    if params.get("hub.mode") == "subscribe":
+        if params.get("hub.verify_token") == settings.WHATSAPP_VERIFY_TOKEN:
+            return PlainTextResponse(params.get("hub.challenge"))
+        return PlainTextResponse("Forbidden", status_code=403)
+    
+    try:
+        payload = await request.json()
+        # Extract message from Meta's nested payload
+        entry = payload.get("entry", [{}])[0]
+        changes = entry.get("changes", [{}])[0]
+        value = changes.get("value", {})
+        messages = value.get("messages", [{}])
+        
+        if not messages: return {"status": "no_msg"}
+        
+        message = messages[0]
+        msg_id = message.get("id")
+        if is_duplicate("whatsapp", msg_id): return {"status": "dup"}
+        
+        sender_id = message.get("from")
+        text = message.get("text", {}).get("body", "")
+        
+        if sender_id and text:
+            asyncio.create_task(generic_brain_process("whatsapp", sender_id, text, sender_id, "p2p", send_whatsapp_message))
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"WhatsApp Webhook Error: {str(e)}")
+        return {"status": "error"}
+
+@router.post("/discord")
+async def discord_webhook(request: Request):
+    """v5.6.0: Discord Unified Webhook"""
+    try:
+        payload = await request.json()
+        # Discord Interactions/Webhooks have different types
+        if payload.get("type") == 1: # PING
+            return JSONResponse({"type": 1})
+            
+        event_id = payload.get("id") or payload.get("d", {}).get("id")
+        if is_duplicate("discord", event_id): return {"status": "dup"}
+        
+        message = payload.get("message", payload.get("d", {}))
+        author = message.get("author", {})
+        if author.get("bot"): return {"status": "bot_ignored"}
+        
+        sender_id = author.get("id")
+        text = message.get("content", "")
+        channel_id = message.get("channel_id")
+        
+        if sender_id and text:
+            asyncio.create_task(generic_brain_process("discord", sender_id, text, channel_id, "group", send_discord_message))
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Discord Webhook Error: {str(e)}")
+        return {"status": "error"}
 
 @router.get("/bind")
 async def process_im_binding(
@@ -317,39 +305,17 @@ async def process_im_binding(
     current_user: Any = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    v5.5.8: Secure Identity Bridge.
-    Links the logged-in 0Buck user to their IM identity.
-    """
-    # 1. Verify Signature
-    expected_sig = generate_binding_sig(platform, uid)
-    if not hmac.compare_digest(sig, expected_sig):
-        raise HTTPException(status_code=403, detail="Invalid binding signature")
+    """v5.5.8: Secure Identity Bridge."""
+    if not hmac.compare_digest(sig, generate_binding_sig(platform, uid)):
+        raise HTTPException(status_code=403, detail="Invalid signature")
     
-    # 2. Check for Existing Binding
     existing = db.query(UserIMBinding).filter_by(platform=platform, platform_uid=uid, is_active=True).first()
     if existing:
         if existing.user_id == current_user.customer_id:
-            return {"status": "already_bound", "message": f"Account already linked to {platform}"}
-        else:
-            # Re-bind to new user
-            existing.is_active = False
-            db.add(existing)
+            return {"status": "already_bound", "message": f"Linked to {platform}", "user_name": f"{current_user.first_name}"}
+        existing.is_active = False
+        db.add(existing)
     
-    # 3. Create New Binding
-    new_binding = UserIMBinding(
-        user_id=current_user.customer_id,
-        platform=platform,
-        platform_uid=uid,
-        is_active=True
-    )
-    db.add(new_binding)
+    db.add(UserIMBinding(user_id=current_user.customer_id, platform=platform, platform_uid=uid, is_active=True))
     db.commit()
-    
-    logger.info(f"✅ Identity Bridge Success: Linked User {current_user.customer_id} to {platform}:{uid}")
-    
-    return {
-        "status": "success", 
-        "message": f"Successfully linked your 0Buck account to {platform}!",
-        "user_name": f"{current_user.first_name} {current_user.last_name}"
-    }
+    return {"status": "success", "message": f"Linked to {platform}!", "user_name": f"{current_user.first_name}"}

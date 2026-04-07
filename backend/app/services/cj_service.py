@@ -138,7 +138,7 @@ class CJDropshippingService:
             import re
             market_data = {"amazon_price": None, "amazon_compare_at_price": None}
             try:
-                amazon_results = await web_search(f"{name} price on amazon.com")
+                amazon_results = await web_search.ainvoke(f"{name} price on amazon.com")
                 for res in amazon_results:
                     if isinstance(res, dict):
                         text = f"{res.get('title', '')} {res.get('text', '')}"

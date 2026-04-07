@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     # Session Secret
     SECRET_KEY: str = os.getenv("SECRET_KEY", "0buck_default_secret_key_for_sessions_32")
     
-    # IM Gateway (v5.5)
+    # IM Gateway (v5.6)
     WHATSAPP_API_TOKEN: str = os.getenv("WHATSAPP_API_TOKEN", "")
     WHATSAPP_PHONE_NUMBER_ID: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
     WHATSAPP_VERIFY_TOKEN: str = os.getenv("WHATSAPP_VERIFY_TOKEN", "0buck_verify_token")
@@ -66,6 +66,10 @@ class Settings(BaseSettings):
     FEISHU_APP_SECRET: str = os.getenv("FEISHU_APP_SECRET", "")
     FEISHU_VERIFY_TOKEN: str = os.getenv("FEISHU_VERIFY_TOKEN", "")
     FEISHU_ENCRYPT_KEY: str = os.getenv("FEISHU_ENCRYPT_KEY", "")
+
+    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
+    DISCORD_BOT_TOKEN: str = os.getenv("DISCORD_BOT_TOKEN", "")
+    DISCORD_CLIENT_ID: str = os.getenv("DISCORD_CLIENT_ID", "")
 
     # Domains & Routing
     BACKEND_URL: str = os.getenv("BACKEND_URL", "")

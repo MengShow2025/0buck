@@ -350,7 +350,7 @@ class SupplyChainService:
         try:
             # 1. Search Amazon
             amazon_query = f"{product_name} current price list price on amazon.com"
-            amazon_results = await web_search(amazon_query)
+            amazon_results = await web_search.ainvoke(amazon_query)
             for res in amazon_results:
                 if isinstance(res, dict):
                     text = f"{res.get('title', '')} {res.get('text', '')}"
@@ -373,7 +373,7 @@ class SupplyChainService:
             
             # 2. Search eBay
             ebay_query = f"{product_name} current price list price on ebay.com"
-            ebay_results = await web_search(ebay_query)
+            ebay_results = await web_search.ainvoke(ebay_query)
             for res in ebay_results:
                 if isinstance(res, dict):
                     text = f"{res.get('title', '')} {res.get('text', '')}"
