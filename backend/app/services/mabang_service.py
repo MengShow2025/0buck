@@ -1,5 +1,9 @@
 import logging
 import httpx
+import hmac
+import hashlib
+import time
+import json
 from typing import Dict, Any, Optional
 from app.core.config import settings
 
@@ -8,36 +12,52 @@ logger = logging.getLogger(__name__)
 class MabangService:
     """
     v5.3: Mabang ERP Integration for 1688 Sourcing & Fulfillment.
-    Used for 'Forwarder Mode' where we buy from 1688 via Mabang.
+    Updated to V2 Gateway: https://gwapi.mabangerp.com/api/v2
     """
     def __init__(self, token: str = None, app_key: str = None):
-        self.token = token or settings.MABANG_TOKEN
+        self.token = token or settings.MABANG_TOKEN # Used as Developer Key for HMAC
         self.app_key = app_key or settings.MABANG_APP_KEY
-        self.base_url = settings.MABANG_API_URL or "https://open.mabangerp.com"
-        self.version = "v1"
+        self.base_url = "https://gwapi.mabangerp.com/api/v2"
+        self.version = "1"
 
-    async def _post(self, action: str, data: Dict[str, Any]) -> Dict[str, Any]:
-        """Generic POST helper for Mabang API."""
+    def _generate_v2_signature(self, body_str: str) -> str:
+        """Calculate HMAC-SHA256 signature for V2."""
+        return hmac.new(
+            self.token.encode('utf-8'),
+            body_str.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest().upper()
+
+    async def _post(self, api_method: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Generic POST helper for Mabang V2 API."""
         payload = {
-            "token": self.token,
-            "appKey": self.app_key,
-            "action": action,
-            "version": self.version,
-            "data": data
+            "api": api_method,
+            "appkey": self.app_key,
+            "data": data,
+            "timestamp": int(time.time()),
+            "version": self.version
+        }
+        
+        body_str = json.dumps(payload, separators=(',', ':'))
+        signature = self._generate_v2_signature(body_str)
+        
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": signature,
+            "Accept": "application/json"
         }
         
         async with httpx.AsyncClient() as client:
             try:
-                # Mabang often expects JSON payload in the body
-                response = await client.post(self.base_url, json=payload, timeout=30.0)
-                print(f"DEBUG MABANG: Status: {response.status_code} | Text: {response.text[:200]}")
+                response = await client.post(self.base_url, headers=headers, content=body_str, timeout=30.0)
+                # print(f"DEBUG MABANG V2: Status: {response.status_code} | Text: {response.text[:200]}")
                 response.raise_for_status()
                 result = response.json()
                 if result.get("code") != "000":
-                    logger.warning(f"⚠️ Mabang API {action} returned error: {result.get('message')}")
+                    logger.warning(f"⚠️ Mabang API {api_method} returned error: {result.get('message')}")
                 return result
             except Exception as e:
-                logger.error(f"❌ Mabang API {action} failed: {e}")
+                logger.error(f"❌ Mabang API {api_method} failed: {e}")
                 return {"code": "999", "message": str(e)}
 
     async def get_1688_product_detail(self, url_1688: str) -> Dict[str, Any]:
