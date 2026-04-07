@@ -35,6 +35,15 @@ class CJDropshippingService:
                 return data["data"]["accessToken"]
             raise Exception(f"Failed to get CJ access token: {data.get('message')}")
 
+    async def get_categories(self) -> List[Dict[str, Any]]:
+        """Fetch all CJ categories."""
+        url = f"{self.BASE_URL}/product/category"
+        headers = await self._get_headers()
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url, headers=headers)
+            data = response.json()
+            return data.get("data", []) if data.get("success") else []
+
     async def search_products(self, keyword: str = None, page: int = 1, size: int = 20, only_cj_owned: bool = False, category_id: str = None) -> List[Dict[str, Any]]:
         url = f"{self.BASE_URL}/product/listV2"
         headers = await self._get_headers()

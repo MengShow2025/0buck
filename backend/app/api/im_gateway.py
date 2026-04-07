@@ -110,18 +110,20 @@ router = APIRouter()
 
 @router.get("/feishu/test")
 async def test_feishu_connectivity():
-    """v5.5.17: Ultra-Explicit Diagnostic for Boss"""
-    app_id = settings.FEISHU_APP_ID.strip() if settings.FEISHU_APP_ID else ""
-    app_secret = settings.FEISHU_APP_SECRET.strip() if settings.FEISHU_APP_SECRET else ""
+    """v5.5.18: Ultra-Robust Diagnostic with Auto-Cleaning for Boss"""
+    # v5.5.18: Force cleaning for UI-entered values with backticks or spaces
+    app_id = settings.FEISHU_APP_ID.strip().replace("`", "") if settings.FEISHU_APP_ID else ""
+    app_secret = settings.FEISHU_APP_SECRET.strip().replace("`", "") if settings.FEISHU_APP_SECRET else ""
+    backend_url = settings.BACKEND_URL.strip().replace("`", "") if settings.BACKEND_URL else ""
     
     return {
-        "version": "v5.5.17-ULTRA-DIAGNOSTIC",
+        "version": "v5.5.18-AUTO-CLEAN",
         "timestamp": datetime.now().isoformat(),
         "status": "ok", 
         "credentials_status": {
             "FEISHU_APP_ID": "✅ SET" if app_id else "❌ MISSING",
             "FEISHU_APP_SECRET": "✅ SET" if app_secret else "❌ MISSING",
-            "BACKEND_URL": f"✅ {settings.BACKEND_URL}" if settings.BACKEND_URL else "❌ MISSING"
+            "BACKEND_URL": f"✅ {backend_url}" if backend_url else "❌ MISSING"
         },
         "instruction": "If you see ❌, please go to Railway Variables, ADD the key, and click REDEPLOY."
     }
