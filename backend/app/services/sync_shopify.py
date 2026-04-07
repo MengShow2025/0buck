@@ -61,9 +61,9 @@ class SyncShopifyService:
       var path = window.location.pathname;
       var search = window.location.search;
       
-      // Do NOT redirect checkout, cart, or admin paths
+      // Do NOT redirect checkout, cart, or admin/control paths
       var isCheckout = path.indexOf('/checkout') !== -1 || path.indexOf('/cart') !== -1;
-      var isAdmin = path.indexOf('/admin') !== -1;
+      var isAdmin = path.indexOf('/admin') !== -1 || path.indexOf('/control') !== -1 || path.indexOf('/command') !== -1;
       
       if (!isCheckout && !isAdmin) {{
         window.location.href = headlessDomain + path + search;

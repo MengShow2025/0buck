@@ -188,6 +188,28 @@ def update_pricing_strategy(data: PricingStrategyUpdate, db: Session = Depends(g
 
 @router.get("/config/sourcing-strategy")
 def get_sourcing_strategy(db: Session = Depends(get_db)):
+    """v4.7.3 Get current sourcing strategy from SystemConfig"""
+    from app.services.config_service import ConfigService
+    config = ConfigService(db)
+    return {
+        "arbitrage_threshold": config.get("arbitrage_threshold", 0.15),
+        "min_trend_score": config.get("min_trend_score", 85),
+        "min_supplier_years": config.get("min_supplier_years", 2),
+        "require_gold_supplier": config.get("require_gold_supplier", True),
+        "require_trade_assurance": config.get("require_trade_assurance", True),
+    }
+
+@router.post("/config/sourcing-strategy")
+def update_sourcing_strategy(data: SourcingStrategyUpdate, db: Session = Depends(get_db)):
+    """v4.7.3 Update sourcing strategy in SystemConfig"""
+    from app.services.config_service import ConfigService
+    config = ConfigService(db)
+    for key, value in data.dict().items():
+        config.set(key, value, description=f"Sourcing strategy: {key}")
+    return {"status": "success"}
+
+@router.get("/config/sourcing-strategy")
+def get_sourcing_strategy(db: Session = Depends(get_db)):
     """v4.7.3 Get sourcing strategy (arbitrage, trends, etc.) from SystemConfig"""
     from app.services.config_service import ConfigService
     config = ConfigService(db)

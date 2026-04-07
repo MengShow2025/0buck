@@ -161,6 +161,14 @@ interface AuditCandidate {
   structural_data?: any;
 }
 
+interface SourcingStrategy {
+  arbitrage_threshold: number;
+  min_trend_score: number;
+  min_supplier_years: number;
+  require_gold_supplier: boolean;
+  require_trade_assurance: boolean;
+}
+
 const AdminDashboard: React.FC = () => {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [contributions, setContributions] = useState<any[]>([]);
@@ -181,6 +189,7 @@ const AdminDashboard: React.FC = () => {
   const [meltedProducts, setMeltedProducts] = useState<any[]>([]);
   const [pricingStrategy, setPricingStrategy] = useState<PricingStrategy | null>(null);
   const [rewardRates, setRewardRates] = useState<RewardRates | null>(null);
+  const [sourcingStrategy, setSourcingStrategy] = useState<SourcingStrategy | null>(null);
   const [pendingTalents, setPendingTalents] = useState<TalentApplication[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
@@ -211,6 +220,29 @@ const AdminDashboard: React.FC = () => {
       const res = await fetchWithAuth('/api/v1/admin/config/reward-rates');
       setRewardRates(await res.json());
     } catch (e) { console.error(e); }
+  };
+
+  const fetchSourcingStrategy = async () => {
+    try {
+      const res = await fetchWithAuth('/api/v1/admin/config/sourcing-strategy');
+      setSourcingStrategy(await res.json());
+    } catch (e) { console.error(e); }
+  };
+
+  const handleUpdateSourcingStrategy = async (strategy: SourcingStrategy) => {
+    try {
+      setIsUpdating(true);
+      const res = await fetchWithAuth('/api/v1/admin/config/sourcing-strategy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(strategy)
+      });
+      if (res.ok) {
+        alert('供应套利策略已更新');
+        fetchSourcingStrategy();
+      }
+    } catch (e) { alert('更新失败'); }
+    finally { setIsUpdating(false); }
   };
 
   const fetchPendingTalents = async () => {
@@ -1770,7 +1802,78 @@ const AdminDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Reward Rates */}
+                {/* Sourcing & Arbitrage Strategy */}
+                <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
+                  <h3 className="font-black text-xl mb-6 flex items-center gap-2">
+                    <Layers size={24} className="text-blue-600" />
+                    供应与套利策略 (v4.7.3)
+                  </h3>
+                  <div className="space-y-6">
+                    <div>
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">Alibaba 套利阈值 (Arb Threshold)</label>
+                      <div className="flex items-center gap-4">
+                        <input 
+                          type="range" min="0.05" max="0.30" step="0.01"
+                          value={sourcingStrategy?.arbitrage_threshold || 0.15}
+                          onChange={(e) => setSourcingStrategy({...sourcingStrategy!, arbitrage_threshold: parseFloat(e.target.value)})}
+                          className="flex-1 accent-blue-600"
+                        />
+                        <span className="text-lg font-black w-16">{(sourcingStrategy?.arbitrage_threshold || 0.15) * 100}%</span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-1">若 Alibaba RTS 价格低于 (1688落地成本 * 1+阈值)，则推荐直发。</p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">最小 Trend Score</label>
+                        <input 
+                          type="number"
+                          value={sourcingStrategy?.min_trend_score || 85}
+                          onChange={(e) => setSourcingStrategy({...sourcingStrategy!, min_trend_score: parseInt(e.target.value)})}
+                          className="w-full bg-gray-50 border-none rounded-xl p-3 font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">最小供应商年限</label>
+                        <input 
+                          type="number"
+                          value={sourcingStrategy?.min_supplier_years || 2}
+                          onChange={(e) => setSourcingStrategy({...sourcingStrategy!, min_supplier_years: parseInt(e.target.value)})}
+                          className="w-full bg-gray-50 border-none rounded-xl p-3 font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-4 border-t border-gray-50">
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input 
+                          type="checkbox"
+                          checked={sourcingStrategy?.require_gold_supplier || true}
+                          onChange={(e) => setSourcingStrategy({...sourcingStrategy!, require_gold_supplier: e.target.checked})}
+                          className="w-5 h-5 rounded-md border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">强制金牌供应商 (Gold Supplier)</span>
+                      </label>
+                      <label className="flex items-center gap-3 cursor-pointer">
+                        <input 
+                          type="checkbox"
+                          checked={sourcingStrategy?.require_trade_assurance || true}
+                          onChange={(e) => setSourcingStrategy({...sourcingStrategy!, require_trade_assurance: e.target.checked})}
+                          className="w-5 h-5 rounded-md border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span className="text-sm font-bold text-gray-700">强制贸易保障 (Trade Assurance)</span>
+                      </label>
+                    </div>
+
+                    <button 
+                      onClick={() => sourcingStrategy && handleUpdateSourcingStrategy(sourcingStrategy)}
+                      disabled={isUpdating}
+                      className="w-full py-4 bg-black text-white rounded-2xl font-black text-sm uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-blue-600/10 disabled:opacity-50"
+                    >
+                      {isUpdating ? '同步中...' : '保存供应策略'}
+                    </button>
+                  </div>
+                </div>
                 <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-8">
                   <h3 className="font-black text-xl mb-6 flex items-center gap-2">
                     <Gift size={24} className="text-purple-600" />

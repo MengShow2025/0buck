@@ -57,7 +57,7 @@ export default function App() {
   const [showWelcome, setShowWelcome] = useState(() => {
     // Skip welcome if accessing command center directly
     const path = window.location.pathname.toLowerCase();
-    return !path.startsWith('/command') && !path.startsWith('/admin');
+    return !path.startsWith('/command') && !path.startsWith('/control');
   });
   const [isAuthenticated, setIsAuthenticated] = useState(() => {
     return localStorage.getItem('0buck_auth_state') === 'true';
@@ -75,7 +75,7 @@ export default function App() {
     const path = window.location.pathname.toLowerCase().replace(/\/$/, "");
     console.log("[App] Initial Path Check:", path);
     
-    if (path.startsWith('/command') || path.startsWith('/admin')) {
+    if (path.startsWith('/command') || path.startsWith('/control')) {
       const isAuth = localStorage.getItem('0buck_auth_state') === 'true';
       const user = JSON.parse(localStorage.getItem('0buck_user') || 'null');
       
@@ -97,7 +97,7 @@ export default function App() {
     console.log("[App] Location Path Change:", path);
     
     // v4.6.4: Strict Security Guard for Admin Routes
-    if ((path.startsWith('/command') || path.startsWith('/admin'))) {
+    if ((path.startsWith('/command') || path.startsWith('/control'))) {
       const isAuth = localStorage.getItem('0buck_auth_state') === 'true';
       const user = JSON.parse(localStorage.getItem('0buck_user') || 'null');
       
@@ -140,7 +140,7 @@ export default function App() {
     
     // v4.5.1: Smart redirect after login
     const path = window.location.pathname.toLowerCase();
-    if (path.startsWith('/command') || path.startsWith('/admin')) {
+    if (path.startsWith('/command') || path.startsWith('/control')) {
       // v4.6: Verify admin privileges
       if (user.user_type === 'admin') {
         setCurrentView('admin');
@@ -176,7 +176,7 @@ export default function App() {
           }
           // v4.5.1: Smart redirect for guest
           const path = window.location.pathname.toLowerCase();
-          if (path.startsWith('/command') || path.startsWith('/admin')) {
+          if (path.startsWith('/command') || path.startsWith('/control')) {
             setCurrentView('admin');
           } else {
             setCurrentView('chat');
@@ -275,7 +275,7 @@ export default function App() {
         if (currentView === 'login') {
           // v4.5.1: Prevent redirect if on command path
           const path = window.location.pathname.toLowerCase();
-          if (path.startsWith('/command') || path.startsWith('/admin')) {
+          if (path.startsWith('/command') || path.startsWith('/control')) {
             setCurrentView('admin');
           } else {
             setCurrentView('chat'); // Auto-enter to AI Butler as guest
@@ -720,7 +720,7 @@ export default function App() {
             transition={{ duration: 0.5 }}
             className="h-full w-full relative"
           >
-            {!['login', 'register', 'admin'].includes(currentView) && !location.pathname.toLowerCase().startsWith('/command') && !location.pathname.toLowerCase().startsWith('/admin') && (
+            {!['login', 'register', 'admin'].includes(currentView) && !location.pathname.toLowerCase().startsWith('/command') && !location.pathname.toLowerCase().startsWith('/control') && (
               <Sidebar 
                 currentView={currentView} 
                 onViewChange={setCurrentView} 
@@ -733,7 +733,7 @@ export default function App() {
                 onClose={() => setIsSidebarOpen(false)}
               />
             )}
-            <main className={`${!['login', 'register', 'admin'].includes(currentView) && !location.pathname.toLowerCase().startsWith('/command') && !location.pathname.toLowerCase().startsWith('/admin') ? 'lg:ml-20' : ''} h-screen flex flex-col relative overflow-hidden`}>
+            <main className={`${!['login', 'register', 'admin'].includes(currentView) && !location.pathname.toLowerCase().startsWith('/command') && !location.pathname.toLowerCase().startsWith('/control') ? 'lg:ml-20' : ''} h-screen flex flex-col relative overflow-hidden`}>
               <TopBar 
                 {...getHeaderProps()} 
                 currentView={currentView} 

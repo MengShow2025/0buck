@@ -117,16 +117,32 @@ class SmartBusinessService:
     async def scan_sourcing_candidates(self):
         """
         Logic 1.4: Autonomous Sourcing (选品嗅探).
-        Triggers IDS Sniffing and Spy Monitor to populate CandidateProduct pool.
+        v4.7.3:IDS Sniffing + Alibaba Arbitrage Sniff.
         """
         from app.services.supply_chain import SupplyChainService
+        from app.models.product import CandidateProduct
+        
         logger.info("🕵️ Triggering IDS Sniffing & Spy Monitor...")
         sc_service = SupplyChainService(self.db)
         try:
-            # 1. Following Mode (IDS)
-            await sc_service.ids_sniffing_and_populate()
-            # 2. Spy Mode (Not implemented yet in supply_chain.py, but placeholder for v3.9.1)
-            # await sc_service.spy_monitor_and_populate()
+            # 1. IDS Search (Followers/Market Trend)
+            new_count = await sc_service.ids_sniffing_and_populate()
+            logger.info(f"🆕 Ingested {new_count} new candidates from IDS.")
+            
+            # 2. v4.7.3 Alibaba Arbitrage Sniff for all pending candidates
+            pending_candidates = self.db.query(CandidateProduct).filter(
+                CandidateProduct.status == "pending",
+                CandidateProduct.alibaba_comparison_price == None
+            ).all()
+            
+            logger.info(f"🔎 Starting Alibaba sniff for {len(pending_candidates)} pending candidates...")
+            for candidate in pending_candidates:
+                try:
+                    await sc_service.find_alibaba_alternative(candidate.id)
+                except Exception as e:
+                    logger.error(f"Failed Alibaba sniff for Candidate {candidate.id}: {e}")
+            
+            self.db.commit()
         except Exception as e:
             logger.error(f"Error during sourcing scan: {e}")
 

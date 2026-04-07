@@ -1,51 +1,60 @@
-
 import asyncio
 import logging
-import os
 import sys
+import os
+import json
 
 # Ensure project root is in sys.path
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(project_root)
-sys.path.append(os.path.join(project_root, "backend"))
+backend_root = os.path.join(project_root, 'backend')
+if backend_root not in sys.path:
+    sys.path.append(backend_root)
 
-from backend.app.db.session import SessionLocal
-from backend.app.models.product import CandidateProduct
+from app.db.session import SessionLocal
+from app.services.supply_chain import SupplyChainService
+from app.models.product import CandidateProduct
 
+# Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Manual mapping for testing (The results of our manual search)
-TEST_MAPPING = {
-    13: {
-        "url": "https://www.alibaba.com/product-detail/High-Quality-Wooden-Handle-Coffee-Pot_1601418031704.html",
-        "price": 19.0
-    },
-    15: {
-        "url": "https://www.alibaba.com/product-detail/Glomarket-Tuya-Smart-Home-WiFi-Smart_1601639954237.html",
-        "price": 28.0
-    },
-    16: {
-        "url": "https://www.alibaba.com/product-detail/DENIXI-S12-New-Smartwatch-IP67-Waterproof_1601649762282.html",
-        "price": 14.0
-    }
-}
-
-async def manual_sniff():
+async def test_sniff():
     db = SessionLocal()
     try:
-        for cid, data in TEST_MAPPING.items():
-            candidate = db.query(CandidateProduct).filter_by(id=cid).first()
-            if candidate:
-                logger.info(f"🚀 Manually Sniffing Alibaba for Candidate {cid}: {candidate.title_zh[:30]}...")
-                candidate.backup_source_url = data["url"]
-                candidate.alibaba_comparison_price = data["price"]
-                db.commit()
-                logger.info(f"✅ Success: Linked to {data['url']}")
+        from app.services.config_service import ConfigService
+        config = ConfigService(db)
+        config.set("min_trend_score", 0, description="Test Override")
+        db.commit()
+
+        sc_service = SupplyChainService(db)
+        
+        # 1. Fetch 'new' candidates that haven't been checked
+        candidates = db.query(CandidateProduct).filter(
+            CandidateProduct.status == "new",
+            CandidateProduct.alibaba_comparison_price == None
+        ).all()
+        
+        print(f"Found {len(candidates)} 'new' candidates with alibaba_comparison_price == None.")
+        
+        if not candidates:
+            print("No 'new' candidates for verification. (Testing with first ID if available...)")
+            candidates = db.query(CandidateProduct).limit(1).all()
+
+        for c in candidates:
+            print(f"🧪 Testing Arbitrage Sniff for Candidate: {c.title_zh[:30]} (ID: {c.id})")
+            await sc_service.find_alibaba_alternative(c.id)
+            
+            # Re-fetch from DB to verify
+            db.refresh(c)
+            if c.discovery_evidence and c.discovery_evidence.get("arbitrage_recommend"):
+                print(f"✅ SUCCESS: Candidate {c.id} marked as ARBITRAGE RECOMMENDED!")
+                print(f"💰 Alibaba Price: {c.alibaba_comparison_price} USD | 1688 Cost: {c.cost_cny} CNY")
             else:
-                logger.warning(f"⚠️ Candidate {cid} not found.")
+                print(f"ℹ️ Info: Candidate {c.id} does not meet arbitrage criteria (Normal Behavior).")
+                print(f"🔍 Result: alibaba_comparison_price={c.alibaba_comparison_price}")
+                
     finally:
         db.close()
 
 if __name__ == "__main__":
-    asyncio.run(manual_sniff())
+    asyncio.run(test_sniff())
