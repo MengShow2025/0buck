@@ -260,7 +260,7 @@ export default function ProductDetailView({ product, onBack, onAddToCart, onBuyN
                   <span className="text-zinc-500 text-[10px] font-black tracking-widest uppercase">SKU: 0B-PRIME-77X</span>
                 </div>
                 <h1 className="text-4xl md:text-5xl font-black tracking-tighter uppercase leading-none mb-4">{product.name}</h1>
-                <p className="text-lg text-zinc-500 leading-relaxed font-medium">High-fidelity acoustic isolation meets decentralized ledger tracking. The ultimate tool for the modern supplier network.</p>
+                <p className="text-lg text-zinc-500 leading-relaxed font-medium">{product.description || "High-fidelity acoustic isolation meets decentralized ledger tracking. The ultimate tool for the modern supplier network."}</p>
               </div>
 
               <div className="bg-zinc-950 p-8 rounded-[2.5rem] shadow-2xl relative overflow-hidden border border-white/5">
@@ -270,9 +270,13 @@ export default function ProductDetailView({ product, onBack, onAddToCart, onBuyN
                 <div className="relative z-10">
                   <p className="text-zinc-500 text-[10px] font-black uppercase tracking-[0.2em] mb-2">Prime Wholesale Price</p>
                   <div className="flex items-baseline gap-2 mb-8">
-                    <span className="text-5xl font-black text-white">$1,249</span>
-                    <span className="text-zinc-600 line-through text-lg font-bold">$1,500</span>
+                    <span className="text-5xl font-black text-white">{product.price}</span>
                     <span className="bg-[#af3000] text-white px-2 py-1 rounded text-[10px] font-black ml-4">SAVE 17%</span>
+                    {product.is_cashback_eligible && (
+                      <span className="bg-primary text-black px-3 py-1 rounded-full text-[10px] font-black ml-4 animate-pulse shadow-[0_0_15px_rgba(255,92,40,0.5)]">
+                        100% BACK
+                      </span>
+                    )}
                   </div>
                   <div className="space-y-4 mb-8">
                     <button 

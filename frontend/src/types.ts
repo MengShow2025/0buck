@@ -69,6 +69,8 @@ export interface Product {
   moq?: string;
   quantity?: number;
   delivery?: string;
+  category_type?: 'TRAFFIC' | 'PROFIT';
+  is_cashback_eligible?: boolean;
 }
 
 export interface CartItem {

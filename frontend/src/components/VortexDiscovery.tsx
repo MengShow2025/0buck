@@ -127,8 +127,17 @@ const VortexDiscovery: React.FC<{ userId: number }> = ({ userId }) => {
                 : 'border-zinc-50'
             }`}
           >
+            {/* 555 Cashback Badge (v5.4 Brute-force Tiering) */}
+            {product.category_type === 'PROFIT' && (
+              <div className="absolute top-3 left-3 z-20 flex flex-col gap-1">
+                <div className="bg-primary text-black text-[10px] font-black px-3 py-1 rounded-full uppercase tracking-tighter shadow-[0_0_20px_rgba(255,92,40,0.5)] border border-white/20">
+                  100% BACK
+                </div>
+              </div>
+            )}
+
             {/* Source Strategy Indicator */}
-            <div className="absolute top-3 left-3 z-10 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className={`absolute ${product.category_type === 'PROFIT' ? 'top-12' : 'top-3'} left-3 z-10 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity`}>
               <span className="bg-black/80 backdrop-blur-md text-white text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-tighter flex items-center gap-1">
                 <Cpu size={8} />
                 {product.strategy_tag || 'IDS_VORTEX'}

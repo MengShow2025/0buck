@@ -29,5 +29,19 @@
 - **私有投影 (Private Projection)**: 群聊中涉及个人的敏感卡片（如返现进度）仅对该用户可见。
 - **BYOK (Bring Your Own Key)**: 支持用户配置自定义 Gemini/MiniMax API Key。
 
+## 9. 0Buck IM 智理网关 (v5.5 - The Sensory Extension)
+
+0Buck AI 大脑通过统一 IM 网关 (Unified IM Gateway) 延伸至第三方通讯平台，实现“对话即商业”的闭环。
+
+### 9.1 架构设计
+- **多端适配器 (Adapters)**: 针对飞书、WhatsApp、Telegram 提供标准化 Webhook 接入。
+- **身份隧道 (Identity Bridge)**: 通过 `UserIMBinding` 建立 `platform_uid` 与 `customer_id` 的 1:1 映射。
+- **大脑代理 (IMBrainProxy)**: 将 IM 上下文（消息 ID、媒体类型）透明转发给 LangGraph Agent 核心。
+
+### 9.2 核心能力
+- **个性化共生**: 共享 L1/L2/L3 Persona OS 架构，记忆跨端同步。
+- **主动式脉冲**: 基于全网热点感应，主动向高好感度 (`Affinity > 80`) 用户推送痛点对齐商品。
+- **无感化工具**: 在 IM 聊天中直接调用物流雷达、签到返现、C2M 许愿池等后端 Skills。
+
 ---
 *Last Updated: 2026-04-05*

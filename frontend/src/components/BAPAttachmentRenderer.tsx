@@ -17,14 +17,7 @@ import {
 } from 'lucide-react';
 import WishingWellProgressBar from './WishingWellProgressBar';
 import { useTranslation } from 'react-i18next';
-
-interface Product {
-  id: string | number;
-  title: string;
-  price: number;
-  image?: string;
-  strategy_tag?: string;
-}
+import { Product } from '../types';
 
 interface BAPCardProps {
   type: string;
@@ -60,14 +53,16 @@ const ProductGridCard = ({ products, comment, onAction, t }: { products: Product
           className="group relative bg-zinc-900/60 rounded-xl overflow-hidden border border-white/5 shadow-lg flex flex-col cursor-pointer transition-all hover:border-primary/30"
         >
           {/* 555 Cashback Badge */}
-          <div className="absolute top-1 left-1 z-10 flex flex-col gap-0.5">
-            <div className="px-1.5 py-0.5 bg-primary/90 backdrop-blur-md rounded-md border border-white/10 shadow-sm">
-              <p className="text-[6px] sm:text-[8px] font-black text-black uppercase leading-none tracking-tighter">100% BACK</p>
+          {product.is_cashback_eligible !== false && (
+            <div className="absolute top-1 left-1 z-10 flex flex-col gap-0.5">
+              <div className="px-1.5 py-0.5 bg-primary/90 backdrop-blur-md rounded-md border border-white/10 shadow-sm">
+                <p className="text-[6px] sm:text-[8px] font-black text-black uppercase leading-none tracking-tighter">100% BACK</p>
+              </div>
+              <div className="px-1.5 py-0.5 bg-black/80 backdrop-blur-md rounded-md border border-white/5 shadow-sm">
+                <p className="text-[6px] sm:text-[8px] font-black text-white uppercase leading-none tracking-tighter">1+3 FREE</p>
+              </div>
             </div>
-            <div className="px-1.5 py-0.5 bg-black/80 backdrop-blur-md rounded-md border border-white/5 shadow-sm">
-              <p className="text-[6px] sm:text-[8px] font-black text-white uppercase leading-none tracking-tighter">1+3 FREE</p>
-            </div>
-          </div>
+          )}
 
           <div className="aspect-square w-full overflow-hidden relative bg-zinc-800">
             <img src={product.image} alt={product.title} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
