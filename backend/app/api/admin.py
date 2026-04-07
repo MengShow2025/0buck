@@ -276,7 +276,7 @@ def get_dashboard_kpis(db: Session = Depends(get_db)):
     month_start = today_start.replace(day=1)
     # v3.9.6: Enhanced safety for MTD calculations
     try:
-        profit_mtd = db.query(func.sum(Product.sale_price - Product.source_cost_usd))\
+        profit_mtd = db.query(func.sum(func.coalesce(Product.sale_price, 0) - func.coalesce(Product.source_cost_usd, 0)))\
             .filter(Product.last_synced_at >= month_start)\
             .scalar() or 0.0
     except Exception as e:
