@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     FEISHU_APP_ID: str = os.getenv("FEISHU_APP_ID", "")
     FEISHU_APP_SECRET: str = os.getenv("FEISHU_APP_SECRET", "")
     FEISHU_VERIFY_TOKEN: str = os.getenv("FEISHU_VERIFY_TOKEN", "")
+    FEISHU_ENCRYPT_KEY: str = os.getenv("FEISHU_ENCRYPT_KEY", "")
 
     # Domains & Routing
     BACKEND_URL: str = os.getenv("BACKEND_URL", "")

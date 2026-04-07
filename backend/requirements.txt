@@ -3,6 +3,7 @@ uvicorn
 sqlalchemy
 psycopg2-binary
 pydantic-settings
+cryptography==42.0.5
 python-dotenv
 requests
 httpx
