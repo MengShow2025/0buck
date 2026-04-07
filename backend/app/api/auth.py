@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.security import create_access_token # Added
 from authlib.integrations.starlette_client import OAuth
 from starlette.responses import RedirectResponse
+import os
 import json
 import pyotp
 import qrcode
@@ -49,6 +50,16 @@ oauth.register(
     authorize_url='https://appleid.apple.com/auth/authorize',
     access_token_url='https://appleid.apple.com/auth/token',
     client_kwargs={'scope': 'name email'}
+)
+
+# v4.7.3: Alibaba Open Platform OAuth for Sourcing & Arbitrage
+oauth.register(
+    name='alibaba',
+    client_id=settings.ALIBABA_1688_API_KEY,
+    client_secret=os.getenv("ALIBABA_1688_API_SECRET", ""),
+    authorize_url='https://oauth.alibaba.com/authorize',
+    access_token_url='https://oauth.alibaba.com/token',
+    # scope matches Alibaba Open Platform's standard requirements
 )
 
 from pydantic import BaseModel, EmailStr
@@ -511,9 +522,10 @@ async def reset_payment_password_2fa(
 
 @router.get("/login/{provider}")
 async def login(provider: str, request: Request):
-    if provider not in ['google', 'apple', 'facebook']:
+    if provider not in ['google', 'apple', 'facebook', 'alibaba']:
         raise HTTPException(status_code=400, detail="Invalid provider")
     
+    # v4.7.3: Handle Alibaba-specific redirect logic
     redirect_uri = request.url_for('auth_callback', provider=provider)
     return await oauth.create_client(provider).authorize_redirect(request, str(redirect_uri))
 
@@ -522,6 +534,18 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
     client = oauth.create_client(provider)
     token = await client.authorize_access_token(request)
     
+    # v4.7.3: Special handling for Alibaba Token (Save to SystemConfig)
+    if provider == 'alibaba':
+        from app.services.config_service import ConfigService
+        config = ConfigService(db)
+        config.set("alibaba_access_token", token.get('access_token'), description="Alibaba OAuth Access Token")
+        config.set("alibaba_refresh_token", token.get('refresh_token'), description="Alibaba OAuth Refresh Token")
+        config.set("alibaba_token_expires_at", token.get('expires_at'), description="Alibaba Token Expiry Timestamp")
+        
+        db.commit()
+        frontend_url = settings.ALLOWED_ORIGINS.split(",")[0]
+        return RedirectResponse(url=f"{frontend_url}/admin/dashboard?alibaba_auth=success")
+
     user_info = None
     if provider == 'google':
         user_info = token.get('userinfo')

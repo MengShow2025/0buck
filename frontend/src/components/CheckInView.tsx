@@ -244,13 +244,13 @@ export default function CheckInView() {
             <p className="text-[10px] font-black tracking-[.3em] text-on-surface-variant uppercase mb-6">Financial Summary</p>
             <div className="space-y-6">
               <div className="flex justify-between items-center">
-                <div>
-                  <p className="text-[10px] text-on-surface-variant font-bold uppercase">Total Earned</p>
-                  <p className="text-3xl font-black text-on-background">${status?.wallet.available.toFixed(2) || '0.00'}</p>
+                <div className="flex-1">
+                  <p className="text-[10px] font-black uppercase text-on-surface-variant tracking-widest mb-1">Available Balance</p>
+                  <p className="text-3xl font-black text-on-background">${(status?.wallet?.available || 0).toFixed(2)}</p>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] text-primary font-bold drop-shadow-[0_0_5px_rgba(255,92,40,0.5)] uppercase">Bundle Locked</p>
-                  <p className="text-3xl font-black text-primary">${status?.plans.reduce((acc, p) => acc + p.reward_base, 0).toFixed(2) || '0.00'}</p>
+                <div className="flex-1">
+                  <p className="text-[10px] font-black uppercase text-on-surface-variant tracking-widest mb-1">Lifetime Earned</p>
+                  <p className="text-3xl font-black text-primary">${(status?.plans?.reduce((acc, p) => acc + (p.reward_base || 0), 0) || 0).toFixed(2)}</p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -289,7 +289,7 @@ export default function CheckInView() {
                     <div className="flex items-center gap-2">
                       <span className="text-[8px] font-black text-primary uppercase">P{String(plan.current_period).padStart(2, '0')}</span>
                       <span className="text-[9px] text-on-surface-variant tracking-tighter">
-                        ${plan.total_earned.toFixed(2)} / ${plan.reward_base.toFixed(2)}
+                        ${(plan.total_earned || 0).toFixed(2)} / ${(plan.reward_base || 0).toFixed(2)}
                       </span>
                     </div>
                   </div>

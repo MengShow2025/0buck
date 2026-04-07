@@ -35,15 +35,18 @@ self.addEventListener('fetch', (event) => {
 
       // Otherwise fetch and cache
       return fetch(event.request).then((fetchResponse) => {
-        // Don't cache if not a successful response or from different origin (CDN assets)
-        if (!fetchResponse || fetchResponse.status !== 200 || fetchResponse.type !== 'basic') {
+        // v4.7.4: Only cache successful HTTP/HTTPS requests
+        const url = new URL(event.request.url);
+        const isSupportedScheme = url.protocol === 'http:' || url.protocol === 'https:';
+        
+        if (!fetchResponse || fetchResponse.status !== 200 || fetchResponse.type !== 'basic' || !isSupportedScheme) {
           return fetchResponse;
         }
 
         const responseToCache = fetchResponse.clone();
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache);
-        });
+        }).catch(err => console.warn('[SW] Cache put failed:', err));
 
         return fetchResponse;
       });

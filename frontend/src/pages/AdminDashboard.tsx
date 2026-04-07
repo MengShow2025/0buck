@@ -37,6 +37,7 @@ const fetchWithAuth = async (url: string, options: any = {}) => {
   if (res.status === 401 || res.status === 403) {
     console.log("[AdminDashboard] Auth failed, redirecting...");
     window.location.href = '/login';
+    throw new Error('Auth failed');
   }
   
   return res;
@@ -159,6 +160,11 @@ interface AuditCandidate {
   logistics_data?: any;
   mirror_assets?: any;
   structural_data?: any;
+  // v4.7.1 Sourcing mapping
+  source_platform?: string;
+  source_url?: string;
+  backup_source_url?: string;
+  alibaba_comparison_price?: number;
 }
 
 interface SourcingStrategy {
@@ -536,7 +542,7 @@ const AdminDashboard: React.FC = () => {
 
   const stats = [
     { label: '今日订单', value: summary?.orders_today || 0, icon: ShoppingBag, color: 'blue' },
-    { label: '本月估算利润', value: `$${summary?.profit_mtd?.toFixed(2) || '0.00'}`, icon: TrendingUp, color: 'green' },
+    { label: '本月估算利润', value: `$${(summary?.profit_mtd || 0).toFixed(2)}`, icon: TrendingUp, color: 'green' },
     { label: '爆款策略覆盖', value: Object.keys(summary?.ids_conversion || {}).length, icon: Database, color: 'purple' },
     { label: '熔断预警', value: summary?.melting_count || 0, icon: Activity, color: 'red' },
     { label: 'API 状态', value: summary?.api_status || 'Simulation', icon: Shield, color: 'orange' }
@@ -649,7 +655,7 @@ const AdminDashboard: React.FC = () => {
                             <p className="text-[9px] font-black text-gray-300 uppercase mb-1">物流 / 估价</p>
                             <div className="flex flex-col items-end">
                               <span className="text-[10px] font-bold text-blue-500 uppercase">{v.logistics?.weight_g || editingCandidate.logistics_data?.weight_g || '0'}g</span>
-                              <p className="text-sm font-black text-orange-600">${editingCandidate.estimated_sale_price?.toFixed(2) || '0.00'}</p>
+                              <p className="text-sm font-black text-orange-600">${(editingCandidate.estimated_sale_price || 0).toFixed(2)}</p>
                             </div>
                           </div>
                         </div>
@@ -1104,7 +1110,7 @@ const AdminDashboard: React.FC = () => {
                               </div>
                               <div className="pt-2 border-t border-gray-200 flex justify-between items-center">
                                 <span className="text-[9px] font-black text-blue-500 uppercase">0Buck Sale</span>
-                                <span className="text-sm font-black text-black">${item.estimated_sale_price?.toFixed(2)}</span>
+                                <span className="text-sm font-black text-black">${(item.estimated_sale_price || 0).toFixed(2)}</span>
                               </div>
                             </div>
                           </td>
@@ -1403,7 +1409,7 @@ const AdminDashboard: React.FC = () => {
                     {aiUsageStats.map((stat) => (
                       <div key={stat.task_type} className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
                         <p className="text-[10px] font-black uppercase text-gray-400 tracking-widest">{stat.task_type}</p>
-                        <p className="text-xl font-black">${stat.cost_usd?.toFixed(4) || '0.0000'}</p>
+                        <p className="text-xl font-black">${(stat.cost_usd || 0).toFixed(4)}</p>
                         <p className="text-[10px] text-gray-500 font-bold">{(stat.tokens_in + stat.tokens_out).toLocaleString()} Tokens</p>
                       </div>
                     ))}
@@ -1598,7 +1604,7 @@ const AdminDashboard: React.FC = () => {
                         {contributions.map((c) => (
                           <tr key={c.user_id} className="hover:bg-gray-50/50 transition-colors">
                             <td className="px-6 py-4 font-bold text-sm">#{c.user_id}</td>
-                            <td className="px-6 py-4 font-black text-green-600">${c.usd_saved?.toFixed(2) || '0.00'}</td>
+                            <td className="px-6 py-4 font-black text-green-600">${(c.usd_saved || 0).toFixed(2)}</td>
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
                                 <div className="flex gap-1">

@@ -224,9 +224,9 @@ export default function MeView({
                     <h2 className="text-xl sm:text-2xl font-headline font-black text-white mt-1">
                       ${status?.wallet?.available?.toFixed(2) || '0.00'}
                     </h2>
-                    {status?.wallet?.pending > 0 && (
+                    {status?.wallet?.pending && status.wallet.pending > 0 && (
                       <p className="text-[9px] text-zinc-500 mt-1 uppercase font-bold">
-                        Pending: ${status.wallet.pending.toFixed(2)}
+                        Pending: ${(status.wallet.pending || 0).toFixed(2)}
                       </p>
                     )}
                   </div>
