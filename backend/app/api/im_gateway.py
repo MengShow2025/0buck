@@ -60,7 +60,11 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
         
         # 1. Send Immediate Thinking Status
         thinking_msg = "🔍 0Buck 智脑正在深度思考中，请稍等片刻..." if lang == "zh" else "🔍 0Buck AI Brain is thinking deeply, please wait a moment..."
-        await send_func(platform_uid, thinking_msg)
+        # v5.6.3: Support Feishu Rich Text to keep browser immersion
+        if platform == "feishu":
+            await send_feishu_rich_link(platform_uid, thinking_msg, "0Buck AI Brain", bind_url if is_guest else None)
+        else:
+            await send_func(platform_uid, thinking_msg)
         
         # 2. Call AI Brain
         logger.info(f"🧠 [{platform.upper()}] Process for {platform_uid} (Guest={is_guest})")
@@ -81,7 +85,10 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
                 footer = f"\n\n---\n💡 Tip: Guest mode active. [Login for full service]({bind_url}) to unlock order tracking and personalized business memory."
             main_reply += footer
             
-        await send_func(platform_uid, main_reply)
+        if platform == "feishu":
+            await send_feishu_rich_link(platform_uid, main_reply, "0Buck AI Brain", bind_url if is_guest else None)
+        else:
+            await send_func(platform_uid, main_reply)
         logger.info(f"✅ [{platform.upper()}] Response complete for {platform_uid}")
         
     except Exception as e:
@@ -109,6 +116,37 @@ async def send_feishu_message(receive_id: str, content: str):
     url = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"}
     payload = {"receive_id": receive_id, "msg_type": "text", "content": json.dumps({"text": content})}
+    async with httpx.AsyncClient() as client:
+        await client.post(url, json=payload, headers=headers)
+
+async def send_feishu_rich_link(receive_id: str, text: str, title: str, link_url: Optional[str] = None):
+    """v5.6.3: Send Feishu Rich Text Message with immersive links."""
+    token = await get_feishu_tenant_access_token()
+    if not token: return
+    url = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id"
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"}
+    
+    # Construct rich text content
+    content_obj = {
+        "zh_cn": {
+            "title": title,
+            "content": [
+                [{"tag": "text", "text": text}]
+            ]
+        }
+    }
+    
+    if link_url:
+        # Append a button or link tag for immersive browser
+        content_obj["zh_cn"]["content"].append([
+            {"tag": "a", "text": "🔗 点击登录获得完整服务", "href": link_url}
+        ])
+
+    payload = {
+        "receive_id": receive_id,
+        "msg_type": "post",
+        "content": json.dumps(content_obj)
+    }
     async with httpx.AsyncClient() as client:
         await client.post(url, json=payload, headers=headers)
 
