@@ -106,6 +106,9 @@ class AESCipher:
             logger.error(f"Decryption failed: {str(e)}")
             return None
 
+# In-memory store for deduplication
+processed_events = set()
+
 router = APIRouter()
 
 @router.get("/feishu/test")
@@ -174,6 +177,19 @@ async def feishu_webhook(request: Request):
             challenge = payload.get("challenge")
             return JSONResponse(content={"challenge": challenge}, status_code=200)
         
+        # v5.5.20: DUPLICATE PREVENTION
+        event_id = payload.get("header", {}).get("event_id")
+        if event_id:
+            if event_id in processed_events:
+                logger.info(f"♻️ Skipping duplicate Feishu Event: {event_id}")
+                return JSONResponse(content={"status": "duplicate_ignored"}, status_code=200)
+            
+            # Add to set and keep it reasonably sized
+            processed_events.add(event_id)
+            if len(processed_events) > 1000:
+                processed_events.clear() # Simple rotation
+            logger.info(f"🆔 Processing Feishu Event: {event_id}")
+
         # 2. EVENT PROCESSING
         event = payload.get("event", {})
         message = event.get("message", {})
