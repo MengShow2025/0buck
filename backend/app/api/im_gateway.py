@@ -86,7 +86,8 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
         
         # 1. Send Immediate Thinking Status
         thinking_msg = "🔍 0Buck 智脑正在深度思考中，请稍等片刻..." if lang == "zh" else "🔍 0Buck AI Brain is thinking deeply, please wait a moment..."
-        await send_rich_message(platform, platform_uid, thinking_msg, "0Buck AI Brain")
+        # v5.6.5: Thinking status shouldn't have a login link yet (too early)
+        await send_rich_message(platform, platform_uid, thinking_msg, "0Buck AI Brain", None)
         
         # 2. Call AI Brain
         logger.info(f"🧠 [{platform.upper()}] Process for {platform_uid} (Guest={is_guest})")
@@ -99,7 +100,7 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
             logger.error(f"AI Agent Error: {ai_err}")
             main_reply = f"⚠️ 0Buck 智脑暂时无法响应: {str(ai_err)}" if lang == "zh" else f"⚠️ 0Buck AI Brain error: {str(ai_err)}"
         
-        # 3. Send final response (Footer handled by send_rich_message)
+        # 3. Send final response (Footer/Login link is handled elegantly by send_rich_message)
         await send_rich_message(platform, platform_uid, main_reply, "0Buck AI Brain", bind_url if is_guest else None)
         logger.info(f"✅ [{platform.upper()}] Response complete for {platform_uid}")
         
