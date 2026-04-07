@@ -24,11 +24,11 @@ class Settings(BaseSettings):
     ALIBABA_1688_API_URL: str = os.getenv("ALIBABA_1688_API_URL", "https://api.1688.com")
     
     # Shopify
-    SHOPIFY_API_KEY: str = os.getenv("SHOPIFY_API_KEY", "")
-    SHOPIFY_API_SECRET: str = os.getenv("SHOPIFY_API_SECRET", "")
-    SHOPIFY_SHOP_NAME: str = os.getenv("SHOPIFY_SHOP_NAME", "")
-    SHOPIFY_ACCESS_TOKEN: str = os.getenv("SHOPIFY_ACCESS_TOKEN", "")
-    SHOPIFY_STOREFRONT_TOKEN: str = os.getenv("SHOPIFY_STOREFRONT_TOKEN", "")
+    SHOPIFY_API_KEY: str = os.getenv("SHOPIFY_API_KEY", "").strip()
+    SHOPIFY_API_SECRET: str = os.getenv("SHOPIFY_API_SECRET", "").strip()
+    SHOPIFY_SHOP_NAME: str = os.getenv("SHOPIFY_SHOP_NAME", os.getenv("SHOPIFY_STORE_DOMAIN", "")).strip()
+    SHOPIFY_ACCESS_TOKEN: str = os.getenv("SHOPIFY_ACCESS_TOKEN", "").strip()
+    SHOPIFY_STOREFRONT_TOKEN: str = os.getenv("SHOPIFY_STOREFRONT_TOKEN", "").strip()
     
     # AI
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")

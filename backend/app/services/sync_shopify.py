@@ -16,10 +16,25 @@ class SyncShopifyService:
         os.environ.pop("ALL_PROXY", None)
         
         # Configure Shopify session
-        self.shop_url = f"{settings.SHOPIFY_SHOP_NAME}.myshopify.com"
+        shop_name = settings.SHOPIFY_SHOP_NAME.replace("https://", "").replace("http://", "").rstrip("/")
+        if ".myshopify.com" in shop_name:
+            self.shop_url = shop_name
+        else:
+            self.shop_url = f"{shop_name}.myshopify.com"
+            
         self.access_token = settings.SHOPIFY_ACCESS_TOKEN
         self.api_version = "2024-01" # Or latest
         
+        logging.info(f"🔌 Initializing Shopify Session for: {self.shop_url}")
+        
+        # v4.6.9: Debugging 401 Unauthorized
+        if not self.access_token:
+            logging.error("❌ SHOPIFY_ACCESS_TOKEN is missing in environment!")
+        elif not self.access_token.startswith("shpat_"):
+            logging.warning("⚠️ SHOPIFY_ACCESS_TOKEN does not start with 'shpat_'. Ensure you are using an Admin API Access Token, not an API Key/Secret.")
+        else:
+            logging.info(f"🔑 Token identified: {self.access_token[:8]}...{self.access_token[-4:]}")
+            
         # Initialize session
         self.session = shopify.Session(self.shop_url, self.api_version, self.access_token)
         shopify.ShopifyResource.activate_session(self.session)
