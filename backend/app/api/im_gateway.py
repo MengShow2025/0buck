@@ -249,64 +249,52 @@ async def feishu_webhook(request: Request):
             
             binding = db.query(UserIMBinding).filter_by(platform="feishu", platform_uid=sender_id, is_active=True).first()
             
-            # v5.5.8: IDENTITY BRIDGE (Mandatory Binding)
-            if not binding:
-                sig = generate_binding_sig("feishu", sender_id)
-                base_url = settings.BACKEND_URL.rstrip("/")
-                bind_url = f"{base_url}/auth/bind?platform=feishu&uid={sender_id}&sig={sig}"
-                
-                logger.info(f"🆕 New Feishu User {sender_id}: Sending binding invitation ({lang})")
-                
-                if lang == "zh":
-                    invitation_text = (
-                        "👋 您好！我是您的 0Buck AI 管家。\n\n"
-                        "为了给您提供专属的选品推荐、订单查询和智脑记忆服务，请先关联您的 0Buck 账号：\n\n"
-                        f"🔗 点击登录获得完整服务: {bind_url} \n\n"
-                        "绑定后，我将成为您在飞书里的“数字选品大脑”！"
-                    )
-                else:
-                    # v5.5.25: Default to English for all non-Chinese languages
-                    invitation_text = (
-                        "👋 Hello! I'm your 0Buck AI Butler.\n\n"
-                        "To provide personalized sourcing recommendations, order tracking, and AI memory services, please link your 0Buck account first:\n\n"
-                        f"🔗 Login for full service: {bind_url} \n\n"
-                        "Once linked, I'll be your 'Digital Sourcing Brain' right here in Feishu!"
-                    )
-                
-                # v5.5.10: Send via Lark API (Async)
-                asyncio.create_task(send_feishu_message(sender_id, "open_id", invitation_text))
-                return JSONResponse(content={"status": "binding_sent"}, status_code=200)
-
-            user_id = binding.user_id
+            # v5.5.27: "Try-Before-You-Buy" Architecture
+            # We NO LONGER block unauthenticated users. 
+            # We allow them to use basic AI but remind them to bind for private data.
+            user_id = binding.user_id if binding else 1 # Default to User 1 (Public/Admin profile) for guests
+            is_guest = binding is None
+            
+            sig = generate_binding_sig("feishu", sender_id)
+            base_url = settings.BACKEND_URL.rstrip("/")
+            bind_url = f"{base_url}/auth/bind?platform=feishu&uid={sender_id}&sig={sig}"
+            
             session_id = f"feishu_{chat_id}_{sender_id}" if chat_type == "group" else f"feishu_{sender_id}"
             
             # v5.5.12: Background Task Execution
-            # v5.5.13: Send an immediate "Thinking..." status feedback.
-            async def background_ai_process(text, uid, sid, u_id, language):
+            async def background_ai_process(text, uid, sid, u_id, language, guest_mode):
                 try:
-                    # v5.5.13: Provide immediate visual feedback to user
-                    if language == "zh":
-                        thinking_msg = "🔍 0Buck 智脑正在深度思考中，请稍等片刻..."
-                    else:
-                        # v5.5.25: Fallback to English for JA, EN, and others
-                        thinking_msg = "🔍 0Buck AI Brain is thinking deeply, please wait a moment..."
-                    
+                    # v5.5.13: Provide immediate visual feedback
+                    thinking_msg = "🔍 0Buck 智脑正在深度思考中，请稍等片刻..." if language == "zh" else "🔍 0Buck AI Brain is thinking deeply, please wait a moment..."
                     await send_feishu_message(uid, "open_id", thinking_msg)
                     
-                    logger.info(f"🧠 AI Brain starting background process for User {u_id} ({language})")
+                    logger.info(f"🧠 AI Brain starting {'GUEST' if guest_mode else 'PRIVATE'} process for {uid} ({language})")
+                    
+                    # Call AI Brain
                     ai_response = await run_agent(
                         content=text, 
                         user_id=u_id,
                         session_id=sid
                     )
-                    await send_feishu_message(uid, "open_id", ai_response.get("content", "Brain is thinking..."))
-                    logger.info(f"✅ AI Brain background process complete for User {u_id}")
+                    
+                    main_reply = ai_response.get("content", "Brain is thinking...")
+                    
+                    # v5.5.27: Append a gentle binding reminder for guests
+                    if guest_mode:
+                        if language == "zh":
+                            footer = f"\n\n---\n💡 提示：检测到您尚未登录。点击 [登录获得完整服务]({bind_url})，即可解锁订单跟踪和专属生意记忆功能。"
+                        else:
+                            footer = f"\n\n---\n💡 Tip: Guest mode active. [Login for full service]({bind_url}) to unlock order tracking and personalized business memory."
+                        main_reply += footer
+                        
+                    await send_feishu_message(uid, "open_id", main_reply)
+                    logger.info(f"✅ AI Brain response sent to {uid}")
                 except Exception as ex:
                     logger.error(f"❌ Background AI Process Error: {str(ex)}")
 
-            asyncio.create_task(background_ai_process(text_content, sender_id, session_id, user_id, lang))
+            asyncio.create_task(background_ai_process(text_content, sender_id, session_id, user_id, lang, is_guest))
             
-            return JSONResponse(content={"status": "processing_started"}, status_code=200)
+            return JSONResponse(content={"status": "processing_started", "guest_mode": is_guest}, status_code=200)
         finally:
             db.close()
 
