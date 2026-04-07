@@ -81,17 +81,11 @@ async def login_v46(
     user = db.query(UserExt).filter(UserExt.email == login_data.email).first()
     
     # 1. Default Admin Logic (Bootstrap)
-    if login_data.email == settings.DEFAULT_ADMIN_EMAIL and login_data.password == settings.DEFAULT_ADMIN_PASSWORD:
+    if settings.DEFAULT_ADMIN_EMAIL and login_data.email == settings.DEFAULT_ADMIN_EMAIL and login_data.password == settings.DEFAULT_ADMIN_PASSWORD:
         if not user:
-            # Create the admin user if it doesn't exist
-            # v4.6.8: Ensure customer_id is set for the bootstrap admin to avoid 500 on primary key
-            # Check if ID 1 is taken by someone else (e.g. legacy test data)
+            # Check if ID 1 is taken by someone else
             conflict = db.query(UserExt).filter(UserExt.customer_id == 1).first()
-            if conflict:
-                # If ID 1 is taken, use a different high-range ID
-                admin_id = 999999999 
-            else:
-                admin_id = 1
+            admin_id = 1 if not conflict else 999999999
                 
             user = UserExt(
                 customer_id=admin_id,
@@ -110,6 +104,18 @@ async def login_v46(
             if user.user_type != "admin":
                 user.user_type = "admin"
                 db.commit()
+        
+        # v4.6.8: Return token immediately for bootstrap admin
+        access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+        access_token = create_access_token(
+            data={"sub": str(user.customer_id), "type": "admin"},
+            expires_delta=access_token_expires
+        )
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user_type": user.user_type
+        }
     
     # 2. General Authentication (placeholder for real hashed password check if needed)
     # For now, we only allow the hardcoded admin or existing users via OAuth.
