@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, String, JSON, ForeignKey, DateTime, Float, Numeric, Boolean
+from sqlalchemy import Column, Integer, BigInteger, String, JSON, ForeignKey, DateTime, Float, Numeric, Boolean, UniqueConstraint
 from sqlalchemy.sql import func
 from .product import Base
 
