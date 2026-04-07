@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.post("/feishu")
-async def feishu_webhook(request: Request, db: Session = Depends(get_db)):
+async def feishu_webhook(request: Request):
     """
     v5.5: Unified IM Gateway - Feishu (Lark) Adapter.
     Handles message reception, identity mapping, and AI Brain routing.
@@ -21,7 +21,7 @@ async def feishu_webhook(request: Request, db: Session = Depends(get_db)):
     data = await request.body()
     payload = json.loads(data)
     
-    # 1. Handle Feishu URL Verification
+    # 1. Handle Feishu URL Verification (Fast Path - No DB needed)
     if payload.get("type") == "url_verification":
         return {"challenge": payload.get("challenge")}
     
@@ -30,38 +30,46 @@ async def feishu_webhook(request: Request, db: Session = Depends(get_db)):
     sender = event.get("sender", {})
     sender_id = sender.get("sender_id", {}).get("open_id")
     message = event.get("message", {})
-    text_content = json.loads(message.get("content", "{}")).get("text", "")
+    
+    # Feishu content is a stringified JSON
+    try:
+        content_obj = json.loads(message.get("content", "{}"))
+        text_content = content_obj.get("text", "")
+    except:
+        text_content = ""
     
     if not sender_id or not text_content:
         return {"status": "ignored"}
 
-    # 3. Identity Mapping (The Bridge)
-    binding = db.query(UserIMBinding).filter_by(platform="feishu", platform_uid=sender_id, is_active=True).first()
-    
-    if not binding:
-        # v5.5: Implicit creation for Demo, but in Prod we'd trigger a binding flow
-        # For now, we assume user_id=1 for testing if not bound
-        user_id = 1 
-        logger.warning(f"⚠️ Unbound Feishu User {sender_id}. Defaulting to User 1.")
-    else:
-        user_id = binding.user_id
+    # 3. Identity Mapping (Lazy DB session for better performance)
+    from app.db.session import SessionLocal
+    db = SessionLocal()
+    try:
+        binding = db.query(UserIMBinding).filter_by(platform="feishu", platform_uid=sender_id, is_active=True).first()
+        
+        if not binding:
+            # v5.5: Default to User 1 for demo if unbound
+            user_id = 1 
+            logger.warning(f"⚠️ Unbound Feishu User {sender_id}. Defaulting to User 1.")
+        else:
+            user_id = binding.user_id
 
-    # 4. Route to AI Brain (LangGraph)
-    # We use sender_id as the session_id to maintain IM-specific context
-    ai_response = await run_agent(
-        content=text_content, 
-        user_id=user_id,
-        session_id=f"feishu_{sender_id}"
-    )
-    
-    # 5. TODO: Implement Feishu-specific Card Renderer
-    # For now, return plain text
-    return {
-        "msg_type": "text",
-        "content": {
-            "text": ai_response.get("content", "AI Brain is processing...")
+        # 4. Route to AI Brain (LangGraph)
+        ai_response = await run_agent(
+            content=text_content, 
+            user_id=user_id,
+            session_id=f"feishu_{sender_id}"
+        )
+        
+        # 5. Return Response (Simplified for now)
+        return {
+            "msg_type": "text",
+            "content": {
+                "text": ai_response.get("content", "AI Brain is processing...")
+            }
         }
-    }
+    finally:
+        db.close()
 
 @router.post("/whatsapp")
 async def whatsapp_webhook(request: Request, db: Session = Depends(get_db)):
