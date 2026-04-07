@@ -243,7 +243,7 @@ async def feishu_webhook(request: Request):
                 invitation_text = (
                     "👋 您好！我是您的 0Buck AI 管家。\n\n"
                     "为了给您提供专属的选品推荐、订单查询和智脑记忆服务，请先关联您的 0Buck 账号：\n\n"
-                    f"🔗 点击一键绑定: {bind_url} \n\n"
+                    f"🔗 点击登录获得完整服务: {bind_url} \n\n"
                     "绑定后，我将成为您在飞书里的“数字选品大脑”！"
                 )
                 
