@@ -21,15 +21,12 @@ from cryptography.hazmat.backends import default_backend
 logger = logging.getLogger(__name__)
 
 def detect_language(text: str) -> str:
-    """v5.5.24: Universal Language Heuristic."""
+    """v5.5.25: Simple Language Heuristic (Chinese or English Fallback)."""
     # Check for Chinese characters
     if any('\u4e00' <= c <= '\u9fff' for c in text):
         return "zh"
-    # Check if it's primarily basic Latin (English)
-    if all(ord(c) < 128 for c in text.replace(" ", "").replace("\n", "")):
-        return "en"
-    # Default to 'multi' for complex scripts (Gujarati, Arabic, etc.)
-    return "multi"
+    # Fallback to English for everything else (including Gujarati, etc.)
+    return "en"
 
 async def get_feishu_tenant_access_token():
     """v5.5.10: Fetch Tenant Access Token for Lark API."""
@@ -261,20 +258,13 @@ async def feishu_webhook(request: Request):
                         f"🔗 点击登录获得完整服务: {bind_url} \n\n"
                         "绑定后，我将成为您在飞书里的“数字选品大脑”！"
                     )
-                elif lang == "en":
+                else:
+                    # v5.5.25: Default to English for all non-Chinese languages
                     invitation_text = (
                         "👋 Hello! I'm your 0Buck AI Butler.\n\n"
                         "To provide personalized sourcing recommendations, order tracking, and AI memory services, please link your 0Buck account first:\n\n"
                         f"🔗 Login for full service: {bind_url} \n\n"
                         "Once linked, I'll be your 'Digital Sourcing Brain' right here in Feishu!"
-                    )
-                else:
-                    # Multi-language / Complex script fallback
-                    invitation_text = (
-                        "👋 Hello / 您好！I'm your 0Buck AI Assistant.\n\n"
-                        "Please link your account to start our personalized conversation / 请先登录以获得完整服务：\n\n"
-                        f"🔗 {bind_url} \n\n"
-                        "I can handle any language! / 我支持全球任何语言！"
                     )
                 
                 # v5.5.10: Send via Lark API (Async)
@@ -291,10 +281,9 @@ async def feishu_webhook(request: Request):
                     # v5.5.13: Provide immediate visual feedback to user
                     if language == "zh":
                         thinking_msg = "🔍 0Buck 智脑正在深度思考中，请稍等片刻..."
-                    elif language == "en":
-                        thinking_msg = "🔍 0Buck AI Brain is thinking deeply, please wait a moment..."
                     else:
-                        thinking_msg = "🔍 Thinking... / 正在思考中..."
+                        # v5.5.25: Fallback to English for everything else
+                        thinking_msg = "🔍 0Buck AI Brain is thinking deeply, please wait a moment..."
                     
                     await send_feishu_message(uid, "open_id", thinking_msg)
                     
