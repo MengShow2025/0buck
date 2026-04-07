@@ -20,6 +20,14 @@ from cryptography.hazmat.backends import default_backend
 
 logger = logging.getLogger(__name__)
 
+def detect_language(text: str) -> str:
+    """v5.5.23: Simple language detection (English vs Chinese)."""
+    # Check if text contains more than 50% Chinese characters
+    chinese_chars = len([c for c in text if '\u4e00' <= c <= '\u9fff'])
+    if chinese_chars > 0:
+        return "zh"
+    return "en"
+
 async def get_feishu_tenant_access_token():
     """v5.5.10: Fetch Tenant Access Token for Lark API."""
     # v5.5.11: Strip whitespace/newlines for robustness
@@ -230,6 +238,9 @@ async def feishu_webhook(request: Request):
         from app.db.session import SessionLocal
         db = SessionLocal()
         try:
+            # v5.5.23: Detect language for initial responses
+            lang = detect_language(text_content)
+            
             binding = db.query(UserIMBinding).filter_by(platform="feishu", platform_uid=sender_id, is_active=True).first()
             
             # v5.5.8: IDENTITY BRIDGE (Mandatory Binding)
@@ -238,14 +249,22 @@ async def feishu_webhook(request: Request):
                 base_url = settings.BACKEND_URL.rstrip("/")
                 bind_url = f"{base_url}/auth/bind?platform=feishu&uid={sender_id}&sig={sig}"
                 
-                logger.info(f"🆕 New Feishu User {sender_id}: Sending binding invitation")
+                logger.info(f"🆕 New Feishu User {sender_id}: Sending binding invitation ({lang})")
                 
-                invitation_text = (
-                    "👋 您好！我是您的 0Buck AI 管家。\n\n"
-                    "为了给您提供专属的选品推荐、订单查询和智脑记忆服务，请先关联您的 0Buck 账号：\n\n"
-                    f"🔗 点击登录获得完整服务: {bind_url} \n\n"
-                    "绑定后，我将成为您在飞书里的“数字选品大脑”！"
-                )
+                if lang == "zh":
+                    invitation_text = (
+                        "👋 您好！我是您的 0Buck AI 管家。\n\n"
+                        "为了给您提供专属的选品推荐、订单查询和智脑记忆服务，请先关联您的 0Buck 账号：\n\n"
+                        f"🔗 点击登录获得完整服务: {bind_url} \n\n"
+                        "绑定后，我将成为您在飞书里的“数字选品大脑”！"
+                    )
+                else:
+                    invitation_text = (
+                        "👋 Hello! I'm your 0Buck AI Butler.\n\n"
+                        "To provide personalized sourcing recommendations, order tracking, and AI memory services, please link your 0Buck account first:\n\n"
+                        f"🔗 Login for full service: {bind_url} \n\n"
+                        "Once linked, I'll be your 'Digital Sourcing Brain' right here in Feishu!"
+                    )
                 
                 # v5.5.10: Send via Lark API (Async)
                 asyncio.create_task(send_feishu_message(sender_id, "open_id", invitation_text))
@@ -255,14 +274,14 @@ async def feishu_webhook(request: Request):
             session_id = f"feishu_{chat_id}_{sender_id}" if chat_type == "group" else f"feishu_{sender_id}"
             
             # v5.5.12: Background Task Execution
-            # We must return 200 OK to Feishu IMMEDIATELY to avoid 3s timeout.
             # v5.5.13: Send an immediate "Thinking..." status feedback.
-            async def background_ai_process(text, uid, sid, u_id):
+            async def background_ai_process(text, uid, sid, u_id, language):
                 try:
                     # v5.5.13: Provide immediate visual feedback to user
-                    await send_feishu_message(uid, "open_id", "🔍 0Buck 智脑正在深度思考中，请稍等片刻...")
+                    thinking_msg = "🔍 0Buck 智脑正在深度思考中，请稍等片刻..." if language == "zh" else "🔍 0Buck AI Brain is thinking deeply, please wait a moment..."
+                    await send_feishu_message(uid, "open_id", thinking_msg)
                     
-                    logger.info(f"🧠 AI Brain starting background process for User {u_id}")
+                    logger.info(f"🧠 AI Brain starting background process for User {u_id} ({language})")
                     ai_response = await run_agent(
                         content=text, 
                         user_id=u_id,
@@ -273,7 +292,7 @@ async def feishu_webhook(request: Request):
                 except Exception as ex:
                     logger.error(f"❌ Background AI Process Error: {str(ex)}")
 
-            asyncio.create_task(background_ai_process(text_content, sender_id, session_id, user_id))
+            asyncio.create_task(background_ai_process(text_content, sender_id, session_id, user_id, lang))
             
             return JSONResponse(content={"status": "processing_started"}, status_code=200)
         finally:
