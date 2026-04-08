@@ -447,37 +447,38 @@ if not os.path.exists(frontend_path):
 
 logger.info(f"📂 Frontend assets path: {frontend_path}")
 
-# --- 1. RAILWAY NATIVE SPA ROUTING (v5.7.31) ---
-# This is the single source of truth for routing when deployed on Railway.
-# It ensures all frontend routes are handled by the React SPA.
+# --- 1. RAILWAY NATIVE SPA ROUTING (v5.7.33) ---
 @app.middleware("http")
 async def railway_spa_interceptor(request: Request, call_next):
     path = request.url.path
     method = request.method
     
-    # 1. API routes must pass through to FastAPI routers
-    if path.startswith(settings.API_V1_STR) or path.startswith("/api/") or path.startswith("/v1/"):
+    # v5.7.33: Explicitly bypass all backend/system routes
+    is_backend = (
+        path.startswith(settings.API_V1_STR) or 
+        path.startswith("/api/") or 
+        path.startswith("/v1/") or
+        path == "/healthz" or
+        path == "/health" or
+        path.startswith("/diag/")
+    )
+    
+    if is_backend or method != "GET":
         return await call_next(request)
     
-    # 2. Static assets (physical files) must be served normally
-    # We check for extensions to identify assets
-    if "." in path.split("/")[-1] and not path.endswith(".html"):
+    # Static assets (files with extensions) pass through
+    if "." in path.split("/")[-1]:
         return await call_next(request)
         
-    # 3. Everything else is an SPA route (including /auth/bind, /chat, etc.)
-    # We serve index.html directly.
-    if method == "GET":
-        # Search for index.html in the container's static folder
-        # In Railway Docker, this is usually /app/static/index.html
-        target_index = os.path.join(frontend_path, "index.html")
-        
-        if os.path.exists(target_index):
-            return FileResponse(target_index)
+    # Everything else is an SPA route -> serve index.html
+    target_index = os.path.join(frontend_path, "index.html")
+    if os.path.exists(target_index):
+        return FileResponse(target_index)
             
-        # Emergency fallback if path detection failed
-        container_index = "/app/static/index.html"
-        if os.path.exists(container_index):
-            return FileResponse(container_index)
+    # Emergency fallback
+    container_index = "/app/static/index.html"
+    if os.path.exists(container_index):
+        return FileResponse(container_index)
             
     return await call_next(request)
 
