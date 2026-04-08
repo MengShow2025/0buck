@@ -74,7 +74,13 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
         import re
         code_match = re.search(r'\b(\d{6})\b', last_msg)
         
-        if user_id > 1 and code_match:
+        if (user_id > 1 or request.user_id) and code_match:
+            # v5.7.45: Dynamic user_id extraction for binding
+            target_user_id = user_id
+            if target_user_id <= 1 and request.user_id:
+                try: target_user_id = int(request.user_id)
+                except: pass
+                
             code = code_match.group(1)
             pending = db.query(BindingCode).filter_by(code=code).first()
             
@@ -82,22 +88,27 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
                 # Perform the binding
                 existing = db.query(UserIMBinding).filter_by(platform=pending.platform, platform_uid=pending.platform_uid).first()
                 if existing:
-                    existing.user_id = user_id
+                    existing.user_id = target_user_id
                     existing.is_active = True
                 else:
-                    db.add(UserIMBinding(user_id=user_id, platform=pending.platform, platform_uid=pending.platform_uid, is_active=True))
+                    db.add(UserIMBinding(user_id=target_user_id, platform=pending.platform, platform_uid=pending.platform_uid, is_active=True))
                 
                 # Cleanup
                 db.delete(pending)
                 db.commit()
                 
-                logger.info(f"✨ CHAT BINDING SUCCESS: {pending.platform} linked to User {user_id} via pattern match")
+                logger.info(f"✨ CHAT BINDING SUCCESS: {pending.platform} linked to User {target_user_id}")
+                
+                # v5.7.45: Notify IM side about the successful binding
+                from app.api.im_gateway import send_rich_message
+                im_reply = f"✨ 身份同步成功！您的 {pending.platform} 账号已与 0Buck 账户关联。现在您可以两端同步享受服务了。"
+                asyncio.create_task(send_rich_message(pending.platform, pending.platform_uid, im_reply, "0Buck 身份同步", None, "zh"))
                 
                 return {
                     "id": f"msg_bind_{datetime.now().timestamp()}",
                     "choices": [{
                         "message": {
-                            "content": f"✨ 身份同步成功！我已经识别了您的指令，并将您的 {pending.platform} 账号与 0Buck 账户成功关联。现在您可以两端同步享受我的服务了，主人！",
+                            "content": f"✨ 身份同步成功！我已经识别了您的指令，并将您的 {pending.platform} 账号与当前账户成功关联。现在您可以两端同步享受我的服务了，主人！",
                             "role": "assistant"
                         }
                     }],
