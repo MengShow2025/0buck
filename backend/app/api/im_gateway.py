@@ -90,9 +90,9 @@ async def handle_binding_command(platform: str, uid: str, lang: str = "en") -> s
         db.commit()
         
         if lang == "zh":
-            return f"您的绑定验证码是：【{code}】\n\n您可以直接在 0Buck App 的 AI 聊天框中输入这个 6 位数字，即可瞬间完成账号关联！验证码 15 分钟内有效。"
+            return f"✨ 0Buck 身份同步指令 ✨\n\n请复制并发送下面这句话给 App 里的 AI 管家：\n\n我要绑定账号 {code}\n\n(验证码 15 分钟内有效)"
         else:
-            return f"Your binding code is: 【{code}】\n\nYou can enter this 6-digit code directly in the 0Buck App's AI chat box to link your account instantly! Valid for 15 minutes."
+            return f"✨ 0Buck Identity Sync ✨\n\nPlease copy and send the following sentence to the App's AI Butler:\n\nLink my account {code}\n\n(Valid for 15 minutes)"
     except Exception as e:
         logger.error(f"Error generating binding code: {e}")
         return "Failed to generate binding code. Please try again later."

@@ -68,11 +68,14 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
         except AttributeError:
             last_msg = request.messages[-1]["content"]
             
-        # --- 2. REVERSE BINDING (v5.7.36) ---
-        # If user is logged in and sends a 6-digit code, try to bind!
-        # This is the "Zero-Click" binding flow suggested by user.
-        if user_id > 1 and last_msg and last_msg.strip().isdigit() and len(last_msg.strip()) == 6:
-            code = last_msg.strip()
+        # --- 2. REVERSE BINDING (v5.7.37) ---
+        # If user is logged in and sends a 6-digit code (alone or in a sentence), try to bind!
+        # This supports the "Copy-Paste Sentence" flow.
+        import re
+        code_match = re.search(r'\b(\d{6})\b', last_msg)
+        
+        if user_id > 1 and code_match:
+            code = code_match.group(1)
             pending = db.query(BindingCode).filter_by(code=code).first()
             
             if pending and pending.expires_at > datetime.now():
@@ -88,13 +91,13 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
                 db.delete(pending)
                 db.commit()
                 
-                logger.info(f"✨ CHAT BINDING SUCCESS: {pending.platform} linked to User {user_id}")
+                logger.info(f"✨ CHAT BINDING SUCCESS: {pending.platform} linked to User {user_id} via pattern match")
                 
                 return {
                     "id": f"msg_bind_{datetime.now().timestamp()}",
                     "choices": [{
                         "message": {
-                            "content": f"✨ 身份识别成功！我已经将您的 {pending.platform} 账号与 0Buck 账户成功关联。以后在 IM 中也能随时找我聊天啦，主人！",
+                            "content": f"✨ 身份同步成功！我已经识别了您的指令，并将您的 {pending.platform} 账号与 0Buck 账户成功关联。现在您可以两端同步享受我的服务了，主人！",
                             "role": "assistant"
                         }
                     }],
