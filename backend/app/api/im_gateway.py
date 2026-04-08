@@ -394,29 +394,41 @@ async def feishu_webhook(request: Request):
         if payload.get("type") == "url_verification":
             return JSONResponse(content={"challenge": payload.get("challenge")}, status_code=200)
         
-        # 2. Handle Interactive Card Callbacks (v5.7.40)
-        # v5.7.40: High-reliability response for Feishu buttons
+        # 2. Handle Interactive Card Callbacks (v5.7.41)
+        # v5.7.41: Ultra-robust ID extraction and response for Feishu buttons
         if "action" in payload:
-            sender_id = payload.get("open_id") or payload.get("operator", {}).get("open_id")
-            if not sender_id: return JSONResponse(content={}, status_code=200)
+            # Feishu IDs can be in multiple places depending on version/context
+            sender_id = (
+                payload.get("open_id") or 
+                payload.get("user", {}).get("open_id") or
+                payload.get("operator", {}).get("open_id")
+            )
+            
+            logger.info(f"⚡ Feishu Callback Payload: {json.dumps(payload)}")
+            
+            if not sender_id:
+                logger.error("❌ Feishu Callback: Could not find open_id in payload")
+                return JSONResponse(content={"toast": {"type": "error", "content": "无法识别用户身份"}}, status_code=200)
             
             action_val = payload.get("action", {}).get("value", {})
             if action_val.get("command") == "get_sync_code":
-                # User clicked "Get Sync Code" button
-                logger.info(f"⚡ Feishu Interactive: User {sender_id} requested sync code")
+                logger.info(f"⚡ Feishu Action: User {sender_id} requested sync code")
                 
-                # v5.7.40: Offload the work to background to respond to Feishu IMMEDIATELY
-                async def delayed_sync():
-                    reply = await handle_binding_command("feishu", sender_id, "zh")
-                    await send_feishu_message(sender_id, reply)
+                async def robust_sync():
+                    try:
+                        reply = await handle_binding_command("feishu", sender_id, "zh")
+                        await send_feishu_message(sender_id, reply)
+                        logger.info(f"✅ Feishu Sync Code sent to {sender_id}")
+                    except Exception as ex:
+                        logger.error(f"❌ Feishu Robust Sync Error: {ex}")
                 
-                asyncio.create_task(delayed_sync())
+                asyncio.create_task(robust_sync())
                 
-                # Return a specific JSON to Feishu to stop the spinner and show a toast
+                # v5.7.41: Standard Feishu Interactive Response
                 return JSONResponse(content={
                     "toast": {
                         "type": "info",
-                        "content": "正在为您获取同步指令，请稍候..."
+                        "content": "🚀 指令已发送，请查收消息"
                     }
                 }, status_code=200)
 
