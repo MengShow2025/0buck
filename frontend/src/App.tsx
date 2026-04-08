@@ -133,6 +133,21 @@ export default function App() {
   const [authInitialEmail, setAuthInitialEmail] = useState('');
   const [onAuthSuccess, setOnAuthSuccess] = useState<{ callback: () => void } | null>(null);
 
+  // v5.7.47: Preserve 'prefill' command across auth cycles
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const prefill = params.get('prefill');
+    
+    if (prefill) {
+      // Store in sessionStorage to persist across redirects (like Google OAuth)
+      sessionStorage.setItem('pending_prefill', prefill);
+      console.log('📦 Captured pending prefill command:', prefill);
+      
+      // If user is already logged in, the FloatingButler will pick it up from URL.
+      // If not, we'll wait for login to complete.
+    }
+  }, [location.search]);
+
   // v5.7.25: Handle OAuth callback parameters (2FA, Success, Redirect)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -149,10 +164,21 @@ export default function App() {
     // 2. Handle Auth Success (Clear params to keep URL clean)
     if (params.get('auth_success') === 'true') {
       queryClient.invalidateQueries({ queryKey: ['auth-me'] });
+      
+      // v5.7.47: Check if we have a stored prefill from before login
+      const pendingPrefill = sessionStorage.getItem('pending_prefill');
+      
       // Remove params from URL without refreshing
       const newParams = new URLSearchParams(location.search);
       newParams.delete('auth_success');
       newParams.delete('email');
+      
+      // If we have a pending prefill, add it back to the URL so FloatingButler triggers
+      if (pendingPrefill) {
+        newParams.set('prefill', pendingPrefill);
+        sessionStorage.removeItem('pending_prefill');
+      }
+      
       const newSearch = newParams.toString();
       navigate({ search: newSearch }, { replace: true });
     }
