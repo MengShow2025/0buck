@@ -109,7 +109,8 @@ async def handle_binding_command(platform: str, uid: str, lang: str = "en") -> s
 
 async def generic_brain_process(platform: str, platform_uid: str, text: str, chat_id: str, chat_type: str, send_func):
     """
-    v5.7.35: Unified Brain Proxy with Reverse Binding support.
+    v5.7.44: Robust Brain Proxy with Keyword-based Binding.
+    Simplest UX: Respond with instructions to reply 'bind' for guests.
     """
     db = SessionLocal()
     try:
@@ -119,7 +120,8 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
         binding_keywords = ["bind", "绑定", "/bind", "会员号"]
         if any(kw in text.lower() for kw in binding_keywords):
             reply = await handle_binding_command(platform, platform_uid, lang)
-            await send_rich_message(platform, platform_uid, reply, "0Buck Identity Bridge", None, lang)
+            # Send plain text instruction for maximum clarity
+            await send_func(platform_uid, reply)
             return
 
         # 2. Regular AI Process
@@ -127,27 +129,10 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
         is_guest = binding is None
         user_id = binding.user_id if binding else 1
         
-        logger.info(f"🧠 [{platform.upper()}] Identity: UID={platform_uid}, UserID={user_id}, IsGuest={is_guest}")
-        
-        sig = generate_binding_sig(platform, platform_uid)
-        
-        # v5.7.20: Use a more robust URL construction
-        domain = settings.STOREFRONT_DOMAIN.strip().rstrip("/")
-        base_url = f"https://{domain}" if not domain.startswith("http") else domain
-            
-        raw_bind_url = f"{base_url}/auth/bind?platform={platform}&uid={platform_uid}&sig={sig}"
-        bind_url = f"{raw_bind_url}&lk_with_external=false"
-        
         # Composite Session for Persona Projection
         session_id = f"{platform}_{chat_id}_{platform_uid}" if chat_type == "group" else f"{platform}_{platform_uid}"
         
-        # 1. Send Immediate Thinking Status (Minimal Rotating Icon)
-        thinking_msg = "🌀"
-        
-        # v5.6.5: Thinking status shouldn't have a login link yet (too early)
-        await send_rich_message(platform, platform_uid, thinking_msg, "0Buck AI Brain", None, lang)
-        
-        # 2. Call AI Brain
+        # 1. Call AI Brain
         try:
             ai_response = await run_agent(content=text, user_id=user_id, session_id=session_id)
             main_reply = ai_response.get("content")
@@ -157,11 +142,13 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
             logger.error(f"AI Agent Error: {ai_err}")
             main_reply = f"⚠️ 0Buck 智脑暂时无法响应: {str(ai_err)}" if lang == "zh" else f"⚠️ 0Buck AI Brain error: {str(ai_err)}"
         
-        # 3. Send final response (Footer/Login link is handled elegantly by send_rich_message)
-        # v5.7.38: Replaced browser link with Interactive Action for guests
-        # We pass a special "action://get_sync_code" URL that the adapters will convert to buttons
-        sync_action_url = "action://get_sync_code"
-        await send_rich_message(platform, platform_uid, main_reply, "0Buck AI Brain", sync_action_url if is_guest else None, lang)
+        # 2. Handle Guest Hint (v5.7.44: Simply append instructions to the reply)
+        if is_guest:
+            hint = "\n\n---\n✨ 提示：检测到您尚未绑定。回复“绑定”即可获取同步指令，关联您的 0Buck 账户。" if lang == "zh" else "\n\n---\n✨ Tip: You are not linked. Reply 'bind' to sync your 0Buck account."
+            main_reply += hint
+
+        # 3. Send final response
+        await send_func(platform_uid, main_reply)
         logger.info(f"✅ [{platform.upper()}] Response complete for {platform_uid}")
         
     except Exception as e:
@@ -368,7 +355,7 @@ async def test_im_connectivity():
     db.close()
     
     return {
-        "version": "v5.7.43-STABLE",
+        "version": "v5.7.44-STABLE",
         "timestamp": datetime.now().isoformat(),
         "status": "ok",
         "ai_brain": {
@@ -386,6 +373,7 @@ async def test_im_connectivity():
 @router.post("/feishu")
 @router.post("/feishu/")
 async def feishu_webhook(request: Request):
+    """v5.7.44: Simplified Feishu Webhook. Only handles regular messages."""
     try:
         raw_body = await request.body()
         payload = json.loads(raw_body)
@@ -394,36 +382,7 @@ async def feishu_webhook(request: Request):
         if payload.get("type") == "url_verification":
             return JSONResponse(content={"challenge": payload.get("challenge")}, status_code=200)
         
-        # 2. Handle Interactive Card Callbacks (v5.7.42)
-        # v5.7.42: Ultra-minimal response to prevent Feishu timeout errors (200340)
-        if "action" in payload:
-            sender_id = (
-                payload.get("open_id") or 
-                payload.get("user", {}).get("open_id") or
-                payload.get("operator", {}).get("open_id")
-            )
-            
-            if not sender_id:
-                logger.error("❌ Feishu Callback: ID not found")
-                return JSONResponse(content={}, status_code=200)
-            
-            action_val = payload.get("action", {}).get("value", {})
-            if action_val.get("command") == "get_sync_code":
-                # v5.7.42: Respond IMMEDIATELY with empty JSON to clear the spinner
-                # The work is done entirely in the background
-                async def background_sync_task():
-                    try:
-                        # Re-verify ID inside task
-                        reply = await handle_binding_command("feishu", sender_id, "zh")
-                        await send_feishu_message(sender_id, reply)
-                        logger.info(f"✅ Background Sync Complete for {sender_id}")
-                    except Exception as inner_ex:
-                        logger.error(f"❌ Background Sync Failed: {inner_ex}")
-                
-                asyncio.create_task(background_sync_task())
-                return JSONResponse(content={}, status_code=200)
-
-        # 3. Handle Regular Events
+        # 2. Handle Regular Events
         event_id = payload.get("header", {}).get("event_id")
         if is_duplicate("feishu", event_id): return JSONResponse(content={"status": "dup"}, status_code=200)
         
@@ -444,27 +403,11 @@ async def feishu_webhook(request: Request):
 @router.post("/telegram")
 @router.post("/telegram/")
 async def telegram_webhook(request: Request):
+    """v5.7.44: Simplified Telegram Webhook."""
     try:
         payload = await request.json()
         
-        # 1. Handle Callback Query (Button clicks) (v5.7.38)
-        if "callback_query" in payload:
-            cb = payload["callback_query"]
-            sender_id = str(cb["from"]["id"])
-            data = cb.get("data")
-            
-            if data == "get_sync_code":
-                logger.info(f"⚡ Telegram Interactive: User {sender_id} requested sync code")
-                reply = await handle_binding_command("telegram", sender_id, "zh")
-                await send_telegram_message(sender_id, reply)
-                # Answer callback query to stop loading state in client
-                token = settings.TELEGRAM_BOT_TOKEN
-                if token:
-                    async with httpx.AsyncClient() as client:
-                        await client.post(f"https://api.telegram.org/bot{token}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
-                return JSONResponse(content={"status": "ok"}, status_code=200)
-
-        # 2. Handle Regular Messages
+        # Handle Regular Messages
         message = payload.get("message", {})
         sender_id = str(message.get("from", {}).get("id", ""))
         text = message.get("text", "")
