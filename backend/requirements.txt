@@ -26,3 +26,6 @@ itsdangerous
 pyotp
 qrcode[pil]
 redis
+
+celery
+redis

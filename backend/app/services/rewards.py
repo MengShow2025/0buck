@@ -9,9 +9,13 @@ from zoneinfo import ZoneInfo
 from app.models.rewards import (
     PointSource, PointTransaction, AIUsageQuota, Points, RenewalCard
 )
+import logging
 from app.models.ledger import (
     UserExt, Wallet, WalletTransaction, CheckinPlan, CheckinLog, ReferralRelationship, GroupBuyCampaign, Order
 )
+from app.models.actuarial import RewardPhase, PlatformProfitPool
+
+logger = logging.getLogger(__name__)
 
 def enforce_idor(owner_id_field: str = "user_id"):
     """
@@ -691,6 +695,78 @@ class RewardsService:
             ).order_by(WalletTransaction.created_at.desc()).first()
             if tx:
                 tx.status = "cancelled"
+
+    def process_daily_checkin(self, user_id: int):
+        """
+        Task 4: The 20-Phase Drop-off Funnel Engine
+        Called daily by a cron job or explicitly.
+        Evaluates active plans. If a checkin is missed (yesterday), forfeits current phase.
+        """
+        today = datetime.utcnow().date()
+        yesterday = today - timedelta(days=1)
+        
+        # Get active plans
+        plans = self.db.query(CheckinPlan).filter(
+            CheckinPlan.user_id == user_id,
+            CheckinPlan.status == 'active_checkin'
+        ).with_for_update().all()
+        
+        for plan in plans:
+            last_checkin = plan.last_checkin_at if plan.last_checkin_at else today
+            
+            # If the user didn't check in yesterday, they forfeit the current phase
+            if last_checkin < yesterday:
+                logger.info(f"User {user_id} missed checkin for plan {plan.id}. Forfeiting phase {plan.current_period}.")
+                
+                # Find current phase
+                current_phase = self.db.query(RewardPhase).filter(
+                    RewardPhase.plan_id == plan.id,
+                    RewardPhase.phase_num == plan.current_period
+                ).first()
+                
+                if current_phase and current_phase.status == 'active':
+                    current_phase.status = 'forfeited'
+                    
+                    # Task 4: Log into PlatformProfitPool & Check Margin
+                    # Fetch related order to check margin
+                    from app.models.ledger import Order
+                    order = self.db.query(Order).filter(Order.shopify_order_id == plan.order_id).first()
+                    
+                    margin_ratio = None
+                    is_red_alert = False
+                    if order and order.total_price and order.total_price > 0:
+                        # Safety Margin = (Sale Price - COGS) / Sale Price
+                        # cogs_total usually includes item cost + shipping
+                        margin_ratio = (Decimal(order.total_price) - Decimal(order.cogs_total)) / Decimal(order.total_price)
+                        if margin_ratio < Decimal('0.15'):
+                            is_red_alert = True
+                            logger.error(f"🚨 RED ALERT: Plan {plan.id} forfeited, but margin is critically low: {margin_ratio*100:.2f}%! Possible loss even with forfeit.")
+                    
+                    profit = PlatformProfitPool(
+                        amount=current_phase.amount,
+                        source="forfeited_rebate",
+                        reference_id=f"plan_{plan.id}_phase_{plan.current_period}",
+                        margin_ratio=margin_ratio,
+                        is_red_alert=is_red_alert
+                    )
+                    self.db.add(profit)
+                    
+                    # Advance to next phase
+                    plan.current_period += 1
+                    plan.consecutive_days = 0
+                    
+                    if plan.current_period > 20:
+                        plan.status = 'completed'
+                    else:
+                        # Activate next phase
+                        next_phase = self.db.query(RewardPhase).filter(
+                            RewardPhase.plan_id == plan.id,
+                            RewardPhase.phase_num == plan.current_period
+                        ).first()
+                        if next_phase:
+                            next_phase.status = 'active'
+                            
+        self.db.commit()
 
     def finalize_payment(self, customer_id: int, amount: Decimal, order_id: str, actual_cost_at_settlement: Optional[Decimal] = None):
         """

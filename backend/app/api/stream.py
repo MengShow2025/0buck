@@ -10,9 +10,31 @@ from app.services.agent import agent_executor
 from app.services.reflection_service import run_butler_learning
 from app.models.ledger import ProcessedWebhookEvent
 from langchain_core.messages import HumanMessage
+from app.core.bap_protocol import BAPCardType, BAP_ProductGrid, BAPAttachment
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+async def send_targeted_bap_card(channel_id: str, user_id: str, bap_payload: dict):
+    """
+    v3.4 BAP: Send targeted business card to specific user.
+    In Lounge (group chat), uses 'Private Projection' so only target user sees it.
+    """
+    channel_type = "concierge"
+    actual_channel_id = channel_id
+    if ":" in channel_id:
+        channel_type, actual_channel_id = channel_id.split(":", 1)
+    
+    card_type = bap_payload.get("component")
+    data = bap_payload.get("data")
+    
+    return stream_chat_service.send_bap_card(
+        channel_type=channel_type,
+        channel_id=actual_channel_id,
+        card_type=card_type,
+        data=data,
+        targeted_user_id=user_id
+    )
 
 @router.post("/webhook")
 async def stream_webhook(

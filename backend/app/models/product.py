@@ -130,6 +130,8 @@ class Product(Base):
 Index('idx_product_attributes', Product.attributes, postgresql_using='gin')
 Index('idx_product_variants_data', Product.variants_data, postgresql_using='gin')
 Index('idx_product_structural_data', Product.structural_data, postgresql_using='gin')
+Index('idx_product_detail_images', Product.detail_images, postgresql_using='gin')
+Index('idx_product_metafields', Product.metafields, postgresql_using='gin')
 
 class ProductVector(Base):
     __tablename__ = "product_vectors"
@@ -143,13 +145,13 @@ class ProductVector(Base):
 class CandidateProduct(Base):
     """
     v3.9.0: Autonomous Sourcing Pipeline - Candidate Stage.
-    Status Flow: new -> reviewing -> approved/rejected -> synced (Product)
+    Status Flow: draft -> refined -> audited -> approved -> published
     """
     __tablename__ = "candidate_products"
 
     id = Column(Integer, primary_key=True, index=True)
     product_id_1688 = Column(String, unique=True, index=True)
-    status = Column(String, default="new", index=True) # 'new', 'reviewing', 'approved', 'rejected', 'synced'
+    status = Column(String, default="draft", index=True) # 'draft', 'refined', 'audited', 'approved', 'published'
     
     # v4.7.1: Sourcing Provenance & Fixed Mapping
     # '1688' or 'ALIBABA'

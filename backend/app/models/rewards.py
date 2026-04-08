@@ -49,8 +49,8 @@ class AIUsageQuota(Base):
     __tablename__ = "ai_usage_quotas"
 
     user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), primary_key=True)
-    daily_cost_usd = Column(Float, default=0.0)
-    monthly_cost_usd = Column(Float, default=0.0)
+    daily_cost_usd = Column(Numeric(10, 4, asdecimal=True), default=0.0)
+    monthly_cost_usd = Column(Numeric(10, 4, asdecimal=True), default=0.0)
     last_reset_at = Column(DateTime, default=func.now())
 
 class Points(Base):

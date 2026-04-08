@@ -13,6 +13,7 @@ import json
 import logging
 from decimal import Decimal
 from app.core.config import settings
+from app.workers.shopify_tasks import process_paid_order
 
 logger = logging.getLogger(__name__)
 
@@ -64,168 +65,23 @@ async def products_created_webhook(
     return {"status": "ok", "message": "Product enrichment queued"}
 
 @router.post("/shopify/orders/paid")
-async def orders_paid_webhook(
-    request: Request,
-    x_shopify_hmac_sha256: str = Header(None),
-    db: Session = Depends(get_db)
-):
+async def orders_paid_webhook(request: Request):
+    """
+    Shopify Order Paid Webhook.
+    HMAC validation + immediate 200 return. Processing offloaded to Celery.
+    """
     data = await request.body()
-    # v3.6.0 STRICT SECURITY: Enforce HMAC verification in production
-    if not verify_shopify_webhook(data, x_shopify_hmac_sha256):
-       logger.error("🚨 CRITICAL: Shopify Webhook HMAC verification failed!")
-       # In production, we MUST raise 401. In dev, we might log a warning but proceed.
-       if settings.ENVIRONMENT == "production":
-           raise HTTPException(status_code=401, detail="Unauthorized: Invalid HMAC Signature")
-       else:
-           print("⚠️ WARNING: HMAC failed but proceeding in development mode.")
+    hmac_header = request.headers.get("X-Shopify-Hmac-Sha256")
     
-    payload = json.loads(data)
-    customer = payload.get("customer") or {}
-    customer_id = customer.get("id")
-    order_id = payload.get("id")
-    order_number = payload.get("name") or str(order_id)
-    currency = payload.get("currency") or "USD"
-    total_price = payload.get("current_total_price") or payload.get("total_price") or "0"
-    
-    if not customer_id or not order_id:
-        print(f"Webhook Skipped: customer_id={customer_id}, order_id={order_id}")
-        return {"status": "skipped", "reason": "No customer or order ID"}
-        
-    line_items = payload.get("line_items", [])
-    
-    # NEW RULE: Exclude specific categories from Reward Base
-    excluded_config = db.query(SystemConfig).filter_by(key="excluded_reward_categories").first()
-    excluded_categories = set(excluded_config.value) if excluded_config and excluded_config.value else set()
-    
-    total_eligible_price = Decimal('0.0')
-    for item in line_items:
-        variant_id = str(item.get("variant_id"))
-        quantity = item.get("quantity", 1)
-        price = Decimal(str(item.get("price", "0")))
-        
-        # Look up product in our DB to check category
-        product = db.query(Product).filter(Product.shopify_variant_id == variant_id).first()
-        
-        # If not found by variant, try by SKU (if SKU contains the variant info)
-        if not product and item.get("sku"):
-             # Assuming SKU format is like 1688-XXXX
-             parts = item.get("sku").split("-")
-             if len(parts) > 1:
-                product = db.query(Product).filter(Product.product_id_1688 == parts[-1]).first()
+    if not hmac_header or not verify_shopify_webhook(data, hmac_header):
+        raise HTTPException(status_code=401, detail="Invalid HMAC signature")
 
-        is_excluded = False
-        if product:
-            if product.category in excluded_categories:
-                is_excluded = True
-                print(f"  Item Excluded (Category: {product.category}): {item.get('title')}")
-            elif not product.is_reward_eligible:
-                is_excluded = True
-                print(f"  Item Excluded (Eligibility=False): {item.get('title')}")
-        
-        if not is_excluded:
-            total_eligible_price += price * Decimal(str(quantity))
-
-    # For the reward base, we use the sum of eligible items.
-    # Note: Shipping and Tax are generally not rewarded.
-    reward_base = total_eligible_price
-
-    # Persist local Order cache (used by automated refund idempotency)
-    try:
-        local_order = db.query(Order).filter_by(shopify_order_id=order_id).first()
-        if not local_order:
-            local_order = Order(
-                shopify_order_id=order_id,
-                user_id=customer_id,
-                order_number=order_number,
-                total_price=Decimal(str(total_price)),
-                currency=currency,
-                status="paid",
-                refund_status="none",
-            )
-            db.add(local_order)
-        else:
-            local_order.user_id = customer_id
-            local_order.order_number = order_number
-            local_order.currency = currency
-            if local_order.total_price is None or local_order.total_price == 0:
-                local_order.total_price = Decimal(str(total_price))
-        db.commit()
-    except Exception as e:
-        print(f"Failed to upsert local order cache: {e}")
+    payload = await request.json()
     
-    print(f"Webhook Received: Order Paid {order_id} for customer {customer_id}")
-    print(f"Total Eligible Base: {reward_base} (Excluded Categories: {list(excluded_categories)})")
+    # Task 1: Offload to Redis Queue (Celery)
+    process_paid_order.delay(payload)
     
-    # Create Local Order Cache
-    existing_order = db.query(Order).filter_by(shopify_order_id=order_id).first()
-    if not existing_order:
-        new_order = Order(
-            shopify_order_id=order_id,
-            user_id=customer_id,
-            order_number=payload.get("name"),
-            total_price=Decimal(str(payload.get("total_price", "0"))),
-            currency=payload.get("currency", "USD"),
-            status="paid"
-        )
-        db.add(new_order)
-        db.commit()
-    
-    # 1. v3.5.0: Check for Balance Deduction in note_attributes
-    note_attributes = payload.get("note_attributes", [])
-    balance_deducted = next((Decimal(str(attr.get("value", "0"))) for attr in note_attributes if attr.get("name") == "balance_deducted"), Decimal("0"))
-    
-    if balance_deducted > 0:
-        print(f"  💰 Balance Deduction Detected: {balance_deducted}. Finalizing payment...")
-        # v3.5.0: System ID 1 for automated webhooks
-        rewards_service = RewardsService(db, current_user_id=1)
-        rewards_service.finalize_payment(customer_id, balance_deducted, str(order_id))
-
-    # 2. Initialize Rewards/Checkin Plan for the order
-    # v3.5.0: System ID 1 for automated webhooks
-    rewards_service = RewardsService(db, current_user_id=1)
-    timezone = customer.get("timezone", "UTC")
-    
-    if reward_base > 0:
-        rewards_service.init_checkin_plan(customer_id, order_id, reward_base, timezone)
-    else:
-        print(f"  Order #{order_id} has 0 eligible reward base. Skipping check-in plan initialization.")
-    
-    # TC-03: Process Referral/KOL Commissions
-    # We look for 'referral_code' in note_attributes
-    note_attributes = payload.get("note_attributes", [])
-    referral_code = next((attr.get("value") for attr in note_attributes if attr.get("name") == "referral_code"), None)
-    
-    if referral_code:
-        print(f"Referral Code Detected: {referral_code}")
-        rewards_service.record_referral(customer_id, referral_code)
-        rewards_service.process_referral_commissions(customer_id, order_id, reward_base, referral_code)
-    
-    # v3.4: Multi-channel Social Automation
-    from app.services.social_automation import SocialAutomationService
-    social_service = SocialAutomationService(db)
-    await social_service.notify_order_paid(order_id)
-    
-    # Logic: Trigger Supply Chain Sourcing
-    sourcing_service = SupplyChainService(db)
-    line_items = payload.get("line_items", [])
-    
-    # v3.0: Tiered Fulfillment Logic
-    # 1. <$30: Auto-fulfill (Shadow Account)
-    # 2. >$30: Manual Approval (Admin Queue)
-    auto_limit = float(rewards_service.config_service.get("AUTO_FULFILLMENT_LIMIT", 30.0))
-    is_auto = Decimal(str(total_price)) < Decimal(str(auto_limit))
-    
-    await sourcing_service.trigger_sourcing(order_id, line_items, auto_fulfill=is_auto)
-    
-    # Logic: Send WhatsApp Notification to customer
-    shipping_address = payload.get("shipping_address") or {}
-    customer_phone = customer.get("phone") or shipping_address.get("phone")
-    if customer_phone:
-        msg = f"🎉 Order #{payload.get('name')} Paid! Your 500-day check-in reward path has started. Check it here: {settings.BACKEND_URL}/checkin"
-        await send_whatsapp_message(customer_phone, msg)
-        print(f"WhatsApp notification sent to {customer_phone}")
-    
-    return {"status": "ok"}
+    return {"status": "success", "message": "Order paid processing queued"}
 
 @router.post("/shopify/orders/fulfilled")
 async def orders_fulfilled_webhook(
