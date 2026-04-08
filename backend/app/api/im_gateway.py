@@ -97,17 +97,24 @@ async def handle_binding_command(platform: str, uid: str, lang: str = "en") -> s
         ))
         db.commit()
         
-        # v5.7.52: Restored pre-fill link but with root path '/' to avoid 404.
-        # Instruction emphasizes MANUAL send to respect user preference.
-        import urllib.parse
+        # v5.7.53: Completely removed all deep links/jumps.
+        # Focus on a single, clear, manual copy-paste instruction.
         cmd_text = f"我要绑定账号 {code}" if lang == "zh" else f"Link my account {code}"
-        encoded_cmd = urllib.parse.quote(cmd_text)
-        deep_link = f"https://0buck.com/?prefill={encoded_cmd}"
         
         if lang == "zh":
-            return f"✨ 0Buck 身份同步指令 ✨\n\n1️⃣ 复制发送下面这句话给 App 里的 AI 管家：\n\n{cmd_text}\n\n2️⃣ 或者点击下方链接自动填入指令，然后手动点击发送：\n{deep_link}\n\n(验证码 15 分钟内有效)"
+            return (
+                f"✨ 0Buck 身份同步指令 ✨\n\n"
+                f"请直接复制发送下面这句话给 App 里的 AI 管家即可完成同步：\n\n"
+                f"{cmd_text}\n\n"
+                f"(验证码 15 分钟内有效)"
+            )
         else:
-            return f"✨ 0Buck Identity Sync ✨\n\n1️⃣ Copy and send the following to the App's AI Butler:\n\n{cmd_text}\n\n2️⃣ Or click below to pre-fill the command, then click send manually:\n{deep_link}\n\n(Valid for 15 minutes)"
+            return (
+                f"✨ 0Buck Identity Sync ✨\n\n"
+                f"Please copy and send the following message to the App's AI Butler:\n\n"
+                f"{cmd_text}\n\n"
+                f"(Valid for 15 minutes)"
+            )
     except Exception as e:
         logger.error(f"Error generating binding code: {e}")
         return "Failed to generate binding code. Please try again later."
@@ -378,7 +385,7 @@ async def test_im_connectivity():
     db.close()
     
     return {
-        "version": "v5.7.51-STABLE",
+        "version": "v5.7.53-STABLE",
         "timestamp": datetime.now().isoformat(),
         "status": "ok",
         "ai_brain": {
