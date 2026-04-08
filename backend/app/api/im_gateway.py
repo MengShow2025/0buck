@@ -358,7 +358,7 @@ router = APIRouter()
 @router.get("/test")
 @router.get("/feishu/test")
 async def test_im_connectivity():
-    """v5.6.1: Unified IM & AI Brain Diagnostic"""
+    """v5.7.42: Unified IM & AI Brain Diagnostic with updated version tracking."""
     from app.services.config_service import ConfigService
     from app.db.session import SessionLocal
     
@@ -368,7 +368,7 @@ async def test_im_connectivity():
     db.close()
     
     return {
-        "version": "v5.6.1-DIAGNOSTIC",
+        "version": "v5.7.42-STABLE",
         "timestamp": datetime.now().isoformat(),
         "status": "ok",
         "ai_brain": {
