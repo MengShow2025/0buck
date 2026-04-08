@@ -53,10 +53,11 @@ def create_shopify_product(title, price, compare_at_price, tags, image_urls, sku
     if logistics_data:
         try:
             logis = json.loads(logistics_data) if isinstance(logistics_data, str) else logistics_data
-            weight = float(logis.get("product_weight", 0) or 0)
-            weight_unit = logis.get("weight_unit", "kg")
+            shipping = logis.get("shipping", {})
+            weight = float(shipping.get("product_weight", 0) or 0)
+            weight_unit = shipping.get("weight_unit", "kg")
             
-            p_size = logis.get("packing_size", {})
+            p_size = shipping.get("packing_size", {})
             if p_size and p_size.get("length"):
                 packing_info = f" | Size: {p_size['length']}x{p_size['width']}x{p_size['height']} {p_size['unit']}"
         except: pass

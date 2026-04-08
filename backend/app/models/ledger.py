@@ -234,7 +234,7 @@ class CouponIssuanceAudit(Base):
     context_snapshot = Column(JSON, nullable=True) # Last 3 messages + cart state
     
     # Fingerprint
-    model_id = Column(String(50), default="gemini-flash-latest")
+    model_id = Column(String(50), default="gemini-1.5-flash")
     fingerprint = Column(String(100), unique=True) # Combined hash of user/code/time
     
     issued_at = Column(DateTime, default=func.now())

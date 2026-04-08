@@ -22,9 +22,9 @@ class ChatRequest(BaseModel):
     user_key: Optional[str] = None
 
 class MinimaxChatRequest(BaseModel):
-    user_id: Optional[str] = None
-    messages: List[Dict[str, str]]
-    butler_name: Optional[str] = "0Buck Butler"
+    user_id: Any = None
+    messages: Any = []
+    butler_name: Any = "0Buck Butler"
 
 @router.post("/chat")
 async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(get_db)):
@@ -34,8 +34,11 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
     Ensures identical persona across Web, Floating Butler, and IM.
     """
     user_id = 1
-    if request.user_id and str(request.user_id).isdigit():
-        user_id = int(request.user_id)
+    if request.user_id:
+        try:
+            user_id = int(request.user_id)
+        except (ValueError, TypeError):
+            user_id = 1
     
     last_msg = request.messages[-1]["content"] if request.messages else "Hello"
     

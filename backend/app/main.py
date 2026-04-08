@@ -255,7 +255,45 @@ def sync_db_schema():
                     logger.warning(f"⚠️ Failed to add {col.name} to checkin_plans: {e}")
                     conn.rollback()
 
-        # 6. Create GIN Indexes for JSONB fields (PostgreSQL only)
+        # 6. UserButlerProfile Table Updates (v5.7.4)
+        cols_butler = [
+            Column("butler_name", String(100)),
+            Column("user_nickname", String(100)),
+            Column("active_persona_id", String(50)),
+            Column("affinity_score", Integer(), server_default=text("0")),
+            Column("current_vibe", String(50)),
+            Column("detected_country", String(10)),
+            Column("preferred_currency", String(10), server_default=text("'USD'")),
+            Column("custom_vectors", JSONB(), server_default=text("'{}'::jsonb")),
+            Column("personality", JSONB(), server_default=text("'{}'::jsonb")),
+            Column("ai_api_key", String(255)),
+            Column("byok_status", String(20), server_default=text("'none'")),
+            Column("last_health_check", DateTime())
+        ]
+        
+        existing_butler_cols = [c['name'] for c in inspector.get_columns('user_butler_profiles')]
+        for col in cols_butler:
+            if col.name not in existing_butler_cols:
+                try:
+                    type_str = get_type(col, engine.dialect)
+                    if engine.dialect.name == 'postgresql':
+                        stmt = f"ALTER TABLE user_butler_profiles ADD COLUMN IF NOT EXISTS {col.name} {type_str}"
+                    else:
+                        stmt = f"ALTER TABLE user_butler_profiles ADD COLUMN {col.name} {type_str}"
+                        
+                    if col.server_default is not None:
+                        default_val = col.server_default.arg
+                        if isinstance(default_val, str):
+                             stmt += f" DEFAULT {default_val}"
+                             
+                    conn.execute(text(stmt))
+                    conn.commit()
+                    logger.info(f"✅ Added column {col.name} to user_butler_profiles table.")
+                except Exception as e:
+                    logger.warning(f"⚠️ Failed to add {col.name} to user_butler_profiles: {e}")
+                    conn.rollback()
+
+        # 7. Create GIN Indexes for JSONB fields (PostgreSQL only)
         if engine.dialect.name == 'postgresql':
             index_stmts = [
                 "CREATE INDEX IF NOT EXISTS idx_product_attributes ON products USING gin (attributes)",
