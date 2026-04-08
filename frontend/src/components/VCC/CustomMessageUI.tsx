@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { ProductGridCard } from './BAPCards/ProductGridCard';
 import { CashbackRadarCard } from './BAPCards/CashbackRadarCard';
+import { useAppContext } from './AppContext';
 // import { MessageSimple } from 'stream-chat-react'; // Uncomment when stream is installed
 
 interface CustomMessageUIProps {
@@ -11,7 +12,31 @@ interface CustomMessageUIProps {
 export const CustomMessageUI: React.FC<CustomMessageUIProps> = (props) => {
   const { message, isMyMessage } = props;
   
-  // 1. Intercept BAP Protocol Attachments
+  // To avoid crash if AppContext is not yet wrapped globally
+  let themeSetter = () => {};
+  let langSetter = () => {};
+  try {
+    const { setTheme, setLanguage } = useAppContext();
+    themeSetter = setTheme;
+    langSetter = setLanguage;
+  } catch (e) {
+    console.warn('AppContext not found, system actions disabled');
+  }
+  
+  // 1. Check for AI System Actions
+  const systemAction = message.attachments?.find((a: any) => a.type === '0B_SYSTEM_ACTION');
+
+  useEffect(() => {
+    if (systemAction && !isMyMessage()) {
+      if (systemAction.action === 'SET_THEME') {
+        themeSetter(systemAction.value);
+      } else if (systemAction.action === 'SET_LANGUAGE') {
+        langSetter(systemAction.value);
+      }
+    }
+  }, [systemAction, themeSetter, langSetter, isMyMessage]);
+
+  // 2. Intercept BAP Protocol Attachments
   // We check if the message has a specific 0Buck Attachment signature
   const bapAttachment = message.attachments?.find((a: any) => a.type === '0B_CARD_V3');
 
@@ -32,7 +57,7 @@ export const CustomMessageUI: React.FC<CustomMessageUIProps> = (props) => {
     }
   }
 
-  // 2. Fallback to Standard WhatsApp-style Text Bubbles
+  // 3. Fallback to Standard WhatsApp-style Text Bubbles
   const timeString = new Date(message.created_at || Date.now()).toLocaleTimeString([], {
     hour: '2-digit', 
     minute:'2-digit'
