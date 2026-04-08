@@ -442,72 +442,73 @@ if not os.path.exists(frontend_path):
 
 logger.info(f"📂 Frontend assets path: {frontend_path}")
 
-# --- 1. FRONTEND ROUTING MIDDLEWARE (v5.7.29) ---
-# Industrial-grade SPA routing. Re-written to be as robust as possible.
+# --- 1. RAILWAY NATIVE SPA ROUTING (v5.7.31) ---
+# This is the single source of truth for routing when deployed on Railway.
+# It ensures all frontend routes are handled by the React SPA.
 @app.middleware("http")
-async def frontend_interceptor(request: Request, call_next):
+async def railway_spa_interceptor(request: Request, call_next):
     path = request.url.path
     method = request.method
     
-    # 1. Skip for API, assets, and non-GET requests
-    is_api = path.startswith(settings.API_V1_STR) or path.startswith("/api/") or path.startswith("/v1/")
-    is_asset = path.startswith("/assets/") or path.startswith("/static/") or "." in path.split("/")[-1]
-    
-    if is_api or is_asset or method != "GET":
+    # 1. API routes must pass through to FastAPI routers
+    if path.startswith(settings.API_V1_STR) or path.startswith("/api/") or path.startswith("/v1/"):
         return await call_next(request)
-
-    # 2. Everything else is a potential SPA route
-    # We serve index.html directly from the most likely locations
-    index_locations = [
-        os.path.join(frontend_path, "index.html"),
-        os.path.join(os.getcwd(), "static", "index.html"),
-        os.path.join(os.getcwd(), "frontend", "dist", "index.html"),
-        "/app/backend/static/index.html",
-        "/app/static/index.html"
-    ]
     
-    for loc in index_locations:
-        if os.path.exists(loc):
-            logger.info(f"🎯 SPA Route {path} -> Serving {loc}")
-            return FileResponse(loc)
+    # 2. Static assets (physical files) must be served normally
+    # We check for extensions to identify assets
+    if "." in path.split("/")[-1] and not path.endswith(".html"):
+        return await call_next(request)
+        
+    # 3. Everything else is an SPA route (including /auth/bind, /chat, etc.)
+    # We serve index.html directly.
+    if method == "GET":
+        # Search for index.html in the container's static folder
+        # In Railway Docker, this is usually /app/static/index.html
+        target_index = os.path.join(frontend_path, "index.html")
+        
+        if os.path.exists(target_index):
+            return FileResponse(target_index)
             
-    # 3. If no index.html found, let it fall through to FastAPI's router
+        # Emergency fallback if path detection failed
+        container_index = "/app/static/index.html"
+        if os.path.exists(container_index):
+            return FileResponse(container_index)
+            
     return await call_next(request)
 
-# --- 2. EXPLICIT SPA ROUTES (v5.7.29) ---
-# High-reliability fallback for critical pages. If index.html is missing,
-# we serve a simple informative page so the user isn't stuck with 404.
+# --- 2. RAILWAY SPA FALLBACK (v5.7.31) ---
+# High-reliability fallback for Railway.
 @app.get("/auth/bind")
 @app.get("/chat")
 @app.get("/me")
 @app.get("/login")
 @app.get("/register")
-async def spa_fallback(request: Request):
-    index_locations = [
+async def railway_fallback(request: Request):
+    # Railway Docker image structure: backend in /app, static in /app/static
+    # We search the most likely places in the container.
+    possible_indices = [
+        "/app/static/index.html",
         os.path.join(frontend_path, "index.html"),
-        os.path.join(os.getcwd(), "static", "index.html"),
-        os.path.join(os.getcwd(), "frontend", "dist", "index.html"),
-        "/app/backend/static/index.html",
-        "/app/static/index.html"
+        "static/index.html"
     ]
-    for loc in index_locations:
+    for loc in possible_indices:
         if os.path.exists(loc):
             return FileResponse(loc)
             
-    # Ultimate fallback: Simple HTML if static assets are completely missing
+    # If the file is physically missing, we give a clear error.
     from fastapi.responses import HTMLResponse
     return HTMLResponse(content=f"""
         <html>
-            <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #0a0a0a; color: white; text-align: center;">
+            <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #000; color: #fff; text-align: center;">
                 <div>
-                    <h1>0Buck Identity Bridge</h1>
-                    <p>Static assets are still deploying. Please refresh in 30 seconds.</p>
-                    <p style="color: #666; font-size: 0.8em;">Path: {request.url.path}</p>
-                    <button onclick="window.location.reload()" style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">Refresh Now</button>
+                    <h1 style="color: #ef4444;">0Buck System Error</h1>
+                    <p>Static assets are missing in the Railway container.</p>
+                    <p>Current path: {os.getcwd()}</p>
+                    <p>Static path: {frontend_path}</p>
                 </div>
             </body>
         </html>
-    """, status_code=200)
+    """, status_code=500)
 
 # Include routers
 app.include_router(api_router, tags=["api"])
