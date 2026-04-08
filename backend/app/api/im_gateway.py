@@ -394,43 +394,34 @@ async def feishu_webhook(request: Request):
         if payload.get("type") == "url_verification":
             return JSONResponse(content={"challenge": payload.get("challenge")}, status_code=200)
         
-        # 2. Handle Interactive Card Callbacks (v5.7.41)
-        # v5.7.41: Ultra-robust ID extraction and response for Feishu buttons
+        # 2. Handle Interactive Card Callbacks (v5.7.42)
+        # v5.7.42: Ultra-minimal response to prevent Feishu timeout errors (200340)
         if "action" in payload:
-            # Feishu IDs can be in multiple places depending on version/context
             sender_id = (
                 payload.get("open_id") or 
                 payload.get("user", {}).get("open_id") or
                 payload.get("operator", {}).get("open_id")
             )
             
-            logger.info(f"⚡ Feishu Callback Payload: {json.dumps(payload)}")
-            
             if not sender_id:
-                logger.error("❌ Feishu Callback: Could not find open_id in payload")
-                return JSONResponse(content={"toast": {"type": "error", "content": "无法识别用户身份"}}, status_code=200)
+                logger.error("❌ Feishu Callback: ID not found")
+                return JSONResponse(content={}, status_code=200)
             
             action_val = payload.get("action", {}).get("value", {})
             if action_val.get("command") == "get_sync_code":
-                logger.info(f"⚡ Feishu Action: User {sender_id} requested sync code")
-                
-                async def robust_sync():
+                # v5.7.42: Respond IMMEDIATELY with empty JSON to clear the spinner
+                # The work is done entirely in the background
+                async def background_sync_task():
                     try:
+                        # Re-verify ID inside task
                         reply = await handle_binding_command("feishu", sender_id, "zh")
                         await send_feishu_message(sender_id, reply)
-                        logger.info(f"✅ Feishu Sync Code sent to {sender_id}")
-                    except Exception as ex:
-                        logger.error(f"❌ Feishu Robust Sync Error: {ex}")
+                        logger.info(f"✅ Background Sync Complete for {sender_id}")
+                    except Exception as inner_ex:
+                        logger.error(f"❌ Background Sync Failed: {inner_ex}")
                 
-                asyncio.create_task(robust_sync())
-                
-                # v5.7.41: Standard Feishu Interactive Response
-                return JSONResponse(content={
-                    "toast": {
-                        "type": "info",
-                        "content": "🚀 指令已发送，请查收消息"
-                    }
-                }, status_code=200)
+                asyncio.create_task(background_sync_task())
+                return JSONResponse(content={}, status_code=200)
 
         # 3. Handle Regular Events
         event_id = payload.get("header", {}).get("event_id")
