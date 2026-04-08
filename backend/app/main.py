@@ -447,15 +447,15 @@ if not os.path.exists(frontend_path):
 
 logger.info(f"📂 Frontend assets path: {frontend_path}")
 
-# --- 1. RAILWAY NATIVE SPA ROUTING (v5.7.33) ---
+# --- 1. RAILWAY NATIVE SPA ROUTING (v5.7.43) ---
 @app.middleware("http")
 async def railway_spa_interceptor(request: Request, call_next):
     path = request.url.path
     method = request.method
     
-    # v5.7.33: Explicitly bypass all backend/system routes
+    # v5.7.43: Strictly bypass ALL API and system routes
+    # This ensures they reach the routers defined below.
     is_backend = (
-        path.startswith(settings.API_V1_STR) or 
         path.startswith("/api/") or 
         path.startswith("/v1/") or
         path == "/healthz" or
@@ -466,67 +466,37 @@ async def railway_spa_interceptor(request: Request, call_next):
     if is_backend or method != "GET":
         return await call_next(request)
     
-    # Static assets (files with extensions) pass through
+    # Static assets (files with extensions) pass through to StaticFiles mount
     if "." in path.split("/")[-1]:
         return await call_next(request)
         
-    # Everything else is an SPA route -> serve index.html
+    # EVERYTHING ELSE is an SPA route -> serve index.html
+    # We search the container's static folder first.
     target_index = os.path.join(frontend_path, "index.html")
     if os.path.exists(target_index):
         return FileResponse(target_index)
             
-    # Emergency fallback
-    container_index = "/app/static/index.html"
-    if os.path.exists(container_index):
-        return FileResponse(container_index)
+    # Emergency fallback for Railway container structure
+    if os.path.exists("/app/static/index.html"):
+        return FileResponse("/app/static/index.html")
             
     return await call_next(request)
 
-# --- 2. RAILWAY SPA FALLBACK (v5.7.31) ---
-# High-reliability fallback for Railway.
-@app.get("/auth/bind")
-@app.get("/chat")
-@app.get("/me")
-@app.get("/login")
-@app.get("/register")
-async def railway_fallback(request: Request):
-    # Railway Docker image structure: backend in /app, static in /app/static
-    # We search the most likely places in the container.
-    possible_indices = [
-        "/app/static/index.html",
-        os.path.join(frontend_path, "index.html"),
-        "static/index.html"
-    ]
-    for loc in possible_indices:
-        if os.path.exists(loc):
-            return FileResponse(loc)
-            
-    # If the file is physically missing, we give a clear error.
-    from fastapi.responses import HTMLResponse
-    return HTMLResponse(content=f"""
-        <html>
-            <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #000; color: #fff; text-align: center;">
-                <div>
-                    <h1 style="color: #ef4444;">0Buck System Error</h1>
-                    <p>Static assets are missing in the Railway container.</p>
-                    <p>Current path: {os.getcwd()}</p>
-                    <p>Static path: {frontend_path}</p>
-                </div>
-            </body>
-        </html>
-    """, status_code=500)
+# --- 2. EXPLICIT SYSTEM ROUTES ---
+@app.get("/healthz")
+async def healthz():
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
 @app.get("/")
 async def root_spa():
-    """v5.7.32: Explicit root handler for Railway SPA."""
     target_index = os.path.join(frontend_path, "index.html")
     if os.path.exists(target_index):
         return FileResponse(target_index)
-    return FileResponse("/app/static/index.html")
+    return FileResponse("/app/static/index.html") if os.path.exists("/app/static/index.html") else {"detail": "SPA not found"}
 
-# Include routers
+# --- 3. INCLUDE ALL ROUTERS ---
+# v5.7.43: Cleaned up redundant prefixes
 app.include_router(api_router, tags=["api"])
-app.include_router(agent_router, prefix=f"{settings.API_V1_STR}", tags=["agent"])
 app.include_router(agent_router, prefix=f"{settings.API_V1_STR}/agent", tags=["agent"])
 app.include_router(admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 app.include_router(webhooks_router, prefix=f"{settings.API_V1_STR}/webhooks", tags=["webhooks"])
@@ -541,27 +511,7 @@ app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["aut
 app.include_router(im_router, prefix=f"{settings.API_V1_STR}/im", tags=["im"])
 app.include_router(proxy_router, prefix=f"{settings.API_V1_STR}/checkin", tags=["checkin"])
 
-# --- 2. STATIC ASSETS & FALLBACK (v5.7.24) ---
+# --- 4. STATIC ASSETS ---
 if os.path.exists(frontend_path):
     app.mount("/assets", StaticFiles(directory=os.path.join(frontend_path, "assets")), name="assets")
-
-    # Final catch-all to ensure any non-matched route returns index.html for SPA
-    @app.get("/{full_path:path}")
-    async def serve_frontend(request: Request, full_path: str = None):
-        # 1. Exclude API routes
-        if full_path and (full_path.startswith("api/") or full_path.startswith("v1/")):
-             return {"detail": "Not Found"}
-             
-        # 2. Check if it's a physical file in the frontend dist root (like sw.js, manifest.json)
-        if full_path:
-            file_path = os.path.join(frontend_path, full_path)
-            if os.path.isfile(file_path):
-                return FileResponse(file_path)
-        
-        # 3. Serve index.html as fallback for SPA routing
-        index_file = os.path.join(frontend_path, "index.html")
-        if os.path.exists(index_file):
-            return FileResponse(index_file)
-            
-        return {"detail": "Static assets not found"}
 

@@ -368,7 +368,7 @@ async def test_im_connectivity():
     db.close()
     
     return {
-        "version": "v5.7.42-STABLE",
+        "version": "v5.7.43-STABLE",
         "timestamp": datetime.now().isoformat(),
         "status": "ok",
         "ai_brain": {
