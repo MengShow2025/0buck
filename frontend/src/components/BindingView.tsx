@@ -78,9 +78,9 @@ const BindingView: React.FC = () => {
   }, [location.search, isAuthenticated, isAuthLoading, navigate]);
 
   const handleLoginClick = () => {
-    // Redirect to login with current path as return URL
+    // v5.7.14: Support both modal login and redirect login
     const returnUrl = encodeURIComponent(location.pathname + location.search);
-    navigate(`/login?redirect=${returnUrl}`);
+    window.location.href = `/login?redirect=${returnUrl}`;
   };
 
   return (

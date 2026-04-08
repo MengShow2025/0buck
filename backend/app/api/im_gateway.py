@@ -45,27 +45,27 @@ def generate_binding_sig(platform: str, uid: str) -> str:
 
 # --- 2. MULTI-PLATFORM BRAIN PROXY ---
 
-async def send_rich_message(platform: str, uid: str, text: str, title: str, link_url: Optional[str] = None):
-    """v5.6.4: Unified Rich Message Dispatcher for all IM platforms."""
+async def send_rich_message(platform: str, uid: str, text: str, title: str, link_url: Optional[str] = None, lang: str = "en"):
+    """v5.7.14: Language-adaptive Rich Message Dispatcher."""
     if platform == "feishu":
-        await send_feishu_rich_link(uid, text, title, link_url)
+        await send_feishu_rich_link(uid, text, title, link_url, lang)
     elif platform == "telegram":
         # Telegram Markdown Link
         msg = text
         if link_url:
-            msg += f"\n\n[🔗 点击登录获得完整服务]({link_url})" if "点击" in text or any('\u4e00' <= c <= '\u9fff' for c in text) else f"\n\n[🔗 Login for Full Service]({link_url})"
+            msg += f"\n\n[🔗 点击登录获得完整服务]({link_url})" if lang == "zh" else f"\n\n[🔗 Login for Full Service]({link_url})"
         await send_telegram_message(uid, msg)
     elif platform == "whatsapp":
         # WhatsApp supports preview_url for links
         msg = text
         if link_url:
-            msg += f"\n\n🔗 点击登录获得完整服务: {link_url}" if "点击" in text or any('\u4e00' <= c <= '\u9fff' for c in text) else f"\n\n🔗 Login for Full Service: {link_url}"
+            msg += f"\n\n🔗 点击登录获得完整服务: {link_url}" if lang == "zh" else f"\n\n🔗 Login for Full Service: {link_url}"
         await send_whatsapp_message(uid, msg)
     elif platform == "discord":
         # Discord Markdown Link
         msg = text
         if link_url:
-            msg += f"\n\n[🔗 点击登录获得完整服务]({link_url})" if "点击" in text or any('\u4e00' <= c <= '\u9fff' for c in text) else f"\n\n[🔗 Login for Full Service]({link_url})"
+            msg += f"\n\n[🔗 点击登录获得完整服务]({link_url})" if lang == "zh" else f"\n\n[🔗 Login for Full Service]({link_url})"
         await send_discord_message(uid, msg)
     else:
         # Fallback to plain text
@@ -112,7 +112,7 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
         thinking_msg = thinking_msgs.get(lang, thinking_msgs["en"])
         
         # v5.6.5: Thinking status shouldn't have a login link yet (too early)
-        await send_rich_message(platform, platform_uid, thinking_msg, "0Buck AI Brain", None)
+        await send_rich_message(platform, platform_uid, thinking_msg, "0Buck AI Brain", None, lang)
         
         # 2. Call AI Brain
         logger.info(f"🧠 [{platform.upper()}] Process for {platform_uid} (Guest={is_guest})")
@@ -126,7 +126,7 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
             main_reply = f"⚠️ 0Buck 智脑暂时无法响应: {str(ai_err)}" if lang == "zh" else f"⚠️ 0Buck AI Brain error: {str(ai_err)}"
         
         # 3. Send final response (Footer/Login link is handled elegantly by send_rich_message)
-        await send_rich_message(platform, platform_uid, main_reply, "0Buck AI Brain", bind_url if is_guest else None)
+        await send_rich_message(platform, platform_uid, main_reply, "0Buck AI Brain", bind_url if is_guest else None, lang)
         logger.info(f"✅ [{platform.upper()}] Response complete for {platform_uid}")
         
     except Exception as e:
@@ -157,14 +157,17 @@ async def send_feishu_message(receive_id: str, content: str):
     async with httpx.AsyncClient() as client:
         await client.post(url, json=payload, headers=headers)
 
-async def send_feishu_rich_link(receive_id: str, text: str, title: str, link_url: Optional[str] = None):
-    """v5.6.3: Send Feishu Rich Text Message with immersive links."""
+async def send_feishu_rich_link(receive_id: str, text: str, title: str, link_url: Optional[str] = None, lang: str = "en"):
+    """v5.7.14: Send Feishu Rich Text Message with language-adaptive links."""
     token = await get_feishu_tenant_access_token()
     if not token: return
     url = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"}
     
-    # Construct rich text content
+    # Language-aware link text
+    link_text = "🔗 点击登录获得完整服务" if lang == "zh" else "🔗 Login for Full Service"
+    
+    # Construct rich text content (Feishu uses 'zh_cn' as key, but we can provide 'en_us' too)
     content_obj = {
         "zh_cn": {
             "title": title,
@@ -175,9 +178,8 @@ async def send_feishu_rich_link(receive_id: str, text: str, title: str, link_url
     }
     
     if link_url:
-        # Append a button or link tag for immersive browser
         content_obj["zh_cn"]["content"].append([
-            {"tag": "a", "text": "🔗 点击登录获得完整服务", "href": link_url}
+            {"tag": "a", "text": link_text, "href": link_url}
         ])
 
     payload = {

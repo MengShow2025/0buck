@@ -28,8 +28,11 @@ def safe_float(val, default=0.0):
         return float(val)
     except: return default
 
-async def find_market_evidence(name, original_kw=None):
-    """v5.7.1: Deep Audit with HTTP Fetch & Pack Normalization."""
+async def find_market_evidence(name, landed_cost, original_kw=None):
+    """
+    v5.8: Profit-Aware Deep Audit. 
+    Heuristic: The real Amazon price must be significantly higher than our cost.
+    """
     from app.services.tools import _web_search_func
     import httpx
     
@@ -44,7 +47,6 @@ async def find_market_evidence(name, original_kw=None):
     }
     
     try:
-        # 1. Broad Search
         search_query = f"{name} price on amazon.com"
         search_results = await _web_search_func(search_query)
         
@@ -65,38 +67,48 @@ async def find_market_evidence(name, original_kw=None):
                 if resp.status_code == 200:
                     content = resp.text.lower()
                     
-                    # 3. Pack Size Detection
+                    # 1. Pack Size Detection
                     pack_match = re.search(r'(\d+)\s?-(?:pack|pcs|set|pairs|count)', content)
                     if not pack_match:
                         pack_match = re.search(r'(?:pack|set|count)\s?of\s?(\d+)', content)
                     if pack_match:
                         evidence["pack_size"] = int(pack_match.group(1))
                     
-                    # 4. Price Extraction
-                    list_match = re.search(r'list\s?price:?\s?\$(\d+(?:\.\d{2})?)', content)
-                    selling_matches = re.findall(r'\$(\d+(?:\.\d{2})?)', content)
-                    
-                    if selling_matches:
-                        prices = [float(p) for p in selling_matches if 1.0 < float(p) < 1000.0]
-                        if prices:
-                            evidence["selling_price"] = prices[0]
-                            if list_match:
-                                evidence["list_price"] = float(list_match.group(1))
-                            else:
-                                evidence["list_price"] = max(prices) if len(prices) > 1 else prices[0]
+                    # 2. Advanced Price Extraction
+                    # Heuristic: We are looking for the "main" price. 
+                    # Main prices on Amazon are usually larger and appear near 'price' keywords.
+                    # We also know the price MUST be > Landed Cost for 0Buck to work.
+                    all_prices = re.findall(r'\$(\d+(?:\.\d{2})?)', content)
+                    if all_prices:
+                        parsed_prices = [float(p) for p in all_prices if float(p) > 1.0]
+                        # Sort and filter for prices that are at least > (landed_cost / pack_size)
+                        # Because if Amazon price is lower than our cost, it's not a viable product for us.
+                        min_viable_market = landed_cost / evidence["pack_size"]
+                        viable_prices = [p for p in parsed_prices if p > min_viable_market]
+                        
+                        if viable_prices:
+                            # Take the most frequent or the first one that is > min_viable
+                            # Usually the selling price is the first prominent one.
+                            evidence["selling_price"] = viable_prices[0]
+                            
+                            # List price is usually the highest one found
+                            evidence["list_price"] = max(viable_prices)
+                        else:
+                            # If no price found > our cost, this product is a FAIL for arbitrage
+                            print(f"      🚫 Market Audit Fail: All found prices (${parsed_prices[:3]}) are lower than our cost (${landed_cost:.2f})")
+                            return evidence
                     
                     if evidence["selling_price"] > 0:
                         evidence["unit_selling_price"] = round(evidence["selling_price"] / evidence["pack_size"], 2)
                         evidence["unit_list_price"] = round(evidence["list_price"] / evidence["pack_size"], 2)
                         evidence["match_score"] = 0.9
-                
     except Exception as e:
         print(f"      ⚠️ Deep Audit Error: {e}")
         
     return evidence
 
-async def mirror_extract_cj(cj_service, p, original_kw=None, supply_chain=None):
-    """v5.7.1: Mirror Extractor with Truth Protocol & Units."""
+async def mirror_extract_cj(cj_service, p, original_kw=None):
+    """v5.8: Mirror Extractor with Profit Firewall."""
     if not p or not isinstance(p, dict): return None
     pid = p.get("pid") or p.get("id")
     name = p.get("productNameEn") or p.get("nameEn") or p.get("productName") or "Unknown"
@@ -105,7 +117,7 @@ async def mirror_extract_cj(cj_service, p, original_kw=None, supply_chain=None):
         price_usd = float(str(price_usd_raw).split(" -- ")[-1]) if " -- " in str(price_usd_raw) else float(price_usd_raw)
     except: price_usd = 0.0
     
-    # Logistics
+    # 1. Logistics
     freight_list = await cj_service.get_freight_estimate(pid, "US")
     freight = 8.0
     logistic_method = "0Buck Global Express"
@@ -117,7 +129,7 @@ async def mirror_extract_cj(cj_service, p, original_kw=None, supply_chain=None):
         except: pass
     landed_cost = price_usd + freight
     
-    # Detail
+    # 2. Detailed Data
     detail = await cj_service.get_product_detail(pid)
     image_list = []
     description_html = ""
@@ -132,9 +144,8 @@ async def mirror_extract_cj(cj_service, p, original_kw=None, supply_chain=None):
     if detail:
         if detail.get("productImage"): image_list = detail.get("productImage").split(",")
         description_html = detail.get("description", "")
-        inventory_data = {"cj": detail.get("cjInventory", 0), "factory": detail.get("factoryInventory", 0), "total": detail.get("cjInventory", 0) + detail.get("factoryInventory", 0)}
+        inventory_data = {"cj": detail.get("cjInventory", 0), "factory": detail.get("factoryInventory", 0), "total": (detail.get("cjInventory", 0) or 0) + (detail.get("factoryInventory", 0) or 0)}
         vendor_info = {"name": detail.get("shopName", "Artisan Partner"), "rating": detail.get("shopRating", 5.0)}
-        
         p_w_det = safe_float(detail.get("productWeight"))
         if p_w_det > 0: product_weight = p_w_det / 1000.0 if p_w_det > 5.0 else p_w_det
         pk_w_det = safe_float(detail.get("packingWeight"))
@@ -144,18 +155,26 @@ async def mirror_extract_cj(cj_service, p, original_kw=None, supply_chain=None):
     if not image_list: image_list = [p.get("bigImage") or p.get("productImage")]
     image_list = [img if img.startswith("http") else f"https:{img}" if img.startswith("//") else img for img in image_list if img]
 
-    # Market Audit
-    print(f"   🔍 Strict Market Audit: {name[:30]}...")
-    evidence = await find_market_evidence(name, original_kw)
+    # 3. Profit-Aware Market Audit
+    print(f"   🔍 Profit Audit: {name[:30]}... Cost: ${landed_cost:.2f}")
+    evidence = await find_market_evidence(name, landed_cost, original_kw)
     m_sell = evidence["unit_selling_price"]
     m_list = evidence["unit_list_price"]
     
     if m_sell <= 0:
-        print(f"   ⏭️ Skipping: Price check failed.")
+        print(f"   ⏭️ Skipping: Market price check failed or lower than our cost.")
         return None
     
+    # 0Buck Model: Sale Price = 60% of Amazon.
     target_price = round(m_sell * 0.6, 2)
-    roi = round(target_price / landed_cost, 2) if landed_cost > 0 else 0.0
+    
+    # PROFIT FIREWALL (v5.8): Target Price must cover cost + 20% margin
+    profit_floor = landed_cost * 1.2
+    if target_price < profit_floor:
+        print(f"   🚫 Profit Firewall Triggered: Target ${target_price:.2f} is below floor ${profit_floor:.2f}. SKIPPING.")
+        return None
+    
+    roi = round(target_price / landed_cost, 2)
     
     return {
         "raw_data": p,
@@ -185,7 +204,7 @@ async def ingest_v57(db, c, supply_chain):
         description_zh=enriched.get("description_en") or "", cost_cny=float(f['landed_cost'] * 7.1),
         amazon_price=float(f['market_evidence']['selling_price']), amazon_compare_at_price=float(f['market_evidence']['list_price']),
         market_comparison_url=f['market_evidence']['url'], estimated_sale_price=float(round(f['market_evidence']['selling_price'] * 0.6, 2)),
-        profit_ratio=float(c['roi']), images=f['images'], discovery_source="CJ_TRUTH_V5.7.1", status="approved",
+        profit_ratio=float(c['roi']), images=f['images'], discovery_source="CJ_PROFIT_GUARD_V5.8", status="approved",
         source_platform="CJ", source_url=f"https://app.cjdropshipping.com/product-detail.html?id={pid}",
         category="Smart Home", category_type="PROFIT" if c['is_cashback'] else "TRAFFIC", is_cashback_eligible=c['is_cashback'],
         desire_hook=enriched.get("desire_hook"), desire_logic=enriched.get("desire_logic"), desire_closing=enriched.get("desire_closing"),
@@ -194,19 +213,24 @@ async def ingest_v57(db, c, supply_chain):
     try:
         db.add(new_draft)
         db.commit()
-        print(f"   ✅ TRUTH VERIFIED: {f['title'][:20]}")
+        print(f"   ✅ PROFIT SECURED: {f['title'][:20]} (Price: ${new_draft.estimated_sale_price})")
     except: db.rollback()
 
 async def main():
     db = SessionLocal()
     cj_service = CJDropshippingService()
     supply_chain = SupplyChainService(db)
-    print("🚀 0Buck v5.7.1 Strict Truth Protocol (Pack-Aware)...")
-    search_results = await cj_service.search_products("Tuya Smart WiFi Door Sensor", size=5)
-    if search_results:
-        for p in search_results:
-            mirror_data = await mirror_extract_cj(cj_service, p, supply_chain=supply_chain)
-            if mirror_data: await ingest_v57(db, mirror_data, supply_chain)
+    print("🚀 0Buck v5.8 Profit Guard & Strict Truth Pipeline...")
+    
+    # Broad sweep keywords
+    search_keywords = ["Tuya Smart", "Smart Home Sensor", "WiFi Camera", "Smart Socket"]
+    for kw in search_keywords:
+        print(f"\n📂 Sweeping: {kw}")
+        search_results = await cj_service.search_products(kw, size=10)
+        if search_results:
+            for p in search_results:
+                mirror_data = await mirror_extract_cj(cj_service, p)
+                if mirror_data: await ingest_v57(db, mirror_data, supply_chain)
     db.close()
 
 if __name__ == "__main__":

@@ -90,7 +90,7 @@ class ReflectionService:
             identity = data.get("butler_identity", {})
             if identity:
                 updated = False
-                forbidden_names = ["hello", "hi", "hey", "你好", "您好", "早上好", "中午好", "下午好", "晚上好", "greetings", "yo"]
+                forbidden_names = ["hello", "hi", "hey", "你好", "您好", "早上好", "中午好", "下午好", "晚上好", "greetings", "yo", "有什么好产品推荐"]
                 
                 b_name = identity.get("butler_name", "").strip()
                 if b_name and b_name.lower() not in forbidden_names and len(b_name) < 30:
