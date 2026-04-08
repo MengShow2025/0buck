@@ -2,12 +2,15 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 type Theme = 'light' | 'dark' | 'system';
 type Language = 'en' | 'zh';
+export type DrawerType = 'none' | 'lounge' | 'square' | 'prime' | 'wallet' | 'fans';
 
 interface AppContextType {
   theme: Theme;
   setTheme: (t: Theme) => void;
   language: Language;
   setLanguage: (l: Language) => void;
+  activeDrawer: DrawerType;
+  setActiveDrawer: (drawer: DrawerType) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -15,6 +18,7 @@ export const AppContext = createContext<AppContextType | null>(null);
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [theme, setTheme] = useState<Theme>('system');
   const [language, setLanguage] = useState<Language>('zh');
+  const [activeDrawer, setActiveDrawer] = useState<DrawerType>('none');
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -26,7 +30,7 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   }, [theme]);
 
   return (
-    <AppContext.Provider value={{ theme, setTheme, language, setLanguage }}>
+    <AppContext.Provider value={{ theme, setTheme, language, setLanguage, activeDrawer, setActiveDrawer }}>
       {children}
     </AppContext.Provider>
   );

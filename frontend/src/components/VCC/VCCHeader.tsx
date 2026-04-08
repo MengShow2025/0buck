@@ -1,7 +1,10 @@
 import React from 'react';
 import { Wallet, ShoppingBag, ChevronLeft } from 'lucide-react';
+import { useAppContext } from './AppContext';
 
 export const VCCHeader = () => {
+  const { setActiveDrawer } = useAppContext();
+
   return (
     <div className="flex items-center justify-between h-16 px-4 bg-[var(--wa-teal)] text-white shadow-md z-20">
       <div className="flex items-center gap-3">
@@ -13,8 +16,14 @@ export const VCCHeader = () => {
         </div>
       </div>
       <div className="flex gap-4">
-        <Wallet className="w-6 h-6 cursor-pointer" />
-        <ShoppingBag className="w-6 h-6 cursor-pointer" />
+        <Wallet 
+          className="w-6 h-6 cursor-pointer" 
+          onClick={() => setActiveDrawer('wallet')}
+        />
+        <ShoppingBag 
+          className="w-6 h-6 cursor-pointer" 
+          onClick={() => setActiveDrawer('fans')}
+        />
       </div>
     </div>
   );

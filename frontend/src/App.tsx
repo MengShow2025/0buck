@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { VortexContainer } from './components/VCC/VortexContainer';
 import { VCCInput } from './components/VCC/VCCInput';
 import { CustomMessageUI } from './components/VCC/CustomMessageUI';
+import { GlobalDrawer } from './components/VCC/Drawer/GlobalDrawer';
 
 // Mock data to preview the UI
 const initialMessages = [
@@ -119,6 +120,9 @@ function App() {
       <div className="w-full bg-gradient-to-t from-[var(--wa-bg)] via-[var(--wa-bg)] to-transparent pt-6 z-20">
         <VCCInput onSendMessage={handleSendMessage} />
       </div>
+
+      {/* Global Drawer Overlay */}
+      <GlobalDrawer />
     </div>
   );
 }
