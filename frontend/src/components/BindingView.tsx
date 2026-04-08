@@ -4,20 +4,35 @@ import axios from 'axios';
 import { motion } from 'framer-motion';
 import { CheckCircle2, XCircle, Loader2, Link as LinkIcon } from 'lucide-react';
 import { getApiUrl } from '../utils/api';
+import { useQuery } from '@tanstack/react-query';
 
-interface BindingViewProps {
-  isAuthenticated: boolean;
-  onLoginClick: () => void;
-}
-
-const BindingView: React.FC<BindingViewProps> = ({ isAuthenticated, onLoginClick }) => {
+const BindingView: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'loading' | 'success' | 'error' | 'unauthorized'>('loading');
   const [message, setMessage] = useState('');
   const [userName, setUserName] = useState('');
 
+  // v5.7.12: Use global auth query instead of props for router compatibility
+  const { data: authData, isLoading: isAuthLoading } = useQuery<any>({
+    queryKey: ['auth-me'],
+    queryFn: async () => {
+      try {
+        const url = getApiUrl('/v1/auth/me');
+        const response = await axios.get(url);
+        return response.data;
+      } catch (e) {
+        return null;
+      }
+    },
+    staleTime: 1000 * 60 * 5,
+  });
+
+  const isAuthenticated = !!authData?.user;
+
   useEffect(() => {
+    if (isAuthLoading) return;
+
     const params = new URLSearchParams(location.search);
     const platform = params.get('platform');
     const uid = params.get('uid');
@@ -60,7 +75,13 @@ const BindingView: React.FC<BindingViewProps> = ({ isAuthenticated, onLoginClick
     };
 
     performBinding();
-  }, [location.search, isAuthenticated, navigate]);
+  }, [location.search, isAuthenticated, isAuthLoading, navigate]);
+
+  const handleLoginClick = () => {
+    // Redirect to login with current path as return URL
+    const returnUrl = encodeURIComponent(location.pathname + location.search);
+    navigate(`/login?redirect=${returnUrl}`);
+  };
 
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] px-6 text-center">
@@ -76,14 +97,14 @@ const BindingView: React.FC<BindingViewProps> = ({ isAuthenticated, onLoginClick
           正在将您的 0Buck 账号与第三方平台进行安全关联
         </p>
 
-        {status === 'loading' && (
+        {(status === 'loading' || isAuthLoading) && (
           <div className="flex flex-col items-center py-4">
             <Loader2 className="animate-spin text-primary mb-4" size={48} />
             <p className="text-primary font-medium">正在验证身份并同步数据...</p>
           </div>
         )}
 
-        {status === 'success' && (
+        {!isAuthLoading && status === 'success' && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -103,7 +124,7 @@ const BindingView: React.FC<BindingViewProps> = ({ isAuthenticated, onLoginClick
           </motion.div>
         )}
 
-        {status === 'error' && (
+        {!isAuthLoading && status === 'error' && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -121,7 +142,7 @@ const BindingView: React.FC<BindingViewProps> = ({ isAuthenticated, onLoginClick
           </motion.div>
         )}
 
-        {status === 'unauthorized' && (
+        {!isAuthLoading && status === 'unauthorized' && (
           <motion.div 
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -133,7 +154,7 @@ const BindingView: React.FC<BindingViewProps> = ({ isAuthenticated, onLoginClick
               </p>
             </div>
             <button 
-              onClick={onLoginClick}
+              onClick={handleLoginClick}
               className="w-full py-4 rounded-full bg-primary text-on-primary font-bold text-lg shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition-all"
             >
               立即登录并绑定
@@ -143,7 +164,7 @@ const BindingView: React.FC<BindingViewProps> = ({ isAuthenticated, onLoginClick
       </div>
       
       <p className="mt-8 text-xs text-on-surface-variant opacity-50">
-        0Buck Secure Identity Protocol v5.5.8
+        0Buck Secure Identity Protocol v5.7.12
       </p>
     </div>
   );

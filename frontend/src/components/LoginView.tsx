@@ -4,10 +4,12 @@ import Logo from './Logo';
 import { getApiUrl } from '../utils/api';
 import axios from 'axios';
 import { useTranslation } from 'react-i18next';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface LoginViewProps {
-  onLogin: (email: string, user_data?: any) => void;
-  onGoRegister: () => void;
+  onLogin?: (email: string, user_data?: any) => void;
+  onGoRegister?: () => void;
   onGuestAccess?: () => void;
   onInteraction?: () => void;
   isModal?: boolean;
@@ -25,7 +27,12 @@ export default function LoginView({
   initialEmail = ''
 }: LoginViewProps) {
   const { t } = useTranslation();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  
   const [email, setEmail] = useState(initialEmail);
+  // ... rest of state
   const [password, setPassword] = useState('');
   const [staySignedIn, setStaySignedIn] = useState(true);
   const [step, setStep] = useState<'login' | '2fa'>(initialStep);
@@ -57,8 +64,16 @@ export default function LoginView({
       console.log('Login Response:', res.data);
       
       if (res.data.status === 'success') {
-        // If successful, pass the full user object back
-        onLogin(email, res.data.user);
+        // v5.7.12: Handle login success with redirection support
+        if (onLogin) {
+          onLogin(email, res.data.user);
+        } else {
+          // Standalone page mode
+          await queryClient.invalidateQueries({ queryKey: ['auth-me'] });
+          const params = new URLSearchParams(location.search);
+          const redirectUrl = params.get('redirect');
+          navigate(redirectUrl ? decodeURIComponent(redirectUrl) : '/');
+        }
       }
     } catch (err: any) {
       console.error('Login failed:', err);
@@ -87,7 +102,15 @@ export default function LoginView({
         email,
         code: twoFactorCode
       });
-      onLogin(email);
+      
+      if (onLogin) {
+        onLogin(email);
+      } else {
+        await queryClient.invalidateQueries({ queryKey: ['auth-me'] });
+        const params = new URLSearchParams(location.search);
+        const redirectUrl = params.get('redirect');
+        navigate(redirectUrl ? decodeURIComponent(redirectUrl) : '/');
+      }
     } catch (err) {
       setError(t('me.2fa.invalid_code'));
     } finally {
@@ -263,7 +286,7 @@ export default function LoginView({
           </div>
         )}
         <p className="text-center mt-8 text-xs text-white/30">
-          System authorized access only. <button onClick={onGoRegister} className="text-white/60 hover:text-primary font-bold transition-colors">Register new node</button>
+          System authorized access only. <button onClick={() => onGoRegister ? onGoRegister() : navigate('/register')} className="text-white/60 hover:text-primary font-bold transition-colors">Register new node</button>
         </p>
       </div>
     </div>
