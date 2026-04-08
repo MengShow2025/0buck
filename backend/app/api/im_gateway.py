@@ -159,20 +159,24 @@ async def send_feishu_rich_link(receive_id: str, text: str, title: str, link_url
     # Language-aware link text
     link_text = "🔗 点击登录获得完整服务" if lang == "zh" else "🔗 Login for Full Service"
     
-    # Construct rich text content (Feishu uses 'zh_cn' as key, but we can provide 'en_us' too)
-    content_obj = {
-        "zh_cn": {
-            "title": title,
-            "content": [
-                [{"tag": "text", "text": text}]
-            ]
-        }
+    # Construct rich text content
+    # v5.7.16: Provide both zh_cn and en_us for maximum compatibility
+    content_payload = {
+        "title": title,
+        "content": [
+            [{"tag": "text", "text": text}]
+        ]
     }
     
     if link_url:
-        content_obj["zh_cn"]["content"].append([
+        content_payload["content"].append([
             {"tag": "a", "text": link_text, "href": link_url}
         ])
+
+    content_obj = {
+        "zh_cn": content_payload,
+        "en_us": content_payload
+    }
 
     payload = {
         "receive_id": receive_id,

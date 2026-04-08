@@ -60,11 +60,23 @@ export default function App() {
 
   // Sync butler name and nickname from profile
   useEffect(() => {
-    // v5.7.15: Support resetting butler name to default
-    const bName = currentUser?.butler_name || 'AI Butler';
-    setAgentName(bName);
-    localStorage.setItem('butlerName', bName);
+    // v5.7.16: Industrial-grade Sync Logic
+    // If server has a name, use it. If not, use 'AI Butler'.
+    const serverButlerName = currentUser?.butler_name;
+    const currentLocalName = localStorage.getItem('butlerName');
     
+    if (serverButlerName) {
+      setAgentName(serverButlerName);
+      localStorage.setItem('butlerName', serverButlerName);
+    } else if (currentLocalName === '有什么好产品推荐') {
+      // Force clear the old bad name if it's still in localStorage
+      const defaultName = 'AI Butler';
+      setAgentName(defaultName);
+      localStorage.setItem('butlerName', defaultName);
+    } else if (!currentLocalName) {
+      setAgentName('AI Butler');
+    }
+
     if (currentUser?.user_nickname) {
       setUserNickname(currentUser.user_nickname);
       localStorage.setItem('userNickname', currentUser.user_nickname);

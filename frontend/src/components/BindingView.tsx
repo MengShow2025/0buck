@@ -14,7 +14,7 @@ const BindingView: React.FC = () => {
   const [userName, setUserName] = useState('');
 
   // v5.7.12: Use global auth query instead of props for router compatibility
-  const { data: authData, isLoading: isAuthLoading } = useQuery<any>({
+  const { data: authData, isLoading: isAuthLoading, isFetched: isAuthFetched } = useQuery<any>({
     queryKey: ['auth-me'],
     queryFn: async () => {
       try {
@@ -31,7 +31,8 @@ const BindingView: React.FC = () => {
   const isAuthenticated = !!authData?.user;
 
   useEffect(() => {
-    if (isAuthLoading) return;
+    // v5.7.16: Wait for fetch to complete before determining auth status
+    if (isAuthLoading || !isAuthFetched) return;
 
     const params = new URLSearchParams(location.search);
     const platform = params.get('platform');
@@ -49,6 +50,7 @@ const BindingView: React.FC = () => {
       return;
     }
 
+    // If authenticated, perform the binding automatically
     const performBinding = async () => {
       try {
         const url = getApiUrl(`/v1/im/bind?platform=${platform}&uid=${uid}&sig=${sig}`);
