@@ -394,8 +394,8 @@ async def feishu_webhook(request: Request):
         if payload.get("type") == "url_verification":
             return JSONResponse(content={"challenge": payload.get("challenge")}, status_code=200)
         
-        # 2. Handle Interactive Card Callbacks (v5.7.39)
-        # v5.7.39: Robust ID extraction from Feishu callback
+        # 2. Handle Interactive Card Callbacks (v5.7.40)
+        # v5.7.40: High-reliability response for Feishu buttons
         if "action" in payload:
             sender_id = payload.get("open_id") or payload.get("operator", {}).get("open_id")
             if not sender_id: return JSONResponse(content={}, status_code=200)
@@ -404,9 +404,21 @@ async def feishu_webhook(request: Request):
             if action_val.get("command") == "get_sync_code":
                 # User clicked "Get Sync Code" button
                 logger.info(f"⚡ Feishu Interactive: User {sender_id} requested sync code")
-                reply = await handle_binding_command("feishu", sender_id, "zh")
-                await send_feishu_message(sender_id, reply)
-                return JSONResponse(content={}, status_code=200)
+                
+                # v5.7.40: Offload the work to background to respond to Feishu IMMEDIATELY
+                async def delayed_sync():
+                    reply = await handle_binding_command("feishu", sender_id, "zh")
+                    await send_feishu_message(sender_id, reply)
+                
+                asyncio.create_task(delayed_sync())
+                
+                # Return a specific JSON to Feishu to stop the spinner and show a toast
+                return JSONResponse(content={
+                    "toast": {
+                        "type": "info",
+                        "content": "正在为您获取同步指令，请稍候..."
+                    }
+                }, status_code=200)
 
         # 3. Handle Regular Events
         event_id = payload.get("header", {}).get("event_id")
