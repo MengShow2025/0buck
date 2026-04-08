@@ -68,12 +68,49 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
         except AttributeError:
             last_msg = request.messages[-1]["content"]
             
-        # --- 2. REVERSE BINDING (v5.7.37) ---
+        # --- 2. REVERSE BINDING (v5.7.51: Bind & Unbind) ---
         # If user is logged in and sends a 6-digit code (alone or in a sentence), try to bind!
         # This supports the "Copy-Paste Sentence" flow.
         import re
         code_match = re.search(r'\b(\d{6})\b', last_msg)
         
+        # Check for Unbinding Keywords in App Chat (v5.7.51)
+        unbinding_keywords = ["unbind", "解绑", "/unbind"]
+        if any(kw in last_msg.lower() for kw in unbinding_keywords):
+            target_user_id = user_id
+            if target_user_id <= 1 and request.user_id:
+                try: target_user_id = int(request.user_id)
+                except: pass
+                
+            if target_user_id > 1:
+                # Find active bindings for this user
+                bindings = db.query(UserIMBinding).filter_by(user_id=target_user_id, is_active=True).all()
+                if bindings:
+                    for b in bindings:
+                        b.is_active = False
+                    db.commit()
+                    return {
+                        "id": f"msg_unbind_{datetime.now().timestamp()}",
+                        "choices": [{
+                            "message": {
+                                "content": "✨ 已为您成功解除所有 IM 账号关联。您现在处于独立的本地账号状态，主人！",
+                                "role": "assistant"
+                            }
+                        }],
+                        "base_resp": {"status_code": 0, "status_msg": "ok"}
+                    }
+                else:
+                    return {
+                        "id": f"msg_unbind_none_{datetime.now().timestamp()}",
+                        "choices": [{
+                            "message": {
+                                "content": "⚠️ 发现您当前尚未关联任何 IM 账号呢，主人。无需进行解绑操作。",
+                                "role": "assistant"
+                            }
+                        }],
+                        "base_resp": {"status_code": 0, "status_msg": "ok"}
+                    }
+
         if (user_id > 1 or request.user_id) and code_match:
             # v5.7.45: Dynamic user_id extraction for binding
             target_user_id = user_id
@@ -99,7 +136,7 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
                 
                 logger.info(f"✨ CHAT BINDING SUCCESS: {pending.platform} linked to User {target_user_id}")
                 
-                # v5.7.50: Notify IM side about success AND provide unbind instructions
+                # v5.7.51: Enhanced dual-side notifications with Unbind instructions
                 from app.api.im_gateway import send_rich_message
                 im_reply = (
                     f"✨ 身份同步成功！\n\n您的 {pending.platform} 账号已与 0Buck 账户关联。现在您可以两端同步享受服务了。\n\n"
@@ -111,7 +148,10 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
                     "id": f"msg_bind_{datetime.now().timestamp()}",
                     "choices": [{
                         "message": {
-                            "content": f"✨ 身份同步成功！我已经识别了您的指令，并将您的 {pending.platform} 账号与当前账户成功关联。现在您可以两端同步享受我的服务了，主人！",
+                            "content": (
+                                f"✨ 身份同步成功！我已经识别了您的指令，并将您的 {pending.platform} 账号与当前账户成功关联。现在您可以两端同步享受我的服务了，主人！\n\n"
+                                f"💡 小贴士：如果您以后想要解除关联，只需对我发送“解绑”或“unbind”即可。"
+                            ),
                             "role": "assistant"
                         }
                     }],
