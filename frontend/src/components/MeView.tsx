@@ -99,6 +99,9 @@ export default function MeView({
   const [showModelDropdown, setShowModelDropdown] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState<'points' | 'renewal' | 'rewards' | 'withdrawal' | null>(null);
   const [show2FAModal, setShow2FAModal] = useState(false);
+  const [showIMBindModal, setShowIMBindModal] = useState(false);
+  const [imBindCode, setImBindCode] = useState('');
+  const [isBindingIM, setIsIMBinding] = useState(false);
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
   const [twoFactorData, setTwoFactorData] = useState<{qr_code: string, secret: string} | null>(null);
   const [verificationCode, setVerificationCode] = useState('');
@@ -180,6 +183,23 @@ export default function MeView({
       alert(t('me.2fa.invalid_code'));
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  const handleClaimIM = async () => {
+    if (imBindCode.length !== 6) return;
+    setIsIMBinding(true);
+    try {
+      await axios.post(getApiUrl('/v1/im/claim'), { code: imBindCode });
+      setShowIMBindModal(false);
+      setImBindCode('');
+      alert(t('me.im_bind.success') || 'Linked successfully!');
+      queryClient.invalidateQueries({ queryKey: ['auth-me'] });
+    } catch (err: any) {
+      console.error('IM Binding failed:', err);
+      alert(err.response?.data?.detail || 'Binding failed. Code might be invalid or expired.');
+    } finally {
+      setIsIMBinding(false);
     }
   };
 
@@ -538,6 +558,26 @@ export default function MeView({
       {/* Settings List */}
       <section className="glass-panel rounded-[1rem] sm:rounded-[2.5rem] overflow-hidden mt-4 sm:mt-8 relative z-20">
         <div className="flex flex-col">
+          {/* Reverse IM Binding Button (v5.7.35) */}
+          <button 
+            onClick={() => setShowIMBindModal(true)}
+            className="flex items-center justify-between p-3 sm:p-6 hover:bg-white/[0.02] transition-colors group border-b border-white/5 relative z-30 cursor-pointer active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-4">
+              <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
+                <MessageSquare className="w-5 h-5" />
+              </div>
+              <div className="text-left">
+                <h4 className="font-bold text-white text-sm uppercase tracking-tight">{t('me.link_im') || 'Link IM Account'}</h4>
+                <p className="text-[10px] text-zinc-500 font-bold uppercase tracking-widest">{t('me.link_im_desc') || 'Bind Feishu, Telegram, etc.'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 bg-primary/20 text-primary text-[8px] font-black rounded uppercase tracking-widest">New</span>
+              <ChevronRight className="w-5 h-5 text-zinc-600 group-hover:text-primary transition-colors" />
+            </div>
+          </button>
+
           {/* Google 2FA Button - Moved to Top for better accessibility */}
           <button 
             onClick={handle2FASetup}
@@ -895,6 +935,59 @@ export default function MeView({
                 className="w-full py-4 bg-primary text-white rounded-2xl font-black uppercase tracking-[0.2em] hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:hover:scale-100"
               >
                 {isVerifying ? 'VERIFYING...' : t('me.2fa.enable')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* IM Binding Modal (v5.7.35) */}
+      {showIMBindModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setShowIMBindModal(false)}></div>
+          <div className="relative w-full max-w-md glass-panel rounded-[2.5rem] p-8 border-white/10 shadow-2xl animate-in fade-in zoom-in duration-300">
+            <button 
+              onClick={() => setShowIMBindModal(false)}
+              className="absolute top-6 right-6 p-2 hover:bg-white/5 rounded-full text-zinc-500 hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="flex items-center gap-4 mb-8">
+              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                <MessageSquare className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-headline font-black text-white uppercase tracking-tight">{t('me.im_bind.title') || 'Link IM Account'}</h3>
+                <p className="text-[10px] text-primary font-black uppercase tracking-[0.2em] mt-1">{t('me.im_bind.desc') || 'Enter 6-digit verification code'}</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="p-4 bg-primary/5 rounded-2xl border border-primary/10">
+                <p className="text-[11px] font-bold text-zinc-300 leading-relaxed">
+                  {t('me.im_bind.instruction') || 'Please send "bind" or "绑定" to our bot on Feishu/Telegram to get your unique 6-digit code.'}
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                <label className="text-[10px] font-black text-zinc-500 uppercase ml-2 tracking-widest">{t('me.im_bind.enter_code') || 'Verification Code'}</label>
+                <input 
+                  type="text" 
+                  maxLength={6}
+                  placeholder="000000"
+                  value={imBindCode}
+                  onChange={(e) => setImBindCode(e.target.value.replace(/\D/g, ''))}
+                  className="w-full h-14 px-6 rounded-2xl bg-black/40 border border-white/10 text-center text-2xl font-black tracking-[0.5em] text-white placeholder:text-zinc-700 focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all"
+                />
+              </div>
+
+              <button 
+                onClick={handleClaimIM}
+                disabled={imBindCode.length !== 6 || isBindingIM}
+                className="w-full py-4 bg-primary text-white rounded-2xl font-black uppercase tracking-[0.2em] hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg shadow-primary/20 disabled:opacity-50 disabled:hover:scale-100"
+              >
+                {isBindingIM ? 'BINDING...' : t('me.im_bind.submit') || 'CONFIRM LINK'}
               </button>
             </div>
           </div>

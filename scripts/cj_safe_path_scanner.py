@@ -4,6 +4,7 @@ import sys
 import os
 import json
 import re
+import random
 from decimal import Decimal
 
 # Ensure project root is in sys.path
@@ -29,7 +30,7 @@ def safe_float(val, default=0.0):
     except: return default
 
 async def find_market_evidence(name, landed_cost):
-    """v5.9.3: Flexible Evidence Extractor for Demo."""
+    """v5.9.4: Full Audit with Identity Match and Price Extraction."""
     from app.services.tools import _web_search_func
     
     evidence = {
@@ -39,41 +40,54 @@ async def find_market_evidence(name, landed_cost):
     }
     
     try:
-        # 1. Search without site restriction for broader snippets
-        search_query = f"{name} amazon price"
+        # Search for Amazon product with pricing context
+        search_query = f"{name} amazon official product price"
         results = await _web_search_func(search_query)
         
         if results and isinstance(results, list):
             for res in results:
                 url = res.get("url", "").lower()
-                if "amazon.com" in url:
-                    # Found an Amazon link
+                # Focus on standard Amazon product pages
+                if "amazon.com" in url and ("/dp/" in url or "/gp/product/" in url):
                     amz_title = (res.get("title") or "").lower()
                     text_blob = (amz_title + " " + (res.get("text") or "")).lower()
                     
-                    # More robust price regex
+                    # 1. Identity Check: Shared significant keywords
+                    cj_keys = set(re.findall(r'\w{4,}', name.lower()))
+                    amz_keys = set(re.findall(r'\w{4,}', amz_title))
+                    shared = cj_keys.intersection(amz_keys)
+                    
+                    # Must share at least 2 long keywords OR 30% of CJ title words
+                    if len(shared) < 2 and (len(shared) / max(len(cj_keys), 1)) < 0.3:
+                        continue
+                    
+                    # 2. Pack Size Detection
+                    pack_match = re.search(r'(\d+)\s?-(?:pack|pcs|set|count|pairs)', text_blob)
+                    if not pack_match: pack_match = re.search(r'(?:pack|set|count)\s?of\s?(\d+)', text_blob)
+                    if pack_match: evidence["pack_size"] = int(pack_match.group(1))
+                    
+                    # 3. Price Extraction from Exa Snippet
                     price_matches = re.findall(r'\$\s?(\d+(?:\.\d{2})?)', text_blob)
                     if price_matches:
-                        prices = sorted([float(p) for p in price_matches if float(p) > 1.0])
+                        prices = sorted([float(p) for p in price_matches if float(p) > 1.5])
                         if prices:
                             evidence["selling_price"] = prices[0]
-                            evidence["list_price"] = prices[-1] if len(prices) > 1 else prices[0] * 1.2
-                            evidence["unit_selling_price"] = evidence["selling_price"]
-                            evidence["unit_list_price"] = evidence["list_price"]
+                            evidence["list_price"] = max(prices)
+                            evidence["unit_selling_price"] = round(evidence["selling_price"] / evidence["pack_size"], 2)
+                            evidence["unit_list_price"] = round(evidence["list_price"] / evidence["pack_size"], 2)
                             evidence["market_url"] = res.get("url")
                             evidence["identity_confirmed"] = True
-                            print(f"      ✨ Evidence Captured: ${evidence['unit_selling_price']} from {url[:40]}...")
                             return evidence
     except Exception as e:
-        print(f"      ⚠️ Search Error: {e}")
+        logger.error(f"Audit error for {name[:20]}: {e}")
     return evidence
 
-async def mirror_extract_cj(cj_service, p, sc):
-    """Mirror Extractor following the strict 14-point standard."""
+async def mirror_extract_cj(cj_service, p):
+    """pixel-level extraction of CJ product following 14-point standard."""
     pid = p.get("pid") or p.get("id")
-    name = p.get("productNameEn") or p.get("nameEn") or "Unknown Product"
+    name = p.get("productNameEn") or p.get("nameEn") or p.get("productName") or "Unknown"
     
-    # 1. Landed Cost
+    # Cost & Logistics
     price_usd_raw = p.get("productPrice") or p.get("sellPrice") or 0.0
     try: price_usd = float(str(price_usd_raw).split(" -- ")[-1])
     except: price_usd = 0.0
@@ -87,23 +101,19 @@ async def mirror_extract_cj(cj_service, p, sc):
         except: pass
     landed_cost = price_usd + freight
 
-    # 2. Deep Audit
-    print(f"   🔍 14-Point Audit: {name[:30]}... Cost: ${landed_cost:.2f}")
+    # Market Audit
     evidence = await find_market_evidence(name, landed_cost)
-    
     if not evidence["identity_confirmed"] or evidence["unit_selling_price"] <= 0:
-        print(f"   ⏭️ Skip: Unreliable evidence or identity mismatch.")
         return None
         
     m_sell = evidence["unit_selling_price"]
     target_price = round(m_sell * 0.6, 2)
     
-    # 3. Model Logic: MUST cover cost.
-    if target_price < landed_cost:
-        print(f"   🚫 Ineligible: Model Price ${target_price} < Cost ${landed_cost:.2f}.")
+    # Truth Model: Target Price must cover cost
+    if target_price <= landed_cost:
         return None
 
-    # 4. Comprehensive Extraction (14 Points)
+    # Full Mirroring
     detail = await cj_service.get_product_detail(pid)
     if not detail: return None
     
@@ -113,7 +123,8 @@ async def mirror_extract_cj(cj_service, p, sc):
     packing_size = {
         "length": detail.get("packingLength", 0),
         "width": detail.get("packingWidth", 0),
-        "height": detail.get("packingHeight", 0)
+        "height": detail.get("packingHeight", 0),
+        "unit": "cm"
     }
     
     img_list = []
@@ -122,55 +133,107 @@ async def mirror_extract_cj(cj_service, p, sc):
 
     return {
         "raw_data": p,
+        "detail_data": detail,
         "standard_fields": {
             "title": name, "sku": detail.get("sku") or f"CJ-{pid}", "price": target_price,
             "cost": landed_cost, "amazon_price": m_sell, "amazon_list": evidence["unit_list_price"],
             "amazon_url": evidence["market_url"], "weight": round(product_weight, 3),
             "size": packing_size, "images": img_list, "description_html": detail.get("description", ""),
             "inventory": detail.get("cjInventory", 0) + detail.get("factoryInventory", 0),
-            "vendor": {"name": detail.get("shopName"), "rating": detail.get("shopRating")},
+            "vendor": {
+                "name": detail.get("shopName", "Artisan Partner"),
+                "rating": detail.get("shopRating", 5.0),
+                "id": detail.get("shopId")
+            },
             "category": p.get("categoryName") or "General"
-        }
+        },
+        "is_cashback": (target_price / landed_cost >= 4.0)
     }
 
-async def run_silent_ingestion():
+async def ingest_to_library(db, c, supply_chain):
+    pid = c['raw_data'].get("pid") or c['raw_data'].get("id")
+    exists = db.query(CandidateProduct).filter_by(product_id_1688=pid).first()
+    if exists: return
+
+    f = c['standard_fields']
+    
+    # 1. Raw Platform Archive
+    try:
+        db.execute(text("""
+            INSERT INTO cj_raw_products (cj_pid, raw_json, title_en, source_url)
+            VALUES (:pid, :json, :title, :url)
+            ON CONFLICT (cj_pid) DO NOTHING
+        """), {
+            "pid": pid, "json": json.dumps(c['detail_data'], ensure_ascii=False),
+            "title": f['title'], "url": f"https://app.cjdropshipping.com/product-detail.html?id={pid}"
+        })
+        db.commit()
+    except: db.rollback()
+
+    # 2. AI Polish Draft
+    enriched = await supply_chain.translate_and_enrich({"title": f['title'], "category": f['category'], "price": f['cost']}, strategy="IDS_BRUTE_FORCE")
+
+    # 3. Save Draft
+    new_draft = CandidateProduct(
+        product_id_1688=pid, title_zh=f['title'], title_en_preview=enriched.get("title_en") or f['title'],
+        description_zh=enriched.get("description_en") or "", cost_cny=f['cost'] * 7.1,
+        amazon_price=f['amazon_price'], amazon_compare_at_price=f['amazon_list'],
+        market_comparison_url=f['amazon_url'], estimated_sale_price=f['price'],
+        profit_ratio=f['price'] / f['cost'], images=f['images'],
+        discovery_source="MASTER_FULL_SWEEP_V5.9.4", status="draft",
+        source_platform="CJ", source_url=f"https://app.cjdropshipping.com/product-detail.html?id={pid}",
+        structural_data={"description_html": f['description_html']},
+        logistics_data={"shipping": {"product_weight": f['weight'], "weight_unit": "kg", "packing_size": f['size']}},
+        raw_vendor_info=f['vendor'],
+        desire_hook=enriched.get("desire_hook"), desire_logic=enriched.get("desire_logic"), desire_closing=enriched.get("desire_closing"),
+        is_cashback_eligible=c['is_cashback']
+    )
+    try:
+        db.add(new_draft)
+        db.commit()
+        print(f"      ✅ Draft Library Ingested: {f['title'][:30]}")
+    except: db.rollback()
+
+async def run_comprehensive_sweep():
     db = SessionLocal()
     cj = CJDropshippingService()
     sc = SupplyChainService(db)
     
-    print("🚀 0Buck v5.9.2 Silent Master Ingestion (Draft Library Mode)...")
+    print("🚀 0Buck v5.9.4 Master Platform Sweep (Full Category Ingestion)...")
     
-    search_keywords = ["Mini Smart WiFi Gateway", "Portable Neck Fan USB"]
-    for kw in search_keywords:
-        print(f"\n📂 Ingesting Platform Category: {kw}")
-        results = await cj.search_products(kw, size=5)
+    categories = await cj.get_categories()
+    if not categories:
+        print("⚠️ Failed to fetch categories. Using broad fallback list.")
+        categories = [{"categoryName": "Home Improvement", "categoryId": "EBBCB644-5D82-40AF-B293-CF9EDEFD6640"}]
+
+    for cat in categories:
+        cat_name = cat.get("categoryName")
+        cat_id = cat.get("categoryId")
+        print(f"\n📂 Sweeping Category: {cat_name} (ID: {cat_id})")
+        
+        # Search top items in category
+        results = await cj.search_products(None, category_id=cat_id, size=20)
         if results:
+            print(f"   ✨ Found {len(results)} candidate items. Auditing...")
             for p in results:
                 try:
-                    exists = db.query(CandidateProduct).filter_by(product_id_1688=p.get('pid')).first()
-                    if exists: continue
-                    
-                    await asyncio.sleep(1.0)
-                    data = await mirror_extract_cj(cj, p, sc)
-                    if data:
-                        f = data['standard_fields']
-                        # Ingest STRICTLY to Draft Library
-                        new_cand = CandidateProduct(
-                            product_id_1688=p.get('pid'), title_zh=f['title'], title_en_preview=f['title'],
-                            cost_cny=f['cost'] * 7.1, amazon_price=f['amazon_price'], amazon_compare_at_price=f['amazon_list'],
-                            market_comparison_url=f['amazon_url'], estimated_sale_price=f['price'],
-                            profit_ratio=f['price'] / f['cost'], images=f['images'],
-                            discovery_source="MASTER_INGEST_V5.9.2", status="draft", # SET TO DRAFT ONLY
-                            source_platform="CJ", source_url=f"https://app.cjdropshipping.com/product-detail.html?id={p.get('pid')}",
-                            structural_data={"description_html": f['description_html']},
-                            logistics_data={"shipping": {"product_weight": f['weight'], "weight_unit": "kg", "packing_size": f['size']}},
-                            raw_vendor_info=f['vendor']
-                        )
-                        db.add(new_cand)
-                        db.commit()
-                        print(f"      ✅ Draft Logged: {f['title'][:25]}")
-                except Exception as e: print(f"      ❌ Ingest Error: {e}")
+                    # Check deduplication first to save API calls
+                    pid = p.get('pid') or p.get('id')
+                    if db.query(CandidateProduct).filter_by(product_id_1688=pid).first():
+                        continue
+                        
+                    await asyncio.sleep(random.uniform(1.0, 3.0)) # Key Rotation Friendly
+                    mirror_data = await mirror_extract_cj(cj, p)
+                    if mirror_data:
+                        await ingest_to_library(db, mirror_data, sc)
+                except Exception as e:
+                    logger.error(f"Error in sweep: {e}")
+        
+        # Category cooldown
+        await asyncio.sleep(5.0)
+
     db.close()
+    print("\n🏁 Master Full Category Sweep Complete.")
 
 if __name__ == "__main__":
-    asyncio.run(run_silent_ingestion())
+    asyncio.run(run_comprehensive_sweep())

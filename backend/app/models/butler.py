@@ -155,3 +155,17 @@ class UserMemorySemantic(Base):
         embedding = Column(JSON, nullable=True)
     tags = Column(JSON, default=[]) # e.g., #tired, #gift_ideas
     created_at = Column(DateTime, default=func.now())
+
+class BindingCode(Base):
+    """
+    v5.7.35: Temporary 6-digit codes for 'Reverse Binding'.
+    Allows users to link IM accounts by entering a code in the app.
+    """
+    __tablename__ = "pending_binding_codes"
+    
+    code = Column(String(10), primary_key=True) # e.g., '123456'
+    platform = Column(String(50), nullable=False)
+    platform_uid = Column(String(255), nullable=False)
+    
+    expires_at = Column(DateTime, nullable=False)
+    created_at = Column(DateTime, default=func.now())

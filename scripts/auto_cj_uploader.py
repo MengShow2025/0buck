@@ -19,6 +19,7 @@ DB_URI = os.getenv("DATABASE_URL")
 def get_new_cj_candidates():
     engine = create_engine(DB_URI)
     with engine.connect() as conn:
+        # v5.9.5: STRICT PIPELINE - Only upload 'approved' items (Must pass manual check)
         query = text("""
             SELECT id, title_zh, source_url, source_platform, profit_ratio, estimated_sale_price, images, 
                    title_en_preview, description_zh, desire_hook, desire_logic, desire_closing, 

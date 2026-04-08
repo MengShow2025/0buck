@@ -1,6 +1,6 @@
 import os
 from app.db.session import get_db, SessionLocal
-from app.models.butler import UserIMBinding
+from app.models.butler import UserIMBinding, BindingCode
 from app.services.agent import run_agent
 from app.core.config import settings
 from app.api.deps import get_current_user
@@ -11,9 +11,10 @@ import logging
 import base64
 import hashlib
 import hmac
-from datetime import datetime
+import random
+from datetime import datetime, timedelta
 from typing import Any, Optional
-from fastapi import APIRouter, Request, Depends, HTTPException, Query
+from fastapi import APIRouter, Request, Depends, HTTPException, Query, Body
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
@@ -71,15 +72,49 @@ async def send_rich_message(platform: str, uid: str, text: str, title: str, link
         # Fallback to plain text
         await send_whatsapp_message(uid, text)
 
+async def handle_binding_command(platform: str, uid: str, lang: str = "en") -> str:
+    """v5.7.35: Generate a 6-digit code for reverse binding."""
+    db = SessionLocal()
+    try:
+        # Generate 6-digit code
+        code = str(random.randint(100000, 999999))
+        expires_at = datetime.now() + timedelta(minutes=15)
+        
+        # Store in DB
+        db.merge(BindingCode(
+            code=code,
+            platform=platform,
+            platform_uid=uid,
+            expires_at=expires_at
+        ))
+        db.commit()
+        
+        if lang == "zh":
+            return f"您的绑定验证码是：【{code}】\n\n请在 0Buck App 的“我的”页面中输入此验证码完成绑定。验证码 15 分钟内有效。"
+        else:
+            return f"Your binding code is: 【{code}】\n\nPlease enter this code in the 0Buck App (Me page) to link your account. Valid for 15 minutes."
+    except Exception as e:
+        logger.error(f"Error generating binding code: {e}")
+        return "Failed to generate binding code. Please try again later."
+    finally:
+        db.close()
+
 async def generic_brain_process(platform: str, platform_uid: str, text: str, chat_id: str, chat_type: str, send_func):
     """
-    v5.6.4: Unified Brain Proxy for all IM platforms.
-    Handles Guest Mode, Identity Bridge, and AI Processing.
+    v5.7.35: Unified Brain Proxy with Reverse Binding support.
     """
     db = SessionLocal()
     try:
         lang = detect_language(text)
-        # v5.7.21: Robust Identity Logic
+        
+        # 1. Check for Binding Command
+        binding_keywords = ["bind", "绑定", "/bind", "会员号"]
+        if any(kw in text.lower() for kw in binding_keywords):
+            reply = await handle_binding_command(platform, platform_uid, lang)
+            await send_rich_message(platform, platform_uid, reply, "0Buck Identity Bridge", None, lang)
+            return
+
+        # 2. Regular AI Process
         binding = db.query(UserIMBinding).filter_by(platform=platform, platform_uid=platform_uid, is_active=True).first()
         is_guest = binding is None
         user_id = binding.user_id if binding else 1
@@ -421,3 +456,49 @@ async def process_im_binding(
         logger.error(f"❌ BINDING DB ERROR: {str(e)}")
         db.rollback()
         raise HTTPException(status_code=500, detail="Database error during binding")
+
+@router.post("/claim")
+async def claim_binding_code(
+    code: str = Body(..., embed=True),
+    current_user: Any = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """v5.7.35: Claim a 6-digit code to link IM account."""
+    logger.info(f"🔑 CLAIM REQUEST: code={code}, user_id={current_user.customer_id}")
+    
+    # 1. Look up code
+    pending = db.query(BindingCode).filter_by(code=code).first()
+    
+    if not pending:
+        raise HTTPException(status_code=400, detail="Invalid or expired code")
+    
+    if pending.expires_at < datetime.now():
+        db.delete(pending)
+        db.commit()
+        raise HTTPException(status_code=400, detail="Code has expired")
+    
+    # 2. Perform Binding
+    try:
+        existing = db.query(UserIMBinding).filter_by(platform=pending.platform, platform_uid=pending.platform_uid).first()
+        if existing:
+            existing.user_id = current_user.customer_id
+            existing.is_active = True
+            db.add(existing)
+        else:
+            db.add(UserIMBinding(
+                user_id=current_user.customer_id, 
+                platform=pending.platform, 
+                platform_uid=pending.platform_uid, 
+                is_active=True
+            ))
+        
+        # 3. Cleanup code
+        db.delete(pending)
+        db.commit()
+        
+        logger.info(f"✅ REVERSE BINDING SUCCESSFUL: {pending.platform} linked to User {current_user.customer_id}")
+        return {"status": "success", "message": f"Successfully linked to your {pending.platform} account!"}
+    except Exception as e:
+        logger.error(f"❌ CLAIM ERROR: {str(e)}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Database error during claiming")
