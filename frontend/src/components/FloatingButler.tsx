@@ -8,6 +8,8 @@ import { useDeviceType } from '../hooks/useDeviceType';
 import { useAppContext } from '../context/AppContext';
 import { useQuery } from '@tanstack/react-query';
 
+import confetti from 'canvas-confetti';
+
 interface Message {
   id: string;
   type: 'user' | 'assistant';
@@ -33,6 +35,7 @@ export default function FloatingButler({ onProductClick }: FloatingButlerProps) 
   const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
+  const [notification, setNotification] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -211,6 +214,21 @@ export default function FloatingButler({ onProductClick }: FloatingButlerProps) 
         }
         
         const content = data.choices?.[0]?.message?.content || "I've processed your request.";
+        
+        // v5.7.54: Visual Feedback - Confetti & Notifications
+        if (data.meta?.show_confetti) {
+          confetti({
+            particleCount: 150,
+            spread: 70,
+            origin: { y: 0.6 },
+            colors: ['#FF5C00', '#FFFFFF', '#000000']
+          });
+        }
+        
+        if (data.meta?.notification) {
+          setNotification(data.meta.notification);
+          setTimeout(() => setNotification(null), 5000);
+        }
 
         // v5.7.2: Superpowers Sync - Refresh auth profile if name/nickname might have changed
         if (content.includes('以后我就叫') || content.includes('我就叫') || content.includes('My name is')) {
@@ -308,7 +326,7 @@ export default function FloatingButler({ onProductClick }: FloatingButlerProps) 
             className="pointer-events-auto bg-zinc-950/90 border border-zinc-800 shadow-[0_0_50px_rgba(0,0,0,0.5)] rounded-[32px] overflow-hidden flex flex-col relative backdrop-blur-2xl"
           >
             {/* Header */}
-            <div className="bg-zinc-900/80 p-4 border-b border-zinc-800 flex items-center justify-between sticky top-0 z-10 backdrop-blur-xl">
+            <div className="bg-zinc-900/80 p-4 border-b border-zinc-800 flex items-center justify-between sticky top-0 z-10 backdrop-blur-xl cursor-grab active:cursor-grabbing select-none">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-[#FF5C00]/10 flex items-center justify-center text-[#FF5C00] overflow-hidden border border-white/5">
                   <BongoCat isTyping={true} className="w-full h-full" />
@@ -338,6 +356,20 @@ export default function FloatingButler({ onProductClick }: FloatingButlerProps) 
                 </button>
               </div>
             </div>
+
+            {/* Notification Bar */}
+            <AnimatePresence>
+              {notification && (
+                <motion.div 
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="bg-[#FF5C00] text-white px-4 py-2 text-xs font-black uppercase tracking-widest text-center overflow-hidden z-20 shadow-lg"
+                >
+                  {notification}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {!isMinimized && (
               <>
