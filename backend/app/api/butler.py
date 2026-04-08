@@ -14,7 +14,7 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-from app.models.butler import UserButlerProfile
+from app.models.butler import UserButlerProfile, BindingCode, UserIMBinding
 
 router = APIRouter()
 
@@ -67,8 +67,41 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
             last_msg = request.messages[-1].content
         except AttributeError:
             last_msg = request.messages[-1]["content"]
+            
+        # --- 2. REVERSE BINDING (v5.7.36) ---
+        # If user is logged in and sends a 6-digit code, try to bind!
+        # This is the "Zero-Click" binding flow suggested by user.
+        if user_id > 1 and last_msg and last_msg.strip().isdigit() and len(last_msg.strip()) == 6:
+            code = last_msg.strip()
+            pending = db.query(BindingCode).filter_by(code=code).first()
+            
+            if pending and pending.expires_at > datetime.now():
+                # Perform the binding
+                existing = db.query(UserIMBinding).filter_by(platform=pending.platform, platform_uid=pending.platform_uid).first()
+                if existing:
+                    existing.user_id = user_id
+                    existing.is_active = True
+                else:
+                    db.add(UserIMBinding(user_id=user_id, platform=pending.platform, platform_uid=pending.platform_uid, is_active=True))
+                
+                # Cleanup
+                db.delete(pending)
+                db.commit()
+                
+                logger.info(f"✨ CHAT BINDING SUCCESS: {pending.platform} linked to User {user_id}")
+                
+                return {
+                    "id": f"msg_bind_{datetime.now().timestamp()}",
+                    "choices": [{
+                        "message": {
+                            "content": f"✨ 身份识别成功！我已经将您的 {pending.platform} 账号与 0Buck 账户成功关联。以后在 IM 中也能随时找我聊天啦，主人！",
+                            "role": "assistant"
+                        }
+                    }],
+                    "base_resp": {"status_code": 0, "status_msg": "ok"}
+                }
         
-        # Run the unified AI brain with failover protection
+        # 3. Run the unified AI brain with failover protection
         response = await run_agent(content=last_msg, user_id=user_id, session_id=session_id)
         
         # v5.7.12: Restore MiniMax-compatible format for frontend
