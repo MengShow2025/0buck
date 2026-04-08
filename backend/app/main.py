@@ -442,64 +442,72 @@ if not os.path.exists(frontend_path):
 
 logger.info(f"📂 Frontend assets path: {frontend_path}")
 
-# --- 1. FRONTEND ROUTING MIDDLEWARE (v5.7.28) ---
+# --- 1. FRONTEND ROUTING MIDDLEWARE (v5.7.29) ---
+# Industrial-grade SPA routing. Re-written to be as robust as possible.
 @app.middleware("http")
 async def frontend_interceptor(request: Request, call_next):
     path = request.url.path
     method = request.method
     
-    # v5.7.28: Robust exclusion for all system paths
-    if (path.startswith(settings.API_V1_STR) or 
-        path.startswith("/api/") or 
-        path.startswith("/v1/") or
-        path.startswith("/assets/") or 
-        path.startswith("/static/") or
-        path.endswith((".ico", ".png", ".jpg", ".json", ".js", ".css", ".svg", ".webp", ".txt", ".map")) or
-        method != "GET"):
+    # 1. Skip for API, assets, and non-GET requests
+    is_api = path.startswith(settings.API_V1_STR) or path.startswith("/api/") or path.startswith("/v1/")
+    is_asset = path.startswith("/assets/") or path.startswith("/static/") or "." in path.split("/")[-1]
+    
+    if is_api or is_asset or method != "GET":
         return await call_next(request)
 
-    # v5.7.28: Intercept SPA routes with high confidence
-    spa_routes = [
-        "/auth/bind", "/chat", "/me", "/profile", "/login", "/register",
-        "/command", "/control", "/admin", "/dashboard", "/products"
+    # 2. Everything else is a potential SPA route
+    # We serve index.html directly from the most likely locations
+    index_locations = [
+        os.path.join(frontend_path, "index.html"),
+        os.path.join(os.getcwd(), "static", "index.html"),
+        os.path.join(os.getcwd(), "frontend", "dist", "index.html"),
+        "/app/backend/static/index.html",
+        "/app/static/index.html"
     ]
     
-    is_spa_route = path == "/" or any(path.startswith(r) for r in spa_routes) or "." not in path.split("/")[-1]
-
-    if is_spa_route:
-        index_file = os.path.join(frontend_path, "index.html")
-        if os.path.exists(index_file):
-            logger.info(f"🎯 SPA Route {path} -> {index_file}")
-            return FileResponse(index_file)
-        else:
-            # v5.7.28: Fallback to manual path detection if global frontend_path fails
-            alt_paths = [
-                os.path.join(os.getcwd(), "static", "index.html"),
-                os.path.join(os.getcwd(), "frontend", "dist", "index.html"),
-                "/app/backend/static/index.html",
-                "/app/frontend/dist/index.html"
-            ]
-            for alt in alt_paths:
-                if os.path.exists(alt):
-                    logger.info(f"🚀 Found index.html at alternative path: {alt}")
-                    return FileResponse(alt)
-                    
-            logger.error(f"❌ CRITICAL: SPA route {path} intercepted but index.html NOT FOUND ANYWHERE.")
+    for loc in index_locations:
+        if os.path.exists(loc):
+            logger.info(f"🎯 SPA Route {path} -> Serving {loc}")
+            return FileResponse(loc)
             
+    # 3. If no index.html found, let it fall through to FastAPI's router
     return await call_next(request)
 
-# --- 2. EXPLICIT SPA ROUTES (v5.7.27) ---
-# High-reliability fallback for critical pages to bypass middleware edge cases
+# --- 2. EXPLICIT SPA ROUTES (v5.7.29) ---
+# High-reliability fallback for critical pages. If index.html is missing,
+# we serve a simple informative page so the user isn't stuck with 404.
 @app.get("/auth/bind")
 @app.get("/chat")
 @app.get("/me")
 @app.get("/login")
 @app.get("/register")
 async def spa_fallback(request: Request):
-    index_file = os.path.join(frontend_path, "index.html")
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
-    return {"detail": "Frontend application not found. Please check deployment logs."}
+    index_locations = [
+        os.path.join(frontend_path, "index.html"),
+        os.path.join(os.getcwd(), "static", "index.html"),
+        os.path.join(os.getcwd(), "frontend", "dist", "index.html"),
+        "/app/backend/static/index.html",
+        "/app/static/index.html"
+    ]
+    for loc in index_locations:
+        if os.path.exists(loc):
+            return FileResponse(loc)
+            
+    # Ultimate fallback: Simple HTML if static assets are completely missing
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=f"""
+        <html>
+            <body style="font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; background: #0a0a0a; color: white; text-align: center;">
+                <div>
+                    <h1>0Buck Identity Bridge</h1>
+                    <p>Static assets are still deploying. Please refresh in 30 seconds.</p>
+                    <p style="color: #666; font-size: 0.8em;">Path: {request.url.path}</p>
+                    <button onclick="window.location.reload()" style="background: #3b82f6; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;">Refresh Now</button>
+                </div>
+            </body>
+        </html>
+    """, status_code=200)
 
 # Include routers
 app.include_router(api_router, tags=["api"])
