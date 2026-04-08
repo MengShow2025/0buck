@@ -136,14 +136,7 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
                 
                 logger.info(f"✨ CHAT BINDING SUCCESS: {pending.platform} linked to User {target_user_id}")
                 
-                # v5.7.51: Enhanced dual-side notifications with Unbind instructions
-                from app.api.im_gateway import send_rich_message
-                im_reply = (
-                    f"✨ 身份同步成功！\n\n您的 {pending.platform} 账号已与 0Buck 账户关联。现在您可以两端同步享受服务了。\n\n"
-                    f"💡 提示：如需解除关联，请随时在当前对话中回复“解绑”或“unbind”。"
-                )
-                asyncio.create_task(send_rich_message(pending.platform, pending.platform_uid, im_reply, "0Buck 身份同步", None, "zh"))
-                
+                # v5.7.52: Removed "automatic" tip to respect user's manual-only preference.
                 return {
                     "id": f"msg_bind_{datetime.now().timestamp()}",
                     "choices": [{

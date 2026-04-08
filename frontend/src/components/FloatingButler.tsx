@@ -153,11 +153,14 @@ export default function FloatingButler({ onProductClick }: FloatingButlerProps) 
         const newUrl = window.location.pathname;
         window.history.replaceState({}, '', newUrl);
         
-        // Auto-send after a short delay to ensure UI is ready
+        // v5.7.52: Removed auto-send to respect user preference for manual confirmation.
+        // Only pre-fill the input and open the UI.
+        /* 
         setTimeout(() => {
           const formEvent = { preventDefault: () => {} } as React.FormEvent;
           handleSendMessage(formEvent, prefill);
         }, 500);
+        */
       }
     };
     
