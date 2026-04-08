@@ -10,8 +10,12 @@
       "destination": "https://www.0buck.com/api/v1/$1"
     },
     {
+      "source": "/healthz",
+      "destination": "https://www.0buck.com/healthz"
+    },
+    {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "https://www.0buck.com/$1"
     }
   ]
 }

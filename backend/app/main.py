@@ -362,6 +362,11 @@ async def diagnostic_paths():
         "env_allowed_origins": settings.ALLOWED_ORIGINS
     }
 
+@app.get("/healthz")
+async def healthz():
+    """v5.7.32: Direct health check to verify backend reachability."""
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+
 @api_router.get("/health")
 async def health_check():
     return {"status": "healthy", "timestamp": datetime.now().isoformat()}
@@ -509,6 +514,14 @@ async def railway_fallback(request: Request):
             </body>
         </html>
     """, status_code=500)
+
+@app.get("/")
+async def root_spa():
+    """v5.7.32: Explicit root handler for Railway SPA."""
+    target_index = os.path.join(frontend_path, "index.html")
+    if os.path.exists(target_index):
+        return FileResponse(target_index)
+    return FileResponse("/app/static/index.html")
 
 # Include routers
 app.include_router(api_router, tags=["api"])
