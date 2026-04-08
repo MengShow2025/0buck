@@ -13,7 +13,7 @@ import hashlib
 import hmac
 import random
 from datetime import datetime, timedelta
-from typing import Any, Optional
+from typing import Any, Optional, List, Dict
 from fastapi import APIRouter, Request, Depends, HTTPException, Query, Body
 from fastapi.responses import JSONResponse, PlainTextResponse
 from sqlalchemy.orm import Session
@@ -47,15 +47,23 @@ def generate_binding_sig(platform: str, uid: str) -> str:
 # --- 2. MULTI-PLATFORM BRAIN PROXY ---
 
 async def send_rich_message(platform: str, uid: str, text: str, title: str, link_url: Optional[str] = None, lang: str = "en"):
-    """v5.7.14: Language-adaptive Rich Message Dispatcher."""
+    """v5.7.38: Language-adaptive Rich Message Dispatcher with Button support."""
     if platform == "feishu":
         await send_feishu_rich_link(uid, text, title, link_url, lang)
     elif platform == "telegram":
-        # Telegram Markdown Link
-        msg = text
+        # v5.7.38: Telegram Inline Button for actions
+        msg = f"*{title}*\n\n{text}"
+        buttons = None
+        
         if link_url:
-            msg += f"\n\n[🔗 点击登录获得完整服务]({link_url})" if lang == "zh" else f"\n\n[🔗 Login for Full Service]({link_url})"
-        await send_telegram_message(uid, msg)
+            if link_url.startswith("action://"):
+                btn_text = "✨ 点击获取同步指令" if lang == "zh" else "✨ Get Sync Code"
+                buttons = [{"text": btn_text, "callback_data": "get_sync_code"}]
+            else:
+                btn_text = "🔗 点击登录" if lang == "zh" else "🔗 Login"
+                buttons = [{"text": btn_text, "url": link_url}]
+                
+        await send_telegram_message(uid, msg, buttons)
     elif platform == "whatsapp":
         # WhatsApp supports preview_url for links
         msg = text
@@ -150,8 +158,10 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
             main_reply = f"⚠️ 0Buck 智脑暂时无法响应: {str(ai_err)}" if lang == "zh" else f"⚠️ 0Buck AI Brain error: {str(ai_err)}"
         
         # 3. Send final response (Footer/Login link is handled elegantly by send_rich_message)
-        # v5.7.21: ONLY pass bind_url if the user is truly a guest
-        await send_rich_message(platform, platform_uid, main_reply, "0Buck AI Brain", bind_url if is_guest else None, lang)
+        # v5.7.38: Replaced browser link with Interactive Action for guests
+        # We pass a special "action://get_sync_code" URL that the adapters will convert to buttons
+        sync_action_url = "action://get_sync_code"
+        await send_rich_message(platform, platform_uid, main_reply, "0Buck AI Brain", sync_action_url if is_guest else None, lang)
         logger.info(f"✅ [{platform.upper()}] Response complete for {platform_uid}")
         
     except Exception as e:
@@ -183,49 +193,103 @@ async def send_feishu_message(receive_id: str, content: str):
         await client.post(url, json=payload, headers=headers)
 
 async def send_feishu_rich_link(receive_id: str, text: str, title: str, link_url: Optional[str] = None, lang: str = "en"):
-    """v5.7.14: Send Feishu Rich Text Message with language-adaptive links."""
+    """v5.7.38: Send Feishu Interactive Card with support for Buttons and Links."""
     token = await get_feishu_tenant_access_token()
     if not token: return
     url = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id"
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json; charset=utf-8"}
     
-    # Language-aware link text
+    # 1. Determine if this is an Action Button or a Browser Link
+    is_action = link_url and link_url.startswith("action://")
+    
+    # Language-aware labels
+    btn_text = "✨ 点击获取同步指令" if lang == "zh" else "✨ Get Sync Code"
     link_text = "🔗 点击登录获得完整服务" if lang == "zh" else "🔗 Login for Full Service"
     
-    # Construct rich text content
-    # v5.7.16: Provide both zh_cn and en_us for maximum compatibility
-    content_payload = {
-        "title": title,
-        "content": [
-            [{"tag": "text", "text": text}]
+    # 2. Construct Interactive Card (Message Card)
+    # v5.7.38: Using 'interactive' type for better UX
+    card_config = {
+        "header": {
+            "title": {
+                "tag": "plain_text",
+                "content": title
+            },
+            "template": "blue"
+        },
+        "elements": [
+            {
+                "tag": "div",
+                "text": {
+                    "tag": "lark_md",
+                    "content": text
+                }
+            }
         ]
     }
     
     if link_url:
-        content_payload["content"].append([
-            {"tag": "a", "text": link_text, "href": link_url}
-        ])
-
-    content_obj = {
-        "zh_cn": content_payload,
-        "en_us": content_payload
-    }
+        if is_action:
+            # Add an Interactive Button
+            card_config["elements"].append({
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {
+                            "tag": "plain_text",
+                            "content": btn_text
+                        },
+                        "type": "primary",
+                        "value": {
+                            "command": "get_sync_code"
+                        }
+                    }
+                ]
+            })
+        else:
+            # Add a Standard Link Button
+            card_config["elements"].append({
+                "tag": "action",
+                "actions": [
+                    {
+                        "tag": "button",
+                        "text": {
+                            "tag": "plain_text",
+                            "content": link_text
+                        },
+                        "type": "default",
+                        "url": link_url
+                    }
+                ]
+            })
 
     payload = {
         "receive_id": receive_id,
-        "msg_type": "post",
-        "content": json.dumps(content_obj)
+        "msg_type": "interactive",
+        "content": json.dumps(card_config)
     }
+    
     async with httpx.AsyncClient() as client:
         await client.post(url, json=payload, headers=headers)
 
 # --- TELEGRAM ---
-async def send_telegram_message(chat_id: str, content: str):
-    """v5.6.0: Telegram Send Adapter"""
+async def send_telegram_message(chat_id: str, content: str, buttons: Optional[List[Dict[str, str]]] = None):
+    """v5.7.38: Telegram Send Adapter with Inline Keyboard support."""
     token = settings.TELEGRAM_BOT_TOKEN
     if not token: return
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {"chat_id": chat_id, "text": content, "parse_mode": "Markdown"}
+    
+    payload = {
+        "chat_id": chat_id, 
+        "text": content, 
+        "parse_mode": "Markdown"
+    }
+    
+    if buttons:
+        payload["reply_markup"] = {
+            "inline_keyboard": [buttons]
+        }
+        
     async with httpx.AsyncClient() as client:
         await client.post(url, json=payload)
 
@@ -325,9 +389,27 @@ async def feishu_webhook(request: Request):
     try:
         raw_body = await request.body()
         payload = json.loads(raw_body)
+        
+        # 1. URL Verification
         if payload.get("type") == "url_verification":
             return JSONResponse(content={"challenge": payload.get("challenge")}, status_code=200)
         
+        # 2. Handle Interactive Card Callbacks (v5.7.38)
+        if "action" in payload and "open_id" in payload:
+            sender_id = payload.get("open_id")
+            action_val = payload.get("action", {}).get("value", {})
+            
+            if action_val.get("command") == "get_sync_code":
+                # User clicked "Get Sync Code" button
+                logger.info(f"⚡ Feishu Interactive: User {sender_id} requested sync code")
+                # We can't use generic_brain_process here because it's a direct action
+                # Trigger code generation
+                reply = await handle_binding_command("feishu", sender_id, "zh")
+                await send_feishu_message(sender_id, reply)
+                # Feishu requires a response to the callback to update the card or acknowledge
+                return JSONResponse(content={}, status_code=200)
+
+        # 3. Handle Regular Events
         event_id = payload.get("header", {}).get("event_id")
         if is_duplicate("feishu", event_id): return JSONResponse(content={"status": "dup"}, status_code=200)
         
@@ -341,25 +423,44 @@ async def feishu_webhook(request: Request):
         if sender_id and text:
             asyncio.create_task(generic_brain_process("feishu", sender_id, text, message.get("chat_id"), chat_type, send_feishu_message))
         return JSONResponse(content={"status": "ok"}, status_code=200)
-    except: return JSONResponse(content={"status": "err"}, status_code=200)
+    except Exception as e:
+        logger.error(f"Feishu Webhook Error: {e}")
+        return JSONResponse(content={"status": "err"}, status_code=200)
 
 @router.post("/telegram")
+@router.post("/telegram/")
 async def telegram_webhook(request: Request):
-    """v5.6.0: Telegram Unified Webhook"""
     try:
         payload = await request.json()
-        update_id = str(payload.get("update_id"))
-        if is_duplicate("telegram", update_id): return {"status": "dup"}
         
+        # 1. Handle Callback Query (Button clicks) (v5.7.38)
+        if "callback_query" in payload:
+            cb = payload["callback_query"]
+            sender_id = str(cb["from"]["id"])
+            data = cb.get("data")
+            
+            if data == "get_sync_code":
+                logger.info(f"⚡ Telegram Interactive: User {sender_id} requested sync code")
+                reply = await handle_binding_command("telegram", sender_id, "zh")
+                await send_telegram_message(sender_id, reply)
+                # Answer callback query to stop loading state in client
+                token = settings.TELEGRAM_BOT_TOKEN
+                if token:
+                    async with httpx.AsyncClient() as client:
+                        await client.post(f"https://api.telegram.org/bot{token}/answerCallbackQuery", json={"callback_query_id": cb["id"]})
+                return JSONResponse(content={"status": "ok"}, status_code=200)
+
+        # 2. Handle Regular Messages
         message = payload.get("message", {})
-        chat = message.get("chat", {})
-        sender_id = str(chat.get("id"))
+        sender_id = str(message.get("from", {}).get("id", ""))
         text = message.get("text", "")
+        
         if sender_id and text:
-            chat_type = "p2p" if chat.get("type") == "private" else "group"
-            asyncio.create_task(generic_brain_process("telegram", sender_id, text, sender_id, chat_type, send_telegram_message))
-        return {"status": "ok"}
-    except: return {"status": "error"}
+            asyncio.create_task(generic_brain_process("telegram", sender_id, text, str(message.get("message_id")), "private", send_telegram_message))
+        return JSONResponse(content={"status": "ok"}, status_code=200)
+    except Exception as e:
+        logger.error(f"Telegram Webhook Error: {e}")
+        return JSONResponse(content={"status": "err"}, status_code=200)
 
 @router.post("/whatsapp")
 @router.get("/whatsapp")
