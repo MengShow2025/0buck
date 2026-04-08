@@ -3,15 +3,11 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://zerobuck-api.onrender.com/api/$1"
+      "destination": "https://www.0buck.com/api/$1"
     },
     {
       "source": "/v1/(.*)",
-      "destination": "https://zerobuck-api.onrender.com/api/v1/$1"
-    },
-    {
-      "source": "/auth/bind(.*)",
-      "destination": "https://zerobuck-api.onrender.com/auth/bind$1"
+      "destination": "https://www.0buck.com/api/v1/$1"
     },
     {
       "source": "/(.*)",
