@@ -81,12 +81,17 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
         lang = detect_language(text)
         binding = db.query(UserIMBinding).filter_by(platform=platform, platform_uid=platform_uid, is_active=True).first()
         
+        logger.info(f"🔍 IM Check: Platform={platform}, UID={platform_uid}, Found Binding={bool(binding)}")
+        
         user_id = binding.user_id if binding else 1
         is_guest = binding is None
         
         sig = generate_binding_sig(platform, platform_uid)
-        base_url = settings.BACKEND_URL.rstrip("/")
-        # v5.6.6: Add Feishu-specific immersive browser flags
+        
+        # v5.7.17: Normalize domain to STOREFRONT_DOMAIN for consistent cookie sharing
+        domain = settings.STOREFRONT_DOMAIN.strip()
+        base_url = f"https://{domain}" if not domain.startswith("http") else domain.rstrip("/")
+        
         raw_bind_url = f"{base_url}/auth/bind?platform={platform}&uid={platform_uid}&sig={sig}"
         
         if platform == "feishu":
@@ -401,13 +406,14 @@ async def process_im_binding(
     if not hmac.compare_digest(sig, generate_binding_sig(platform, uid)):
         raise HTTPException(status_code=403, detail="Invalid signature")
     
-    existing = db.query(UserIMBinding).filter_by(platform=platform, platform_uid=uid, is_active=True).first()
+    # v5.7.18: Robust binding with Upsert logic to handle unique constraint
+    existing = db.query(UserIMBinding).filter_by(platform=platform, platform_uid=uid).first()
     if existing:
-        if existing.user_id == current_user.customer_id:
-            return {"status": "already_bound", "message": f"Linked to {platform}", "user_name": f"{current_user.first_name}"}
-        existing.is_active = False
+        existing.user_id = current_user.customer_id
+        existing.is_active = True
         db.add(existing)
+    else:
+        db.add(UserIMBinding(user_id=current_user.customer_id, platform=platform, platform_uid=uid, is_active=True))
     
-    db.add(UserIMBinding(user_id=current_user.customer_id, platform=platform, platform_uid=uid, is_active=True))
     db.commit()
     return {"status": "success", "message": f"Linked to {platform}!", "user_name": f"{current_user.first_name}"}

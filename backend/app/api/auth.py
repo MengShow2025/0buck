@@ -120,8 +120,10 @@ async def login_v46(
             # v4.6.8: Return token immediately for bootstrap admin
             access_token = create_access_token(subject=user.customer_id)
             
-            # Set Secure Cookie
+            # Set Secure Cookie (v5.7.17: Shared domain support)
             is_prod = settings.ENVIRONMENT == "production"
+            cookie_domain = settings.COOKIE_DOMAIN if is_prod else None
+            
             response.set_cookie(
                 key="access_token",
                 value=access_token,
@@ -129,6 +131,7 @@ async def login_v46(
                 max_age=60 * 24 * 7 * 60,
                 samesite="lax",
                 secure=is_prod,
+                domain=cookie_domain,
                 path="/"
             )
             
@@ -156,8 +159,10 @@ async def login_v46(
         # 3. Issue JWT
         access_token = create_access_token(subject=user.customer_id)
         
-        # 4. Set Secure Cookie
+        # 4. Set Secure Cookie (v5.7.17: Shared domain support)
         is_prod = settings.ENVIRONMENT == "production"
+        cookie_domain = settings.COOKIE_DOMAIN if is_prod else None
+        
         response.set_cookie(
             key="access_token",
             value=access_token,
@@ -165,6 +170,7 @@ async def login_v46(
             max_age=60 * 24 * 7 * 60,
             samesite="lax",
             secure=is_prod,
+            domain=cookie_domain,
             path="/"
         )
         
