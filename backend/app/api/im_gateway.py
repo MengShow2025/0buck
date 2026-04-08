@@ -116,8 +116,7 @@ async def handle_binding_command(platform: str, uid: str, lang: str = "en") -> s
 
 async def generic_brain_process(platform: str, platform_uid: str, text: str, chat_id: str, chat_type: str, send_func):
     """
-    v5.7.44: Robust Brain Proxy with Keyword-based Binding.
-    Simplest UX: Respond with instructions to reply 'bind' for guests.
+    v5.7.50: Robust Brain Proxy with Full Binding Lifecycle (Bind/Unbind).
     """
     db = SessionLocal()
     try:
@@ -127,11 +126,28 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
         binding_keywords = ["bind", "绑定", "/bind", "会员号"]
         if any(kw in text.lower() for kw in binding_keywords):
             reply = await handle_binding_command(platform, platform_uid, lang)
-            # Send plain text instruction for maximum clarity
             await send_func(platform_uid, reply)
             return
 
-        # 2. Regular AI Process
+        # 2. Check for Unbinding Command (v5.7.50)
+        unbinding_keywords = ["unbind", "解绑", "/unbind"]
+        if any(kw in text.lower() for kw in unbinding_keywords):
+            try:
+                binding = db.query(UserIMBinding).filter_by(platform=platform, platform_uid=platform_uid).first()
+                if binding:
+                    binding.is_active = False
+                    db.commit()
+                    reply = "✨ 已为您解除账号关联。您现在已回归访客身份。" if lang == "zh" else "✨ Unlinked successfully. You are now in guest mode."
+                else:
+                    reply = "⚠️ 您当前尚未绑定任何账号。" if lang == "zh" else "⚠️ You are not currently linked."
+                await send_func(platform_uid, reply)
+                return
+            except Exception as unbind_err:
+                logger.error(f"Unbinding Error: {unbind_err}")
+                await send_func(platform_uid, "Error during unbinding.")
+                return
+
+        # 3. Regular AI Process
         binding = db.query(UserIMBinding).filter_by(platform=platform, platform_uid=platform_uid, is_active=True).first()
         is_guest = binding is None
         user_id = binding.user_id if binding else 1

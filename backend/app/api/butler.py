@@ -99,9 +99,12 @@ async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(g
                 
                 logger.info(f"✨ CHAT BINDING SUCCESS: {pending.platform} linked to User {target_user_id}")
                 
-                # v5.7.45: Notify IM side about the successful binding
+                # v5.7.50: Notify IM side about success AND provide unbind instructions
                 from app.api.im_gateway import send_rich_message
-                im_reply = f"✨ 身份同步成功！您的 {pending.platform} 账号已与 0Buck 账户关联。现在您可以两端同步享受服务了。"
+                im_reply = (
+                    f"✨ 身份同步成功！\n\n您的 {pending.platform} 账号已与 0Buck 账户关联。现在您可以两端同步享受服务了。\n\n"
+                    f"💡 提示：如需解除关联，请随时在当前对话中回复“解绑”或“unbind”。"
+                )
                 asyncio.create_task(send_rich_message(pending.platform, pending.platform_uid, im_reply, "0Buck 身份同步", None, "zh"))
                 
                 return {
