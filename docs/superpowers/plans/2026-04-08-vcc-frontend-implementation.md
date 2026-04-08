@@ -49,7 +49,50 @@ Add `.dark` class variables mirroring WeChat Dark Mode, but retaining 0Buck Oran
 
 - [ ] **Step 2: Create AppContext for Theme & Language**
 
+### Task 5: AI System Control ("System as Chat" Interceptor)
+
+**Files:**
+- Modify: `frontend/src/components/VCC/CustomMessageUI.tsx`
+
+- [ ] **Step 1: Intercept `0B_SYSTEM_ACTION` to mutate AppContext**
+
 ```tsx
+import React, { useEffect } from 'react';
+import { ProductGridCard } from './BAPCards/ProductGridCard';
+import { CashbackRadarCard } from './BAPCards/CashbackRadarCard';
+import { useAppContext } from './AppContext';
+
+export const CustomMessageUI = (props: any) => {
+  const { message, isMyMessage } = props;
+  const { setTheme, setLanguage } = useAppContext();
+  
+  // 1. Check for AI System Actions
+  const systemAction = message.attachments?.find((a: any) => a.type === '0B_SYSTEM_ACTION');
+
+  useEffect(() => {
+    // If there is a system action, apply the state change when the message mounts
+    if (systemAction && !isMyMessage()) {
+      if (systemAction.action === 'SET_THEME') {
+        setTheme(systemAction.value);
+      } else if (systemAction.action === 'SET_LANGUAGE') {
+        setLanguage(systemAction.value);
+      }
+    }
+  }, [systemAction, setTheme, setLanguage]);
+
+  // 2. Render BAP Cards
+  const bapAttachment = message.attachments?.find((a: any) => a.type === '0B_CARD_V3');
+  // ... [Keep existing BAP logic]
+
+  // 3. Fallback Bubble Render (Standard)
+  // Even if it's a system action, we still render the text (e.g., "帮您切换至黑色模式啦🌙")
+  return (
+    <div className={`flex w-full my-1 ${isMyMessage() ? 'justify-end' : 'justify-start'}`}>
+      <div className={`...`}>{message.text}</div>
+    </div>
+  );
+};
+```
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 type Theme = 'light' | 'dark' | 'system';

@@ -32,7 +32,7 @@ const initialMessages = [
           price: 29.99,
           original_price: 59.99,
           physical_verification: { weight_kg: 0.15, dimensions_cm: '10x10x5 cm' },
-          image_url: 'https://images.unsplash.com/photo-1606220588913-b3aea06b026a?w=400&q=80'
+          image_url: 'https://images.pexels.com/photos/3780681/pexels-photo-3780681.jpeg?auto=compress&cs=tinysrgb&w=400'
         }
       }
     ],
