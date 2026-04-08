@@ -3,6 +3,7 @@ import sys
 import json
 import requests
 import time
+import re
 from sqlalchemy import create_engine, text
 from decimal import Decimal
 from dotenv import load_dotenv
@@ -58,6 +59,11 @@ def create_shopify_product(title, price, compare_at_price, tags, image_urls, sku
                 packing_info = f" | Size: {p_size['length']}x{p_size['width']}x{p_size['height']} {p_size['unit']}"
         except: pass
 
+    def clean_label(text):
+        if not text: return ""
+        # Remove [The Hook], Hook:, [The Logic], etc.
+        return re.sub(r'^\[?The (?:Hook|Logic|Closing|Contract)\]?:?\s*', '', text, flags=re.IGNORECASE).strip()
+
     # 0Buck Brand Vibe - Professional & Natural
     rebate_block = ""
     if is_cashback:
@@ -68,11 +74,11 @@ def create_shopify_product(title, price, compare_at_price, tags, image_urls, sku
         </div>
         """
     
-    narrative = (enriched_data.get("description_en") or "").strip()
-    hook_text = (enriched_data.get("desire_hook") or "").strip()
-    logic_text = (enriched_data.get("desire_logic") or "We've bypassed traditional retail markups to bring you direct artisan quality.").strip()
-    closing_text = (enriched_data.get("desire_closing") or "Crafted for quality. Priced for wisdom.").strip()
-    title_en = enriched_data.get("title_en") or title
+    narrative = clean_label(enriched_data.get("description_en") or "")
+    hook_text = clean_label(enriched_data.get("desire_hook") or "")
+    logic_text = clean_label(enriched_data.get("desire_logic") or "We've bypassed traditional retail markups to bring you direct artisan quality.")
+    closing_text = clean_label(enriched_data.get("desire_closing") or "Crafted for quality. Priced for wisdom.")
+    title_en = clean_label(enriched_data.get("title_en") or title)
 
     body_html = f"""
     <div class="0buck-experience-v5" style="max-width: 800px; margin: 0 auto; line-height: 1.7; color: #222; font-family: 'Inter', -apple-system, sans-serif;">
@@ -98,7 +104,7 @@ def create_shopify_product(title, price, compare_at_price, tags, image_urls, sku
                         <span style="color: #d00; font-size: 32px; font-weight: 900;">${price:.2f}</span>
                     </div>
                 </div>
-                <p style="margin-top: 15px; color: #52c41a; font-weight: 600; font-size: 14px;">✓ Real Sourcing Value: -40% Direct-to-Consumer Savings</p>
+                <p style="margin-top: 15px; color: #52c41a; font-weight: 600; font-size: 14px;">✓ Real Sourcing Value: Direct-to-Consumer Efficiency.</p>
             </div>
             
             <p style="font-size: 15px; color: #444; font-style: italic;">{logic_text}</p>
@@ -162,24 +168,17 @@ def process_batch():
         # c: id, title_zh, url, platform, roi, sale_price, images, t_en, d_en, hook, logic, closing, m_sell, m_list, is_cb, struct, logis
         c_id, title, url, platform, roi, sale_price, images_json, t_en, d_en, hook, logic, closing, m_sell, m_list, is_cb, struct_json, logis_json = c
         
-        # v5.7 Strict Truth Pricing Logic
         try:
             raw_sell = float(m_sell or 0)
             raw_list = float(m_list or 0)
-            
-            # Use MSRP if available, else Selling Price as Compare At
             compare_at = raw_list if raw_list > 0 else raw_sell
             
-            # MANDATORY: If no real selling price found, skip the product.
             if raw_sell <= 0:
-                print(f"   🚫 Skipping {title[:20]}: Missing real Amazon/eBay Selling Price.")
+                print(f"   🚫 Skipping {title[:20]}: Missing real Selling Price.")
                 continue
             
-            # 0Buck Price is 60% of Amazon Selling Price
             price = float(round(Decimal(str(raw_sell)) * Decimal("0.6"), 2))
-            
         except Exception as e:
-            print(f"   ❌ Price error: {e}")
             continue
         
         is_cashback = bool(is_cb)
@@ -193,7 +192,6 @@ def process_batch():
         image_urls = []
         try:
             raw_str = str(images_json)
-            import re
             image_urls = re.findall(r'https?://[^\s"\'\[\]<>]+(?:\.jpe?g|\.png|\.webp|\.gif|\.JPG|\.PNG)', raw_str)
             image_urls = list(dict.fromkeys(image_urls))
         except: image_urls = []
@@ -211,8 +209,6 @@ def process_batch():
         }
         
         print(f"🚀 Processing: {t_en or title}")
-        print(f"   💸 Final Audit: Price: ${price:.2f}, Compare At: ${compare_at:.2f}")
-        
         shopify_id = create_shopify_product(title, price, compare_at, tags, image_urls, sku, roi, is_cashback, enriched_data, raw_description_html, logis_json)
         if shopify_id:
             mark_as_published(c_id, shopify_id)

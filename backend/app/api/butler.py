@@ -8,7 +8,13 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import httpx
 import asyncio
+import logging
+from datetime import datetime
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+from app.models.butler import UserButlerProfile
 
 router = APIRouter()
 
@@ -29,47 +35,52 @@ class MinimaxChatRequest(BaseModel):
 @router.post("/chat")
 async def proxy_butler_chat(request: MinimaxChatRequest, db: Session = Depends(get_db)):
     """
-    v5.7.2 Superpowers Unified AI: 
-    Routes all web-based AI requests through the central 'run_agent' brain.
-    Ensures identical persona across Web, Floating Butler, and IM.
+    v5.7.11: Zero-Error Proxy Policy.
+    Ensures all errors are caught and returned as user-friendly messages.
     """
-    user_id = 1
-    if request.user_id:
-        try:
-            user_id = int(request.user_id)
-        except (ValueError, TypeError):
-            user_id = 1
-    
-    last_msg = request.messages[-1]["content"] if request.messages else "Hello"
-    
-    # Use 'web' platform prefix for session isolation but user-level persistence
-    session_id = f"web_{user_id}"
-    
-    # v5.7.3: Check connectivity if user_id is 1 (Guest/System account)
-    if user_id == 1 and not settings.GOOGLE_API_KEY:
-        raise HTTPException(status_code=503, detail="AI Brain is offline (Missing System Key)")
-
     try:
-        response = await run_agent(content=last_msg, user_id=user_id, session_id=session_id)
+        user_id = 1
+        if request.user_id:
+            try:
+                user_id = int(request.user_id)
+            except (ValueError, TypeError):
+                user_id = 1
         
-        # Adapt run_agent response to MiniMax-compatible format for frontend
-        return {
-            "choices": [
-                {
-                    "message": {
-                        "content": response["content"],
-                        "role": "assistant"
-                    }
-                }
-            ],
-            "model": "gemini-flash-latest",
-            "base_resp": {
-                "status_code": 0,
-                "status_msg": "ok"
+        # Determine the user's name if available
+        profile = db.query(UserButlerProfile).filter_by(user_id=user_id).first()
+        user_nickname = profile.user_nickname if profile and profile.user_nickname else "主人"
+        
+        # Use a consistent session ID for the user's web chat
+        session_id = f"web_{user_id}"
+        
+        # Extract the actual message content
+        if not request.messages:
+            return {
+                "id": f"msg_err_{datetime.now().timestamp()}",
+                "role": "assistant",
+                "content": "⚠️ 您似乎没有输入任何内容呢。",
+                "type": "text"
             }
-        }
+            
+        # Try object access, fallback to dict access
+        try:
+            last_msg = request.messages[-1].content
+        except AttributeError:
+            last_msg = request.messages[-1]["content"]
+        
+        # Run the unified AI brain with failover protection
+        response = await run_agent(content=last_msg, user_id=user_id, session_id=session_id)
+        return response
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"🚨 CRITICAL API FAILURE: {str(e)}")
+        # Ultimate fallback: Never return a 500, always a polite 200 with error content
+        return {
+            "id": f"msg_panic_{datetime.now().timestamp()}",
+            "role": "assistant",
+            "content": "⚠️ 0Buck 智脑正在进行神经网络自愈，请稍等片刻后再与我交谈。我一直都在。",
+            "type": "text"
+        }
 
 @router.get("/profile/{user_id}")
 async def get_butler_profile(user_id: int, db: Session = Depends(get_db)):

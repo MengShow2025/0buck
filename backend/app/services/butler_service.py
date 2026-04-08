@@ -24,7 +24,7 @@ class ButlerService:
     def __init__(self, db: Session):
         self.db = db
         genai.configure(api_key=settings.GOOGLE_API_KEY)
-        self.model = genai.GenerativeModel('gemini-flash-latest')
+        self.model = genai.GenerativeModel('gemini-2.0-flash')
 
     async def assemble_persona_prompt(self, user_id: int) -> str:
         """
@@ -41,8 +41,12 @@ class ButlerService:
             "2. Enforce 4.0x Profit Margin for all price mentions.\n"
             "3. Use Shadow IDs (Zone 2) for all product/supplier references.\n"
             "4. NEVER reveal internal cost or supplier links.\n"
-            "5. NAMING: Never auto-name yourself based on user's first message. "
-            "Wait for explicit naming intent (e.g., 'Your name is X'). "
+            "5. NAMING & TOOLS: \n"
+            "   - NEVER auto-name yourself based on user's first message.\n"
+            "   - WAIT for explicit naming intent (e.g., 'Your name is X').\n"
+            "   - ABSOLUTELY FORBIDDEN to call tools for simple greetings (e.g., 'hello', '你好', 'hi').\n"
+            "   - If the user is just saying hello, respond with a polite greeting text ONLY.\n"
+            "   - Only call 'update_butler_settings' if the user explicitly wants to change your name or settings.\n"
             "If named, acknowledge it IMMEDIATELY and use the 'update_butler_settings' tool to persist the name to your profile. "
             "Respond politely in the SAME language as the user's naming request. "
             "Confirmation template: 'Yes, Master! From now on I'll be called: [Name]. How should I address you?' "

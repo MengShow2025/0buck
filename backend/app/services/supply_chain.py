@@ -31,7 +31,7 @@ class SupplyChainService:
         
         # Initialize AI with Admin-configurable key
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-flash-latest",
+            model="gemini-2.0-flash",
             google_api_key=self.config_service.get_api_key("GOOGLE_API_KEY"),
             temperature=0.7
         )

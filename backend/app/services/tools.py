@@ -35,27 +35,32 @@ def trigger_wishing_well(user_id: int, description: str):
 def product_search(query: str):
     """Search for products in the 0buck store by name or category."""
     db = SessionLocal()
-    shield = ShieldService(db)
-    
-    products = db.query(Product).filter(
-        (Product.title_en.ilike(f"%{query}%")) | 
-        (Product.category.ilike(f"%{query}%"))
-    ).limit(5).all()
-    
-    results = []
-    for p in products:
-        # v3.1: Apply Shadow ID Mapping (Zone 2)
-        shadow_id = shield.get_shadow_id(p.product_id_1688, "product")
-        results.append({
-            "shadow_id": shadow_id,
-            "title": p.title_en,
-            "price": float(p.sale_price),
-            "category": p.category,
-            "vibe": "IDS Match"
-        })
-    
-    db.close()
-    return results
+    try:
+        shield = ShieldService(db)
+        
+        products = db.query(Product).filter(
+             (Product.title_en.ilike(f"%{query}%")) | 
+             (Product.category.ilike(f"%{query}%"))
+         ).limit(5).all()
+        
+        if not products:
+            return {"status": "info", "message": f"未找到与 '{query}' 相关的产品。"}
+            
+        results = []
+        for p in products:
+            shadow_id = shield.get_shadow_id(p.product_id_1688, "product")
+            results.append({
+                "shadow_id": shadow_id,
+                "title": p.title_en,
+                "price": float(p.sale_price),
+                "category": p.category
+            })
+        return results
+    except Exception as e:
+        print(f"❌ Product search failed: {e}")
+        return {"status": "error", "message": "暂时无法搜索产品，请稍后再试。"}
+    finally:
+        db.close()
 
 async def _web_search_func(query: str) -> List[Dict[str, Any]]:
     """

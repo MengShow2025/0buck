@@ -22,7 +22,8 @@ class ReflectionService:
     
     def __init__(self):
         genai.configure(api_key=settings.GOOGLE_API_KEY)
-        self.model = genai.GenerativeModel('gemini-flash-latest')
+        # v5.7.10: Using a stable model for reflection, failover handled in methods if needed
+        self.model = genai.GenerativeModel('gemini-2.0-flash')
 
     async def extract_facts(self, history: List[Dict[str, str]], user_id: int, db: Session):
         """
@@ -60,7 +61,22 @@ class ReflectionService:
         )
 
         try:
-            response = await self.model.generate_content_async(prompt)
+            # v5.7.10: Model Failover for Reflection
+            model_tier = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.0-pro"]
+            response = None
+            last_err = None
+            for m_name in model_tier:
+                try:
+                    self.model = genai.GenerativeModel(m_name)
+                    response = await self.model.generate_content_async(prompt)
+                    break
+                except Exception as e:
+                    last_err = e
+                    continue
+            
+            if not response:
+                raise last_err if last_err else Exception("Reflection models failed.")
+
             # v3.2: Directly parse Gemini's structured JSON output
             text = response.text.strip()
             if "```json" in text:
@@ -153,7 +169,7 @@ class ReflectionService:
             usage_stat = AIUsageStats(
                 user_id=user_id,
                 task_type="reflection",
-                model_name="gemini-flash-latest",
+                model_name="gemini-2.0-flash",
                 tokens_in=usage.prompt_token_count,
                 tokens_out=usage.candidates_token_count,
                 cost_usd=(usage.prompt_token_count * 0.000000075) + (usage.candidates_token_count * 0.0000003),

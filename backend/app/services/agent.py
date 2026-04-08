@@ -49,14 +49,14 @@ def get_dynamic_llm(user_id: int, db: SessionLocal):
     if profile and profile.ai_api_key:
         # Use User's Pro Key (BYOK)
         return ChatGoogleGenerativeAI(
-            model="gemini-flash-latest",
+            model="gemini-2.0-flash",
             google_api_key=profile.ai_api_key,
             temperature=0
         ), True
     
     # Use System Flash Key (Subsidy)
     return ChatGoogleGenerativeAI(
-        model="gemini-flash-latest",
+        model="gemini-2.0-flash",
         google_api_key=config_service.get_api_key("GOOGLE_API_KEY"),
         temperature=0
     ), False
@@ -66,18 +66,15 @@ async def supervisor(state: AgentState):
     """
     v3.2 Persona OS Supervisor:
     1. Assemble 3-Layer Prompt (Enforcement + Strategy + Surface)
-    2. Route to tools or respond directly
+    2. Route to tools or respond directly with Failover Support.
     """
     user_id = state.get("user_id")
     
     db = SessionLocal()
     try:
         butler_service = ButlerService(db)
-        
-        # --- v3.2 3-Layer Prompt Assembly ---
         system_prompt = await butler_service.assemble_persona_prompt(user_id)
         
-        # --- v3.3.1 C2M Wishing Well Guidance ---
         last_user_msg = ""
         for m in reversed(state["messages"]):
             if m.type == "human":
@@ -88,16 +85,43 @@ async def supervisor(state: AgentState):
             c2m_guidance = await butler_service.get_c2m_guidance_prompt(user_id, last_user_msg)
             system_prompt += f"\n\n{c2m_guidance}"
         
-        # Additional Context (Locale/Currency)
         locale = state.get("locale", "en")
         currency = state.get("currency", "USD")
         system_prompt += f"\n\n### Current Context\n- Locale: {locale}\n- Currency: {currency}\n- Response Language: {locale}"
         
-        llm, _ = get_dynamic_llm(user_id, db)
+        # v5.7.10: Industrial-grade Model Failover (Cheapest -> Pro)
+        model_tier = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.0-pro"]
+        last_error = None
         
-        llm_with_tools = llm.bind_tools(tools)
-        messages = [SystemMessage(content=system_prompt)] + state["messages"]
-        response = await llm_with_tools.ainvoke(messages)
+        config_service = ConfigService(db)
+        profile = db.query(UserButlerProfile).filter_by(user_id=user_id).first()
+        api_key = profile.ai_api_key if profile and profile.ai_api_key else config_service.get_api_key("GOOGLE_API_KEY")
+
+        for model_name in model_tier:
+            try:
+                llm = ChatGoogleGenerativeAI(
+                    model=model_name,
+                    google_api_key=api_key,
+                    temperature=0
+                )
+                llm_with_tools = llm.bind_tools(tools)
+                messages = [SystemMessage(content=system_prompt)] + state["messages"]
+                response = await llm_with_tools.ainvoke(messages)
+                
+                # If we reached here, it succeeded!
+                logger.info(f"✅ AI Success using model: {model_name}")
+                
+                # Tag the response with the model used for usage tracking
+                response.response_metadata["model_used"] = model_name
+                break 
+            except Exception as e:
+                last_error = e
+                logger.warning(f"⚠️ Model {model_name} failed: {str(e)}. Trying next...")
+                continue
+        else:
+            # All models failed
+            raise last_error if last_error else Exception("All models in failover tier failed.")
+
     finally:
         db.close()
     
@@ -227,11 +251,12 @@ async def run_agent(content: str, user_id: int, session_id: str = "default"):
                 "is_byok": is_byok
             }
         except Exception as e:
-            logger.error(f"❌ AI Agent Execution Error: {str(e)}")
+            logger.error(f"❌ AI Agent Execution Error (Final Fallback): {str(e)}")
+            # v5.7.11: Final Safety Net for Zero-Error Goal
             return {
-                "id": f"msg_err_{datetime.now().timestamp()}",
+                "id": f"msg_panic_{datetime.now().timestamp()}",
                 "role": "assistant",
-                "content": f"⚠️ 0Buck 智脑遇到技术故障: {str(e)}",
+                "content": "⚠️ 0Buck 智脑正在进行深度进化，暂时无法处理该请求。请尝试更换问题或稍后再试，我会一直守护您的生意。",
                 "type": "text",
                 "is_byok": is_byok
             }
@@ -243,13 +268,14 @@ async def run_agent(content: str, user_id: int, session_id: str = "default"):
             usage = last_msg.response_metadata.get("token_usage", {})
             tokens_in = usage.get("prompt_tokens", 0)
             tokens_out = usage.get("completion_tokens", 0)
+            model_used = last_msg.response_metadata.get("model_used", "gemini-2.0-flash")
             
             # Log to ai_usage_stats
             usage_stat = AIUsageStats(
                 user_id=user_id,
                 task_type="chat",
-            model_name="gemini-flash-latest", # Main model
-            tokens_in=tokens_in,
+                model_name=model_used, # Use actual model
+                tokens_in=tokens_in,
                 tokens_out=tokens_out,
                 cost_usd=(tokens_in * 0.0000035) + (tokens_out * 0.0000105), # Est. Pro pricing
                 session_id=session_id
