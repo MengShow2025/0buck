@@ -394,19 +394,18 @@ async def feishu_webhook(request: Request):
         if payload.get("type") == "url_verification":
             return JSONResponse(content={"challenge": payload.get("challenge")}, status_code=200)
         
-        # 2. Handle Interactive Card Callbacks (v5.7.38)
-        if "action" in payload and "open_id" in payload:
-            sender_id = payload.get("open_id")
-            action_val = payload.get("action", {}).get("value", {})
+        # 2. Handle Interactive Card Callbacks (v5.7.39)
+        # v5.7.39: Robust ID extraction from Feishu callback
+        if "action" in payload:
+            sender_id = payload.get("open_id") or payload.get("operator", {}).get("open_id")
+            if not sender_id: return JSONResponse(content={}, status_code=200)
             
+            action_val = payload.get("action", {}).get("value", {})
             if action_val.get("command") == "get_sync_code":
                 # User clicked "Get Sync Code" button
                 logger.info(f"⚡ Feishu Interactive: User {sender_id} requested sync code")
-                # We can't use generic_brain_process here because it's a direct action
-                # Trigger code generation
                 reply = await handle_binding_command("feishu", sender_id, "zh")
                 await send_feishu_message(sender_id, reply)
-                # Feishu requires a response to the callback to update the card or acknowledge
                 return JSONResponse(content={}, status_code=200)
 
         # 3. Handle Regular Events
