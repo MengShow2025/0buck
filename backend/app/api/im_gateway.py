@@ -97,10 +97,17 @@ async def handle_binding_command(platform: str, uid: str, lang: str = "en") -> s
         ))
         db.commit()
         
+        # v5.7.46: Enhanced instruction with One-Click Sync Deep Link
+        # URL encodes the command to pre-fill the App chat
+        import urllib.parse
+        cmd_text = f"我要绑定账号 {code}" if lang == "zh" else f"Link my account {code}"
+        encoded_cmd = urllib.parse.quote(cmd_text)
+        deep_link = f"https://0buck.com/chat?prefill={encoded_cmd}"
+        
         if lang == "zh":
-            return f"✨ 0Buck 身份同步指令 ✨\n\n请复制并发送下面这句话给 App 里的 AI 管家：\n\n我要绑定账号 {code}\n\n(验证码 15 分钟内有效)"
+            return f"✨ 0Buck 身份同步指令 ✨\n\n1️⃣ 复制发送下面这句话给 App 里的 AI 管家：\n\n{cmd_text}\n\n2️⃣ 或者直接点击下方链接一键同步：\n{deep_link}\n\n(验证码 15 分钟内有效)"
         else:
-            return f"✨ 0Buck Identity Sync ✨\n\nPlease copy and send the following sentence to the App's AI Butler:\n\nLink my account {code}\n\n(Valid for 15 minutes)"
+            return f"✨ 0Buck Identity Sync ✨\n\n1️⃣ Copy and send the following to the App's AI Butler:\n\n{cmd_text}\n\n2️⃣ Or click below to sync instantly:\n{deep_link}\n\n(Valid for 15 minutes)"
     except Exception as e:
         logger.error(f"Error generating binding code: {e}")
         return "Failed to generate binding code. Please try again later."

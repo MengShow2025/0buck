@@ -140,6 +140,33 @@ export default function FloatingButler({ onProductClick }: FloatingButlerProps) 
     return () => window.removeEventListener('openFloatingButler', handleOpenButler);
   }, [messages, butlerName]); // Need dependencies since handleSendMessage uses them
 
+  useEffect(() => {
+    const checkPrefill = () => {
+      const params = new URLSearchParams(window.location.search);
+      const prefill = params.get('prefill');
+      if (prefill) {
+        setIsOpen(true);
+        setIsMinimized(false);
+        setInputValue(prefill);
+        
+        // Remove parameter from URL
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, '', newUrl);
+        
+        // Auto-send after a short delay to ensure UI is ready
+        setTimeout(() => {
+          const formEvent = { preventDefault: () => {} } as React.FormEvent;
+          handleSendMessage(formEvent, prefill);
+        }, 500);
+      }
+    };
+    
+    checkPrefill();
+    // Also listen for URL changes if it's a SPA navigation
+    window.addEventListener('popstate', checkPrefill);
+    return () => window.removeEventListener('popstate', checkPrefill);
+  }, []);
+
   const handleSendMessage = (e: React.FormEvent, overrideValue?: string) => {
     e.preventDefault();
     const valueToSend = overrideValue !== undefined ? overrideValue : inputValue;
