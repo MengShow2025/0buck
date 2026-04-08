@@ -79,30 +79,21 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
     db = SessionLocal()
     try:
         lang = detect_language(text)
+        # v5.7.21: Robust Identity Logic
         binding = db.query(UserIMBinding).filter_by(platform=platform, platform_uid=platform_uid, is_active=True).first()
-        
-        logger.info(f"🔍 IM Check: Platform={platform}, UID={platform_uid}, Found Binding={bool(binding)}")
-        
-        user_id = binding.user_id if binding else 1
         is_guest = binding is None
+        user_id = binding.user_id if binding else 1
+        
+        logger.info(f"🧠 [{platform.upper()}] Identity: UID={platform_uid}, UserID={user_id}, IsGuest={is_guest}")
         
         sig = generate_binding_sig(platform, platform_uid)
         
         # v5.7.20: Use a more robust URL construction
         domain = settings.STOREFRONT_DOMAIN.strip().rstrip("/")
-        if not domain.startswith("http"):
-            base_url = f"https://{domain}"
-        else:
-            base_url = domain
+        base_url = f"https://{domain}" if not domain.startswith("http") else domain
             
         raw_bind_url = f"{base_url}/auth/bind?platform={platform}&uid={platform_uid}&sig={sig}"
-        
-        # Determine appropriate binding message based on is_guest
-        if is_guest:
-            # v5.6.6: Add Feishu-specific immersive browser flags
-            bind_url = f"{raw_bind_url}&lk_with_external=false"
-        else:
-            bind_url = raw_bind_url
+        bind_url = f"{raw_bind_url}&lk_with_external=false"
         
         # Composite Session for Persona Projection
         session_id = f"{platform}_{chat_id}_{platform_uid}" if chat_type == "group" else f"{platform}_{platform_uid}"
@@ -114,7 +105,6 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
         await send_rich_message(platform, platform_uid, thinking_msg, "0Buck AI Brain", None, lang)
         
         # 2. Call AI Brain
-        logger.info(f"🧠 [{platform.upper()}] Process for {platform_uid} (Guest={is_guest})")
         try:
             ai_response = await run_agent(content=text, user_id=user_id, session_id=session_id)
             main_reply = ai_response.get("content")
@@ -124,12 +114,9 @@ async def generic_brain_process(platform: str, platform_uid: str, text: str, cha
             logger.error(f"AI Agent Error: {ai_err}")
             main_reply = f"⚠️ 0Buck 智脑暂时无法响应: {str(ai_err)}" if lang == "zh" else f"⚠️ 0Buck AI Brain error: {str(ai_err)}"
         
-        # 3. Send final response (v5.7.20: Enhanced footer for guests)
-        if is_guest:
-            # v5.6.4: Only suggest binding if they haven't yet
-            main_reply += f"\n\n--- \n 💡 提示：检测到您尚未登录。点击 [立即登录]({bind_url})，即可解锁订单跟踪和专属生意记忆功能。" if lang == "zh" else f"\n\n--- \n 💡 Tip: You are not logged in. [Login Now]({bind_url}) to unlock order tracking and personalized memory."
-            
-        await send_rich_message(platform, platform_uid, main_reply, "0Buck AI Brain", None, lang)
+        # 3. Send final response (Footer/Login link is handled elegantly by send_rich_message)
+        # v5.7.21: ONLY pass bind_url if the user is truly a guest
+        await send_rich_message(platform, platform_uid, main_reply, "0Buck AI Brain", bind_url if is_guest else None, lang)
         logger.info(f"✅ [{platform.upper()}] Response complete for {platform_uid}")
         
     except Exception as e:

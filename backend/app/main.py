@@ -446,7 +446,8 @@ if os.path.exists(frontend_path):
         return FileResponse(os.path.join(frontend_path, "index.html"))
 
     @app.get("/auth/bind")
-    async def serve_bind_page():
+    async def serve_bind_page(request: Request):
+        """v5.7.21: Accept all query params to prevent 422 Unprocessable Entity."""
         return FileResponse(os.path.join(frontend_path, "index.html"))
 
     @app.get("/{full_path:path}")
