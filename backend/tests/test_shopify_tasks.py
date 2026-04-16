@@ -37,3 +37,19 @@ def test_process_paid_order_missing_ids(mock_db_session):
     
     assert result == {"status": "skipped"}
     mock_db_session.add.assert_not_called()
+
+def test_process_paid_order_idempotency(mock_db_session, sample_payload):
+    # Mock the DB query to return an existing order with status "paid_processed"
+    mock_query = MagicMock()
+    mock_db_session.query.return_value = mock_query
+    mock_filter = MagicMock()
+    mock_query.filter_by.return_value = mock_filter
+    
+    existing_order = MagicMock()
+    existing_order.status = "paid_processed"
+    mock_filter.first.return_value = existing_order
+    
+    result = process_paid_order(sample_payload)
+    
+    assert result == {"status": "already_processed"}
+    mock_db_session.add.assert_not_called()
