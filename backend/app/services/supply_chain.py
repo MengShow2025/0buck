@@ -1064,7 +1064,7 @@ class SupplyChainService:
 
     async def approve_candidate(self, candidate_id: int):
         candidate = self.db.query(CandidateProduct).filter_by(id=candidate_id).first()
-        if not candidate or candidate.status != "new":
+        if not candidate or candidate.status not in ["new", "pending"]:
             return False
 
         candidate.status = "reviewing"
