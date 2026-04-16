@@ -4,7 +4,7 @@ import {
   ChevronRight, MessageCircle as FacebookIcon, Send as TwitterIcon, Code as GithubIcon 
 } from 'lucide-react';
 import { useAppContext } from '../AppContext';
-import { userApi, authApi, imApi } from '../../../services/api';
+import { userApi, authApi } from '../../../services/api';
 
 export const SecurityDrawer: React.FC = () => {
   const { 
@@ -17,22 +17,6 @@ export const SecurityDrawer: React.FC = () => {
   } = useAppContext();
 
   const [kycStatus, setKycStatus] = useState<{ kyc_level: number; status: string }>({ kyc_level: 0, status: 'unverified' });
-  const [imBindings, setImBindings] = useState<Record<string, { linked: boolean; platform_uid: string }>>({});
-
-  const fetchImBindings = async () => {
-    try {
-      const resp = await imApi.getBindings();
-      const list = (resp.data?.bindings || []) as Array<{ platform: string; linked: boolean; platform_uid: string }>;
-      const map: Record<string, { linked: boolean; platform_uid: string }> = {};
-      list.forEach((item) => {
-        map[item.platform] = { linked: !!item.linked, platform_uid: item.platform_uid || '' };
-      });
-      setImBindings(map);
-    } catch (e) {
-      console.error('Failed to load IM bindings', e);
-    }
-  };
-
   useEffect(() => {
     const fetchSecurityStatus = async () => {
       try {
@@ -41,47 +25,12 @@ export const SecurityDrawer: React.FC = () => {
         
         // Also ensure user info is fresh
         await refreshUser();
-        await fetchImBindings();
       } catch (error) {
         console.error('Failed to fetch security status', error);
       }
     };
     fetchSecurityStatus();
   }, [refreshUser]);
-
-  const handleImBind = async (platform: 'feishu' | 'telegram' | 'whatsapp' | 'discord') => {
-    try {
-      if (platform === 'feishu') {
-        const resp = await imApi.getFeishuOauthStart();
-        const url = resp.data?.authorize_url;
-        if (url) {
-          window.open(url, '_blank', 'noopener,noreferrer');
-          alert('Opened Feishu OAuth page in a new tab.');
-          return;
-        }
-      }
-      const resp = await imApi.createBindToken(platform);
-      const cmd = resp.data?.im_command || '';
-      if (cmd) {
-        await navigator.clipboard.writeText(cmd);
-        alert(`Binding command copied: ${cmd}`);
-      } else {
-        alert('Bind token generated. Please use IM command to complete binding.');
-      }
-    } catch (e) {
-      alert('Failed to start IM binding flow.');
-    }
-  };
-
-  const handleImUnlink = async (platform: 'feishu' | 'telegram' | 'whatsapp' | 'discord') => {
-    try {
-      await imApi.unlink(platform);
-      await fetchImBindings();
-      alert(`${platform} unlinked.`);
-    } catch (e) {
-      alert(`Failed to unlink ${platform}.`);
-    }
-  };
 
   const handleSocialBind = async (platform: 'facebook' | 'twitter' | 'github', isBound: boolean, setter: (v: boolean) => void) => {
     if (isBound) {
@@ -110,42 +59,6 @@ export const SecurityDrawer: React.FC = () => {
           <ShieldCheck className="w-16 h-16 text-green-500 mb-3" />
           <h2 className="text-xl font-black text-gray-900 dark:text-white">{t('security.status_good')}</h2>
           <p className="text-sm text-gray-500 dark:text-gray-400 font-medium mt-1">{t('security.status_desc')}</p>
-        </div>
-
-        {/* IM Platform Binding Group */}
-        <div>
-          <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3 ml-4">IM Platform Bindings</h3>
-          <div className="bg-white dark:bg-[#1C1C1E] rounded-[32px] overflow-hidden shadow-sm border border-gray-100 dark:border-white/5">
-            {(['feishu', 'telegram', 'whatsapp', 'discord'] as const).map((platform, idx) => {
-              const info = imBindings[platform] || { linked: false, platform_uid: '' };
-              const showBorder = idx < 3;
-              return (
-                <button
-                  key={platform}
-                  onClick={() => (info.linked ? handleImUnlink(platform) : handleImBind(platform))}
-                  className={`w-full flex items-center justify-between px-5 py-4 ${showBorder ? 'border-b border-gray-50 dark:border-white/5' : ''} active:bg-gray-50 dark:active:bg-white/5 transition-colors`}
-                >
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded-2xl bg-sky-50 dark:bg-sky-900/20 flex items-center justify-center text-sky-600 dark:text-sky-400">
-                      <TwitterIcon className="w-5 h-5" />
-                    </div>
-                    <div className="text-left">
-                      <div className="text-[15px] font-black text-gray-900 dark:text-white">{platform.charAt(0).toUpperCase() + platform.slice(1)}</div>
-                      <div className="text-[11px] text-gray-400 font-medium">
-                        {info.linked ? `Linked UID: ${info.platform_uid || '-'}` : 'Not linked'}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-[10px] font-black uppercase tracking-widest ${info.linked ? 'text-red-500' : 'text-green-500'}`}>
-                      {info.linked ? 'Unlink' : 'Bind'}
-                    </span>
-                    <ChevronRight className="w-4 h-4 text-gray-300" />
-                  </div>
-                </button>
-              );
-            })}
-          </div>
         </div>
 
         {/* Auth Group */}

@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   User, Shield, Smartphone, Bell, Moon, Sun, 
   Globe, Bot, Brain, Database, Trash2, ChevronRight,
-  Monitor, LogOut, Info, HardDrive, ChevronDown
+  Monitor, LogOut, Info, HardDrive, ChevronDown, Link2,
+  MessageSquare, Send, MessageCircle, Gamepad2, Copy
 } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import { imApi } from '../../../services/api';
 
 // Internal Custom Select Component for downward floating menu
 const CustomSelect = ({ value, options, onChange, width = "w-36" }: { value: string, options: {label: string, value: string}[], onChange: (val: any) => void, width?: string }) => {
@@ -72,6 +74,101 @@ export const SettingsDrawer: React.FC = () => {
   const [cacheSize, setCacheSize] = useState('24.5 MB');
   const [isClearing, setIsClearing] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [imBindings, setImBindings] = useState<Record<string, { linked: boolean; platform_uid: string }>>({});
+  const [bindModal, setBindModal] = useState<{
+    open: boolean;
+    platform: 'feishu' | 'telegram' | 'whatsapp' | 'discord' | null;
+    link: string;
+    command: string;
+    qrValue: string;
+  }>({ open: false, platform: null, link: '', command: '', qrValue: '' });
+  const [unlinkPlatform, setUnlinkPlatform] = useState<'feishu' | 'telegram' | 'whatsapp' | 'discord' | null>(null);
+
+  const PLATFORM_META: Record<'feishu' | 'telegram' | 'whatsapp' | 'discord', { label: string; icon: React.ReactNode; linked: string; unlinked: string }> = {
+    feishu: {
+      label: '飞书',
+      icon: <MessageSquare className="w-4 h-4" />,
+      linked: 'bg-blue-500 text-white',
+      unlinked: 'bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+    },
+    telegram: {
+      label: 'Telegram',
+      icon: <Send className="w-4 h-4" />,
+      linked: 'bg-sky-500 text-white',
+      unlinked: 'bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+    },
+    whatsapp: {
+      label: 'WhatsApp',
+      icon: <MessageCircle className="w-4 h-4" />,
+      linked: 'bg-emerald-500 text-white',
+      unlinked: 'bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+    },
+    discord: {
+      label: 'Discord',
+      icon: <Gamepad2 className="w-4 h-4" />,
+      linked: 'bg-indigo-500 text-white',
+      unlinked: 'bg-gray-200 text-gray-400 dark:bg-gray-700 dark:text-gray-500'
+    }
+  };
+
+  const loadBindings = async () => {
+    try {
+      const resp = await imApi.getBindings();
+      const list = (resp.data?.bindings || []) as Array<{ platform: string; linked: boolean; platform_uid: string }>;
+      const map: Record<string, { linked: boolean; platform_uid: string }> = {};
+      list.forEach((item) => {
+        map[item.platform] = { linked: !!item.linked, platform_uid: item.platform_uid || '' };
+      });
+      setImBindings(map);
+    } catch (e) {
+      console.error('Failed to load IM bindings', e);
+    }
+  };
+
+  useEffect(() => {
+    loadBindings();
+  }, []);
+
+  const openBindPanel = async (platform: 'feishu' | 'telegram' | 'whatsapp' | 'discord') => {
+    const linked = !!imBindings[platform]?.linked;
+    if (linked) {
+      setUnlinkPlatform(platform);
+      return;
+    }
+    try {
+      const tokenResp = await imApi.createBindToken(platform);
+      const command = tokenResp.data?.im_command || '';
+      let link = command;
+      if (platform === 'feishu') {
+        try {
+          const oauthResp = await imApi.getFeishuOauthStart();
+          if (oauthResp.data?.authorize_url) link = oauthResp.data.authorize_url;
+        } catch (_e) {
+          // fall back to command when oauth url is unavailable
+        }
+      }
+      setBindModal({
+        open: true,
+        platform,
+        link,
+        command,
+        qrValue: link || command
+      });
+    } catch (e) {
+      alert('获取绑定信息失败，请稍后再试');
+    }
+  };
+
+  const doUnlink = async () => {
+    if (!unlinkPlatform) return;
+    try {
+      await imApi.unlink(unlinkPlatform);
+      setUnlinkPlatform(null);
+      await loadBindings();
+    } catch (e) {
+      alert('解绑失败，请稍后再试');
+    }
+  };
 
   const handleSaveInstructions = () => {
     setAiCustomInstructions(instructions);
@@ -232,6 +329,32 @@ export const SettingsDrawer: React.FC = () => {
                 <input type="checkbox" className="sr-only peer" checked={notifications} onChange={(e) => setNotifications(e.target.checked)} />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-[#FF5C00]"></div>
               </label>
+            </div>
+
+            {/* Link Bindings */}
+            <div className="flex items-center justify-between px-4 py-3.5 border-t border-gray-100 dark:border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center text-cyan-600 dark:text-cyan-400">
+                  <Link2 className="w-4 h-4" />
+                </div>
+                <span className="text-[15px] text-gray-900 dark:text-white">链接：</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {(['feishu', 'telegram', 'whatsapp', 'discord'] as const).map((platform) => {
+                  const linked = !!imBindings[platform]?.linked;
+                  const meta = PLATFORM_META[platform];
+                  return (
+                    <button
+                      key={platform}
+                      onClick={() => openBindPanel(platform)}
+                      title={meta.label}
+                      className={`w-8 h-8 rounded-full flex items-center justify-center transition-all ${linked ? meta.linked : meta.unlinked}`}
+                    >
+                      {meta.icon}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </div>
@@ -422,6 +545,100 @@ export const SettingsDrawer: React.FC = () => {
                   className="flex-1 py-3 text-[16px] text-red-500 dark:text-red-500 font-semibold active:bg-gray-200/50 dark:active:bg-white/5 transition-colors"
                 >
                   {t('common.confirm')}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Bind Panel Modal */}
+      <AnimatePresence>
+        {bindModal.open && bindModal.platform && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setBindModal({ open: false, platform: null, link: '', command: '', qrValue: '' })}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-[320px] bg-[#f2f2f2] dark:bg-[#1C1C1E] rounded-2xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-4 border-b border-gray-200 dark:border-gray-700">
+                <h3 className="text-[16px] font-semibold text-black dark:text-white">{PLATFORM_META[bindModal.platform].label} 连接</h3>
+                <p className="text-[12px] text-gray-500 mt-1">请使用连接链接或二维码完成绑定</p>
+              </div>
+              <div className="p-4 space-y-3">
+                <div className="bg-white dark:bg-[#2C2C2E] rounded-xl p-3">
+                  <div className="text-[12px] text-gray-500 mb-1">连接链接</div>
+                  <div className="text-[12px] break-all text-gray-800 dark:text-gray-200">{bindModal.link || bindModal.command}</div>
+                </div>
+                <button
+                  onClick={async () => {
+                    const content = bindModal.link || bindModal.command;
+                    await navigator.clipboard.writeText(content);
+                  }}
+                  className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-500 text-white text-[13px] font-medium"
+                >
+                  <Copy className="w-4 h-4" />
+                  复制连接链接
+                </button>
+                <div className="bg-white dark:bg-[#2C2C2E] rounded-xl p-3">
+                  <div className="text-[12px] text-gray-500 mb-2">二维码</div>
+                  {bindModal.qrValue ? (
+                    <img
+                      src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(bindModal.qrValue)}`}
+                      alt="bind-qr"
+                      className="w-44 h-44 mx-auto rounded-md bg-white p-1"
+                    />
+                  ) : (
+                    <div className="text-[12px] text-gray-400">暂无二维码内容</div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Unlink Modal */}
+      <AnimatePresence>
+        {!!unlinkPlatform && (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+              onClick={() => setUnlinkPlatform(null)}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="relative w-[280px] bg-[#f2f2f2] dark:bg-[#1C1C1E] rounded-2xl overflow-hidden shadow-2xl"
+            >
+              <div className="p-5 text-center">
+                <h3 className="text-[16px] font-semibold text-black dark:text-white mb-2">确认解绑</h3>
+                <p className="text-[13px] text-gray-500">是否解绑 {unlinkPlatform ? PLATFORM_META[unlinkPlatform].label : ''}？</p>
+              </div>
+              <div className="flex border-t border-gray-300 dark:border-gray-700/50">
+                <button
+                  onClick={() => setUnlinkPlatform(null)}
+                  className="flex-1 py-3 text-[15px] text-blue-500 border-r border-gray-300 dark:border-gray-700/50"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={doUnlink}
+                  className="flex-1 py-3 text-[15px] text-red-500 font-semibold"
+                >
+                  解绑
                 </button>
               </div>
             </motion.div>

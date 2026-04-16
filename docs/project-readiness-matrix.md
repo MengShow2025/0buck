@@ -307,3 +307,16 @@
   - 登录态 `POST /api/v1/im/promo/cards/from-link` 返回 `200`，可反解模板成功。
 - 进行中：Checkout 登录态成功流仍受历史库结构漂移阻断（`products` 表缺失多列，已补 `source_platform/source_url/backup_source_url`，仍有 `melting_reason` 等字段缺失引发 `quote` 500）。
 - 当前结论：AI/Share 登录态已打通；Checkout 成功流需继续完成 `products` 相关缺失列兼容或执行完整迁移后再验证。
+
+## 本轮进展（第 44 批：服务可用性与 IM 绑定入口恢复）
+- 已完成：恢复本地服务可用性（前端 `5173` + 后端 `8000` 同时拉起）；`/healthz` 与首页请求均返回 `200`，修复“服务不可用”页面。
+- 已完成：恢复“飞书等绑定入口”可见性（`SecurityDrawer` 新增 IM Platform Bindings 分组）。
+- 已完成：入口接入真实接口能力：`getBindings`（状态）、`createBindToken`（绑定指令）、`unlink`（解绑）、`getFeishuOauthStart`（飞书 OAuth）。
+- 已验证：前端 `npm run build` 通过，无新增类型诊断错误。
+
+## 本轮进展（第 45 批：按原交互恢复“链接”栏）
+- 已完成：按原体验把入口迁回 `SettingsDrawer`，新增“链接：”图标行（飞书/Telegram/WhatsApp/Discord）。
+- 已完成：图标状态恢复为“灰色未绑定 / 彩色已绑定”。
+- 已完成：点击灰色图标弹出绑定面板，包含“连接链接 + 二维码 + 一键复制链接”。
+- 已完成：点击彩色图标弹出“确认解绑”并执行解绑。
+- 已完成：移除 `SecurityDrawer` 中临时新增的 IM 入口，避免入口重复与层级错位。
