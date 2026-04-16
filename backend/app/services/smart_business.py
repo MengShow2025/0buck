@@ -6,6 +6,7 @@ from app.models.ledger import PriceWish, Order
 from app.models.product import Product
 from app.services.shopify_payment_service import ShopifyDraftOrderService
 from app.services.social_automation import SocialAutomationService
+from app.services.cj_service import CJDropshippingService
 
 logger = logging.getLogger(__name__)
 
@@ -16,6 +17,72 @@ class SmartBusinessService:
     """
     def __init__(self, db: Session):
         self.db = db
+
+    async def scan_cj_price_and_inventory(self, batch_size: int = 20):
+        """
+        v7.0 Truth Engine: Monitoring Radar (Batch Parallel Mode).
+        Scans active products on CJ to detect Price Spikes or Stock Outs.
+        """
+        active_products = self.db.query(Product).filter(
+            Product.is_melted == False,
+            Product.cj_pid.isnot(None)
+        ).all()
+        
+        cj_service = CJDropshippingService()
+        melted_count = 0
+        
+        # Parallel scanning in batches to respect CJ API rate limits
+        for i in range(0, len(active_products), batch_size):
+            batch = active_products[i:i + batch_size]
+            tasks = [self._scan_single_cj_product(product, cj_service) for product in batch]
+            results = await asyncio.gather(*tasks)
+            melted_count += sum(results)
+            
+            # Small delay between batches to avoid 429
+            await asyncio.sleep(2.0)
+        
+        self.db.commit()
+        return melted_count
+
+    async def _scan_single_cj_product(self, product, cj_service):
+        """Helper for parallel CJ scanning."""
+        try:
+            cj_detail = await cj_service.get_product_detail(product.cj_pid)
+            if not cj_detail:
+                logger.warning(f"⚠️ CJ PID {product.cj_pid} not found. Pausing product {product.id}.")
+                product.is_melted = True
+                product.melt_reason = "Sourcing Lost: CJ PID Not Found"
+                return 1
+            
+            variants = cj_detail.get("variants", [])
+            total_stock = sum([int(v.get("variantInventory", 0)) for v in variants])
+            
+            current_min_price = 0.0
+            if variants:
+                current_min_price = min([float(v.get("variantSellPrice", 0.0)) for v in variants])
+            
+            old_cost = float(product.source_cost_usd or 0.0)
+            
+            is_out_of_stock = total_stock < 50
+            is_price_spike = False
+            if old_cost > 0 and current_min_price > 0:
+                price_increase = (current_min_price - old_cost) / old_cost
+                if price_increase > 0.15:
+                    is_price_spike = True
+            
+            if is_out_of_stock or is_price_spike:
+                product.is_melted = True
+                product.melt_reason = f"{'Stock Out' if is_out_of_stock else 'Price Spike'}: Inv={total_stock}, Price=${current_min_price}"
+                logger.error(f"❄️ MELTING Product {product.id}: {product.melt_reason}")
+                return 1
+            else:
+                if current_min_price > 0:
+                    product.source_cost_usd = current_min_price
+                return 0
+                        
+        except Exception as e:
+            logger.error(f"❌ Error scanning CJ for Product {product.id}: {e}")
+            return 0
 
     async def scan_price_wishes(self):
         """
@@ -149,6 +216,72 @@ class SmartBusinessService:
         except Exception as e:
             logger.error(f"Error during sourcing scan: {e}")
 
+    async def scan_cj_price_and_inventory(self):
+        """
+        Logic 1.5: CJ Price & Inventory Monitor (v7.0 Truth Engine).
+        Checks all active CJ products for price hikes or stock-outs.
+        Implements Automatic Melting (Circuit Breaker).
+        """
+        from app.services.cj_service import CJDropshippingService
+        from app.services.sync_shopify import SyncShopifyService
+        
+        products = self.db.query(Product).filter(
+            Product.platform_tag == 'CJ',
+            Product.is_melted == False
+        ).all()
+        
+        cj_service = CJDropshippingService()
+        sync_service = SyncShopifyService(self.db)
+        
+        logger.info(f"🕵️ Monitoring {len(products)} active CJ products...")
+        
+        for product in products:
+            try:
+                # 1. Fetch current data from CJ
+                cj_data = await cj_service.get_product_detail(product.cj_pid)
+                if not cj_data:
+                    logger.warning(f"⚠️ CJ PID {product.cj_pid} not found in CJ API. Skipping.")
+                    continue
+                
+                # 2. Extract current price and inventory
+                # Note: CJ returns sellPrice as string
+                current_price = Decimal(cj_data.get("sellPrice", "0"))
+                original_cost = Decimal(str(product.source_cost_usd or 0))
+                
+                # Sum up inventory from all variants
+                variants = cj_data.get("variants", [])
+                current_inventory = sum(int(v.get("inventoryNum") or 0) for v in variants)
+                
+                # 3. Circuit Breaker Logic
+                melt_reason = None
+                
+                # A. Inventory Melting (Stock < 50)
+                if current_inventory < 50:
+                    melt_reason = f"Inventory low: {current_inventory}"
+                
+                # B. Price Melting (Price hike > 15%)
+                elif original_cost > 0 and current_price > (original_cost * Decimal("1.15")):
+                    melt_reason = f"Price hike: ${original_cost} -> ${current_price} (>15%)"
+                
+                if melt_reason:
+                    logger.warning(f"🚨 MELTING Product {product.id} ({product.title_en}): {melt_reason}")
+                    product.is_melted = True
+                    product.melt_reason = melt_reason
+                    self.db.add(product)
+                    
+                    # 4. Sync to Shopify (Status will become 'draft' in SyncShopifyService)
+                    await sync_service.sync_to_shopify(product.id)
+                else:
+                    # Update local inventory/price if changed but not melted
+                    if current_inventory != product.inventory_total:
+                        product.inventory_total = current_inventory
+                        self.db.add(product)
+                        
+            except Exception as e:
+                logger.error(f"Failed monitoring for Product {product.id}: {e}")
+        
+        self.db.commit()
+
     async def scan_all(self):
         """Triggered every 6 hours by the Smart Scanner."""
         logger.info("🚀 Starting 6-hour Smart Business Scan...")
@@ -156,6 +289,8 @@ class SmartBusinessService:
         await self.scan_churn_risk()
         await self.scan_abandoned_drafts()
         await self.scan_sourcing_candidates()
+        # v7.0 Truth Engine Monitoring
+        await self.scan_cj_price_and_inventory()
         logger.info("✅ 6-hour Smart Business Scan complete.")
 
     def add_price_wish(self, user_id: int, product_id: int, wish_price: float):

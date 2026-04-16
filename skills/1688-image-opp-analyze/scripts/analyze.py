@@ -1,0 +1,389 @@
+#!/usr/bin/env python3
+"""
+1688图片市场机会分析脚本
+通过AlphaShop API分析商品的下游市场销售机会
+"""
+
+import os
+import sys
+import json
+import time
+import jwt
+from urllib.request import urlopen, Request
+from urllib.error import HTTPError, URLError
+
+
+def get_api_credentials():
+    """获取API凭证"""
+    access_key = os.environ.get('ALPHASHOP_ACCESS_KEY')
+    secret_key = os.environ.get('ALPHASHOP_SECRET_KEY')
+
+    if not access_key or not secret_key:
+        print("❌ 错误：未配置API凭证", file=sys.stderr)
+        print("请在环境变量中设置 ALPHASHOP_ACCESS_KEY 和 ALPHASHOP_SECRET_KEY", file=sys.stderr)
+        sys.exit(1)
+
+    return access_key, secret_key
+
+
+def generate_signature(method, url, params, secret_key):
+    """生成API签名"""
+    # 按字母顺序排序参数
+    sorted_params = sorted(params.items())
+
+    # 构建待签名字符串
+    query_string = urlencode(sorted_params)
+    string_to_sign = f"{method}&{url}&{query_string}"
+
+    # 使用HMAC-SHA256生成签名
+    signature = hmac.new(
+        secret_key.encode('utf-8'),
+        string_to_sign.encode('utf-8'),
+        hashlib.sha256
+    ).digest()
+
+    return base64.b64encode(signature).decode('utf-8')
+
+
+def get_api_endpoint():
+    """获取API端点，支持多环境"""
+    env = os.environ.get('ALPHASHOP_ENV', 'prod')
+
+    endpoints = {
+        'pre': 'https://pre-api.alphashop.cn/ai.sel.global1688.image.opp.analyze/1.0',
+        'prod': 'https://api.alphashop.cn/ai.sel.global1688.image.opp.analyze/1.0'
+    }
+
+    endpoint = endpoints.get(env, endpoints['prod'])
+    print(f"使用环境: {env} ({endpoint})", file=sys.stderr)
+    return endpoint
+
+
+def get_jwt_token(access_key, secret_key):
+    """生成 JWT token 用于 AlphaShop API 认证"""
+    try:
+        current_time = int(time.time())
+        expired_at = current_time + 1800  # 30分钟后过期
+        not_before = current_time - 5
+
+        token = jwt.encode(
+            payload={
+                "iss": access_key,
+                "exp": expired_at,
+                "nbf": not_before
+            },
+            key=secret_key,
+            algorithm="HS256",
+            headers={"alg": "HS256"}
+        )
+
+        if isinstance(token, bytes):
+            token = token.decode("utf-8")
+        return token
+    except Exception as e:
+        raise ValueError(f"生成 JWT token 失败: {e}")
+
+
+def call_api(item_id, access_key, secret_key, image_url=None):
+    """调用图片市场机会分析API"""
+
+    # API端点（HTTP接口，底层基于HSF服务）
+    api_url = get_api_endpoint()
+
+    # 构建请求参数（只包含业务参数）
+    params = {}
+
+    # 添加商品ID（如果提供）
+    if item_id:
+        params["itemId"] = item_id
+
+    # 添加图片URL（如果提供）
+    if image_url:
+        params["imageUrl"] = image_url
+
+    # 生成 JWT token
+    token = get_jwt_token(access_key, secret_key)
+
+    # 发送请求（JSON 格式）
+    try:
+        json_data = json.dumps(params).encode('utf-8')
+        req = Request(
+            api_url,
+            data=json_data,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}"
+            }
+        )
+
+        with urlopen(req, timeout=150) as response:
+            response_text = response.read().decode('utf-8')
+            print(f"DEBUG: Response status: {response.status}", file=sys.stderr)
+            print(f"DEBUG: Response body: {response_text[:500]}", file=sys.stderr)
+            data = json.loads(response_text)
+            return data
+
+    except HTTPError as e:
+        print(f"❌ HTTP错误 {e.code}: {e.reason}", file=sys.stderr)
+        try:
+            error_data = json.loads(e.read().decode('utf-8'))
+            print(f"错误详情: {error_data.get('msg', '未知错误')}", file=sys.stderr)
+        except:
+            pass
+        return None
+
+    except URLError as e:
+        print(f"❌ 网络错误: {e.reason}", file=sys.stderr)
+        return None
+
+    except Exception as e:
+        print(f"❌ 请求失败: {str(e)}", file=sys.stderr)
+        return None
+
+
+def format_number(num):
+    """格式化数字"""
+    if num is None:
+        return "N/A"
+
+    if num >= 1000000:
+        return f"{num / 1000000:.1f}M"
+    elif num >= 1000:
+        return f"{num / 1000:.1f}K"
+    else:
+        return str(num)
+
+
+def format_trend(trend_list):
+    """格式化趋势数据"""
+    if not trend_list:
+        return "无数据"
+
+    values = [t.get('trendValue', '0') for t in trend_list[-12:]]  # 最近12个数据点
+    try:
+        numeric_values = [int(float(v)) for v in values]
+        return " → ".join([format_number(v) for v in numeric_values])
+    except:
+        return " → ".join(values)
+
+
+def highlight_peaks(trend_list, threshold=100):
+    """高亮峰值"""
+    if not trend_list:
+        return "无数据"
+
+    result = []
+    for trend in trend_list[-12:]:
+        try:
+            value = int(float(trend.get('trendValue', '0')))
+            if value > threshold:
+                result.append(f"{value} ⚡")
+            else:
+                result.append(str(value))
+        except:
+            result.append(trend.get('trendValue', '0'))
+
+    return " → ".join(result)
+
+
+def print_market_opportunity(opp):
+    """打印单个市场机会"""
+    platform = opp.get('platform', '').upper()
+    region = opp.get('region', '')
+    sold_cnt = opp.get('soldCntLst30d', 0)
+    similar_items = opp.get('similarItemCount', 0)
+    price = opp.get('sellingPrice', 0)
+    rating = opp.get('rating', 0)
+    growth = opp.get('salesGrowthRate', 0)
+
+    print(f"\n### {platform} - {region}")
+    print(f"- 近30天销量：{format_number(sold_cnt)}")
+    print(f"- 相似款在售：{format_number(similar_items)}")
+    print(f"- 售价：${price}")
+    print(f"- 评分：{rating} ⭐")
+    print(f"- 销量涨幅：{'+' if growth >= 0 else ''}{growth * 100:.1f}%")
+
+    # 月销量趋势
+    month_trend = opp.get('soldCntHisByM', [])
+    if month_trend:
+        print(f"\n**近12个月销量趋势：**")
+        print(f"📈 {format_trend(month_trend)}")
+
+
+def print_report(data):
+    """打印分析报告"""
+    if not data:
+        print(f"❌ 分析失败: 请求失败")
+        return
+
+    # 检查返回的结果码
+    result_code = data.get('resultCode') or data.get('code')
+    if result_code != 'SUCCESS':
+        error_msg = data.get('msg', f"错误码: {result_code}")
+
+        # 特殊错误码处理
+        if result_code == 'FAIL_SERVER_INTERNAL_ERROR':
+            print(f"❌ 服务端内部错误")
+            print(f"\n可能原因：")
+            print(f"  1. 商品ID不存在或已下架")
+            print(f"  2. 服务端数据异常")
+            print(f"  3. 依赖服务不可用")
+            print(f"\n建议：")
+            print(f"  - 检查商品ID是否正确（可访问 https://detail.1688.com/offer/{item_id}.html 验证）")
+            print(f"  - 尝试使用其他有效商品ID")
+            print(f"  - 联系技术支持查看 SLS 日志（requestId: {data.get('requestId', 'N/A')}）")
+        else:
+            print(f"❌ 分析失败: {error_msg}")
+
+        print(f"\nDEBUG: 完整响应: {json.dumps(data, ensure_ascii=False)}")
+        return
+
+    # 获取响应数据
+    result = data.get('result', {})
+
+    # 检查是否有查看权限
+    if isinstance(result, dict):
+        result_data = result.get('data', {})
+        if isinstance(result_data, dict) and not result_data.get('isDisplay', True):
+            print(f"\n⚠️  查看权限不足")
+            print(f"\n当前用户尚未获得查看市场机会数据的权限。")
+            print(f"请联系遨虾选品技术团队 @昱晖 进行用户加白。")
+            print(f"\nDEBUG: 完整响应: {json.dumps(data, ensure_ascii=False)}")
+            return
+
+        # 提取实际数据
+        model = result_data
+    else:
+        model = result
+
+    # 提取字段（新格式）
+    item_id = model.get('itemId')
+    market_summary = model.get('briefText', '')  # 新字段名
+    market_description = model.get('disPlayText', '')  # 新字段名
+    opportunities = model.get('oppAnalyzeVOList', [])  # 新字段名
+    b2b_info = model.get('odSaleInfo1688', {})  # 新字段名
+    feature_highlights = model.get('featureHighlightsList', [])  # 新字段名
+    supplier_highlights = model.get('supplierHighlightsList', [])  # 新字段名
+
+    # 打印报告
+    print(f"\n# 商品ID: {item_id}")
+    print(f"\n## 市场阶段")
+    print(f"**{market_summary}**")
+    print(market_description)
+
+    # 下游市场机会
+    if opportunities:
+        print(f"\n## 下游市场机会")
+        for opp in opportunities:
+            print_market_opportunity(opp)
+
+    # B2B采购数据
+    if b2b_info:
+        print(f"\n## 1688 B2B采购数据")
+        sold_cnt = b2b_info.get('soldCntLst30d', 0)
+        week_trend = b2b_info.get('soldCntHisByW', [])
+
+        print(f"\n- 近30天采购量：{sold_cnt}")
+        if week_trend:
+            print(f"- 近12周采购趋势：")
+            print(f"  📊 {highlight_peaks(week_trend, threshold=100)}")
+            print(f"\n⚡ 表示采购峰值（>100），说明B端商家集中囤货")
+
+    # 商品亮点
+    if feature_highlights or supplier_highlights:
+        print(f"\n## 商品亮点")
+
+        if feature_highlights:
+            print(f"\n### 功能特性")
+            for feature in feature_highlights:
+                print(f"- {feature}")
+
+        if supplier_highlights:
+            print(f"\n### 供应商优势")
+            for highlight in supplier_highlights:
+                print(f"- {highlight}")
+
+    # 分析结论
+    print(f"\n---")
+    print(f"\n**分析结论**：")
+    if market_summary == "黄金备货期":
+        print("该商品处于黄金备货期，B端商家已开始集中采购，但C端市场尚未大规模爆发。")
+        print("建议：立即备货，抢占市场先机。")
+    elif market_summary == "顺势增长期":
+        print("该商品市场已经启动，建议立即备货，跟随市场趋势。")
+    elif market_summary == "市场空白期":
+        print("该商品市场供需均处低位，建议小批量试卖，观察市场反馈。")
+    else:
+        print(f"市场处于{market_summary}阶段，请根据实际情况决策。")
+
+    print()
+
+
+def main():
+    """主函数"""
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description='1688图片市场机会分析',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='''
+使用示例:
+  # 通过商品ID分析
+  analyze.py 720345678912
+
+  # 通过图片URL分析（需提供商品ID）
+  analyze.py 720345678912 --image https://example.com/image.jpg
+
+  # 仅通过图片URL分析（商品ID设为0）
+  analyze.py --image https://example.com/image.jpg
+
+  # 切换到生产环境
+  ALPHASHOP_ENV=prod analyze.py 720345678912
+        '''
+    )
+
+    parser.add_argument('item_id', nargs='?', type=str, default=None,
+                        help='1688商品ID（纯图片分析时可省略或填0）')
+    parser.add_argument('--image', '-i', type=str, dest='image_url',
+                        help='商品图片URL（可选，不传则自动获取商品白底图或主图）')
+
+    args = parser.parse_args()
+
+    # 参数验证
+    item_id = None
+    if args.item_id:
+        try:
+            item_id = int(args.item_id)
+            if item_id == 0:
+                item_id = None
+        except ValueError:
+            print("❌ 错误：商品ID必须是数字", file=sys.stderr)
+            sys.exit(1)
+
+    if not item_id and not args.image_url:
+        print("❌ 错误：必须提供商品ID或图片URL其中之一", file=sys.stderr)
+        parser.print_help()
+        sys.exit(1)
+
+    # 获取API凭证
+    access_key, secret_key = get_api_credentials()
+
+    # 调用API
+    if item_id and args.image_url:
+        print(f"正在分析商品 {item_id}（使用指定图片）...\n")
+    elif item_id:
+        print(f"正在分析商品 {item_id}...\n")
+    else:
+        print(f"正在分析图片...\n")
+
+    data = call_api(item_id, access_key, secret_key, args.image_url)
+
+    # 打印报告
+    if data:
+        print_report(data)
+    else:
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()

@@ -4,6 +4,12 @@ import { CartItem, SecurePayPayload } from '../types';
 import axios from 'axios';
 import { getApiUrl } from '../utils/api';
 
+interface SecurePayViewProps {
+  payload: SecurePayPayload | null;
+  onBack: () => void;
+  currentUser: any;
+}
+
 export default function SecurePayView({ payload, onBack, currentUser }: SecurePayViewProps) {
   const [localItems, setLocalItems] = useState<CartItem[]>([]);
   const [email, setEmail] = useState('');
@@ -65,7 +71,32 @@ export default function SecurePayView({ payload, onBack, currentUser }: SecurePa
     }, 0);
   }, [localItems, parsePrice]);
 
-  const shipping: number = 0;
+  const [shipping, setShipping] = useState<number>(0);
+  const [shippingMethod, setShippingMethod] = useState<string>('Standard Shipping');
+  const [shippingDays, setShippingDays] = useState<string>('7-15 days');
+
+  useEffect(() => {
+    if (zip && zip.length >= 5 && primaryItem?.product?.id) {
+      const calcShipping = async () => {
+        try {
+          const url = getApiUrl('/v1/products/calculate-shipping');
+          const response = await axios.post(url, {
+            product_id: parseInt(primaryItem.product.id),
+            country_code: country === 'United States' ? 'US' : 'CN',
+            zip_code: zip
+          });
+          const { freight, method, days } = response.data;
+          setShipping(freight || 0);
+          setShippingMethod(method || 'Standard Shipping');
+          setShippingDays(days || '7-15 days');
+        } catch (error) {
+          console.error('Failed to calculate shipping:', error);
+          setShipping(9.99);
+        }
+      };
+      calcShipping();
+    }
+  }, [zip, primaryItem, country]);
   const tax = useMemo(() => Math.round(itemsSubtotal * 0.105 * 100) / 100, [itemsSubtotal]);
   const orderTotal = useMemo(() => Math.round((itemsSubtotal + shipping + tax) * 100) / 100, [itemsSubtotal, shipping, tax]);
 

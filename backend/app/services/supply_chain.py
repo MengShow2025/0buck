@@ -27,6 +27,7 @@ class SupplyChainService:
         
         # Fetch API keys from DB (Admin-configurable) or Settings
         self.api_key = self.config_service.get_api_key("ALIBABA_1688_API_KEY")
+        self.api_secret = self.config_service.get_api_key("ALIBABA_1688_API_SECRET")
         self.api_base_url = settings.ALIBABA_1688_API_URL
         
         # Initialize AI with Admin-configurable key
@@ -41,16 +42,17 @@ class SupplyChainService:
     async def fetch_product_details(self, source_product_id: str) -> Dict[str, Any]:
         """
         Fetch product details from the supply library.
-        v4.5: Support real 1688 API + Candidate Pool fallback.
+        v8.5: Alibaba-First Strategy. Prioritizes ICBU API (507580).
         """
-        # 1. Check if we have this in the candidate pool already
+        # 1. Check if we have this in the candidate pool already (Fast Path)
         candidate = self.db.query(CandidateProduct).filter_by(product_id_1688=source_product_id).first()
         if candidate:
             return self._format_candidate_as_details(candidate)
 
-        # 2. Try Real 1688 API
+        # 2. Try Real Alibaba ICBU API (App Key: 507580)
         if source_product_id and not source_product_id.startswith("sim_"):
             try:
+                # v8.5: Prioritize alibaba.product.get for ICBU Truth
                 raw_json = await self._call_1688_api("alibaba.product.get", {"product_id": source_product_id})
                 if raw_json:
                     mirror = MirrorExtractor.extract(raw_json)
@@ -67,42 +69,57 @@ class SupplyChainService:
                         "structural_data": mirror.get("structural_data", {}),
                         "supplier": {
                             "id": mirror.get("structural_data", {}).get("trust", {}).get("supplier_id"),
-                            "name": mirror.get("structural_data", {}).get("trust", {}).get("factory_name"),
-                            "rating": mirror.get("structural_data", {}).get("social", {}).get("rating", 4.5)
-                        }
+                            "name": mirror.get("structural_data", {}).get("trust", {}).get("factory_name") or "Alibaba Verified Artisan",
+                            "rating": mirror.get("structural_data", {}).get("social", {}).get("rating", 4.5),
+                            "assurance": True # Trade Assurance
+                        },
+                        "platform_tag": "ALIBABA"
                     }
             except Exception as e:
-                logger.error(f"1688 API Fetch failed for {source_product_id}: {e}")
+                logger.error(f"Alibaba ICBU API Fetch failed for {source_product_id}: {e}")
 
-        # 3. Mock response fallback for simulations
+        # 3. Mock response fallback for simulations (Alibaba-First Mock)
         return {
             "id": source_product_id,
-            "title": "Supply Library Item",
-            "description": "Product description from the source library.",
+            "title": "Alibaba ICBU Global Item",
+            "description": "Premium product sourced via Alibaba International with Global Logistics.",
             "price": 50.0,
             "images": [],
             "variants": [],
-            "category": "General",
-            "supplier": {"id": "test_supplier", "name": "Test Factory", "rating": 4.5}
+            "category": "Artisan Choice",
+            "supplier": {
+                "id": "ali_verified_artisan", 
+                "name": "0Buck Verified Artisan", 
+                "rating": 4.8,
+                "assurance": True
+            },
+            "platform_tag": "ALIBABA"
         }
 
-    async def _call_1688_api(self, method: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """v4.6: Real 1688 API Gateway Integration"""
+    async def _call_1688_api(self, method: str, params: Dict[str, Any], country_code: str = "US") -> Dict[str, Any]:
+        """
+        v4.6: Real 1688 API Gateway Integration.
+        v8.5 Patch: Uses Residential IP Proxy matching the target country.
+        """
         if not self.api_key or not self.api_base_url:
             logger.warning("1688 API Configuration missing. Falling back to simulation.")
             return None
             
-        async with httpx.AsyncClient() as client:
+        # v8.5 Patch: IP Geo-Match via ProxyManager
+        proxies = get_proxy_for_country(country_code)
+
+        async with httpx.AsyncClient(proxies=proxies) as client:
             try:
+                if proxies:
+                    logger.info(f"🌐 [Geo-Match] Using {country_code} Proxy for Alibaba API")
                 # Add authentication headers/params as per 1688 API spec
-                # This is a generic implementation using common patterns
                 api_params = {
                     "method": method,
                     "api_key": self.api_key,
                     "timestamp": datetime.now().isoformat(),
                     **params
                 }
-                response = await client.get(self.api_base_url, params=api_params, timeout=15.0)
+                response = await client.get(self.api_base_url, params=api_params, timeout=20.0)
                 if response.status_code == 200:
                     return response.json()
                 logger.error(f"1688 API Error: {response.status_code} - {response.text}")
@@ -112,6 +129,10 @@ class SupplyChainService:
                 return None
 
     def _format_candidate_as_details(self, candidate: CandidateProduct) -> Dict[str, Any]:
+        """
+        v8.5: Alibaba-First Data Formatter.
+        Ensures Alibaba ICBU Truth (Warehouses, DDP, Assurance) is preserved.
+        """
         def safe_json_load(data, default=[]):
             if isinstance(data, (list, dict)): return data
             try:
@@ -119,7 +140,7 @@ class SupplyChainService:
             except (json.JSONDecodeError, TypeError):
                 return default
 
-        return {
+        details = {
             "id": candidate.product_id_1688,
             "title": candidate.title_zh,
             "description": candidate.description_zh,
@@ -133,17 +154,40 @@ class SupplyChainService:
             "structural_data": safe_json_load(candidate.structural_data, {}),
             "supplier": {
                 "id": candidate.supplier_id_1688,
+                "name": candidate.supplier_name or "0Buck Verified Artisan",
+                "assurance": True, # Alibaba Trade Assurance Default
                 **(candidate.supplier_info if isinstance(candidate.supplier_info, dict) else safe_json_load(candidate.supplier_info, {}))
-            }
+            },
+            # v8.2/8.5: Global Truth Logistics
+            "warehouse_anchor": candidate.warehouse_anchor,
+            "freight_fee": candidate.freight_fee,
+            "shipping_days": candidate.shipping_days,
+            
+            # v7.0: Truth Engine & Industrial Arbitrage
+            "amazon_link": candidate.amazon_link,
+            "amazon_list_price": candidate.amazon_list_price,
+            "amazon_sale_price": candidate.amazon_sale_price,
+            "hot_rating": candidate.hot_rating,
+            "profit_ratio": candidate.profit_ratio,
+            "entry_tag": candidate.entry_tag,
+            "platform_tag": candidate.platform_tag or "ALIBABA", # Default to ALIBABA in v8.5
+            "cj_pid": candidate.cj_pid,
+            "category_id": candidate.category_id,
+            "product_props": safe_json_load(candidate.product_props, {}),
+            "is_melted": candidate.is_melted,
+            "melt_reason": candidate.melt_reason
         }
+        return details
 
-    def calculate_price(self, cost_cny: float, comp_price_usd: float = None, category_type: str = "PROFIT") -> Dict[str, Any]:
-        """Internal logic for profit analysis (v4.6.8 Hybrid Pricing)"""
+    def calculate_price(self, cost_cny: float, comp_price_usd: float = None, category_type: str = "PROFIT", shipping_cost_usd: float = 0.0) -> Dict[str, Any]:
+        """Internal logic for profit analysis (v8.5 Hybrid Pricing)"""
         config = ConfigService(self.db)
         sale_ratio = config.get("sale_price_ratio", 0.6)
         strike_ratio = config.get("compare_at_price_ratio", 0.95)
         
-        multiplier = 4.0 if category_type == "PROFIT" else 2.0
+        # v8.5: Explicit Tier Check
+        is_magnet = category_type == "MAGNET"
+        multiplier = 4.0 if category_type in ["PROFIT", "REBATE"] else 2.0
         
         return calculate_final_price(
             cost_cny=cost_cny, 
@@ -151,7 +195,9 @@ class SupplyChainService:
             multiplier=multiplier,
             comp_price_usd=comp_price_usd,
             sale_price_ratio=sale_ratio,
-            compare_at_price_ratio=strike_ratio
+            compare_at_price_ratio=strike_ratio,
+            shipping_cost_usd=shipping_cost_usd,
+            is_magnet=is_magnet
         )
 
     async def translate_and_enrich(self, raw_data: Dict[str, Any], strategy: str) -> Dict[str, str]:
@@ -209,6 +255,8 @@ class SupplyChainService:
                 "desire_closing": enriched.get("desire_closing", "Join the 20-phase rebate revolution.")
             }
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             logger.error(f"Desire Engine enrichment failed: {e}")
             return {
                 "title_en": f"Global {raw_data.get('title')}",
@@ -218,7 +266,18 @@ class SupplyChainService:
                 "desire_closing": "Closing contract..."
             }
 
-    async def sync_product(self, source_product_id: str, comp_price_usd: float = None, cost_cny: float = None, title: str = None, strategy_tag: str = "IDS_FOLLOWING", category_type: str = "PROFIT", is_cashback_eligible: bool = None, variants_override: List[Dict] = None, images_override: List[str] = None, attributes: List[Dict] = None, logistics_data: Dict = None, mirror_assets: Dict = None, structural_data: Dict = None, desire_hook: str = None, desire_logic: str = None, desire_closing: str = None, visual_fingerprint: str = None, source_platform: str = "1688", source_url: str = None, backup_source_url: str = None, amazon_price: float = None, ebay_price: float = None, amazon_compare_at_price: float = None, ebay_compare_at_price: float = None):
+    async def sync_product(self, source_product_id: str, comp_price_usd: float = None, cost_cny: float = None, title: str = None, strategy_tag: str = "IDS_FOLLOWING", category_type: str = "PROFIT", is_cashback_eligible: bool = None, variants_override: List[Dict] = None, images_override: List[str] = None, attributes: List[Dict] = None, logistics_data: Dict = None, mirror_assets: Dict = None, structural_data: Dict = None, desire_hook: str = None, desire_logic: str = None, desire_closing: str = None, visual_fingerprint: str = None, source_platform: str = "ALIBABA", source_url: str = None, backup_source_url: str = None, amazon_price: float = None, ebay_price: float = None, amazon_compare_at_price: float = None, ebay_compare_at_price: float = None, 
+                           amazon_link: str = None, hot_rating: float = None, profit_ratio: float = None, entry_tag: str = None, platform_tag: str = "ALIBABA", cj_pid: str = None, category_id: str = None, is_test_product: bool = False, packing_weight: float = None, product_weight: float = None, inventory_total: int = None, entry_code: str = None, entry_name: str = None, product_props: Dict = None,
+                           is_melted: bool = False, melt_reason: str = None,
+                           category_name: str = None, primary_image: str = None, variant_images: List[str] = None, detail_images_html: str = None,
+                           sell_price: float = None, variant_sell_price: float = None, dimensions_display: str = None, weight_display: str = None,
+                           freight_fee: float = None, shipping_days: str = None, warehouse_anchor: str = None,
+                           variant_sku: str = None, variant_key: str = None):
+        """
+        v8.5: Alibaba-First Strategic Sync.
+        Prioritizes Alibaba ICBU (App Key: 507580) as the primary Truth source.
+        """
+        logger.info(f"🚀 Alibaba-First Sync triggered for {source_product_id}")
         raw_data = await self.fetch_product_details(source_product_id)
         if cost_cny:
             raw_data["price"] = cost_cny
@@ -240,6 +299,40 @@ class SupplyChainService:
         if visual_fingerprint:
             raw_data["visual_fingerprint"] = visual_fingerprint
         
+        # v7.0 Truth Engine & Industrial Arbitrage
+        if amazon_link: raw_data["amazon_link"] = amazon_link
+        if hot_rating: raw_data["hot_rating"] = hot_rating
+        if profit_ratio: raw_data["profit_ratio"] = profit_ratio
+        if entry_tag: raw_data["entry_tag"] = entry_tag
+        if platform_tag: raw_data["platform_tag"] = platform_tag
+        if cj_pid: raw_data["cj_pid"] = cj_pid
+        if category_id: raw_data["category_id"] = category_id
+        if is_test_product is not None: raw_data["is_test_product"] = is_test_product
+        if packing_weight: raw_data["packing_weight"] = packing_weight
+        if product_weight: raw_data["product_weight"] = product_weight
+        if inventory_total: raw_data["inventory_total"] = inventory_total
+        if entry_code: raw_data["entry_code"] = entry_code
+        if entry_name: raw_data["entry_name"] = entry_name
+        if product_props: raw_data["product_props"] = product_props
+        if is_melted is not None: raw_data["is_melted"] = is_melted
+        if melt_reason: raw_data["melt_reason"] = melt_reason
+        
+        # cj_fields_matrix.csv fields
+        if category_name: raw_data["category_name"] = category_name
+        if primary_image: raw_data["primary_image"] = primary_image
+        if variant_images: raw_data["variant_images"] = variant_images
+        if detail_images_html: raw_data["detail_images_html"] = detail_images_html
+        if sell_price: raw_data["sell_price"] = sell_price
+        if variant_sell_price: raw_data["variant_sell_price"] = variant_sell_price
+        if dimensions_display: raw_data["dimensions_display"] = dimensions_display
+        if weight_display: raw_data["weight_display"] = weight_display
+        if freight_fee: raw_data["freight_fee"] = freight_fee
+        if shipping_days: raw_data["shipping_days"] = shipping_days
+        if warehouse_anchor: raw_data["warehouse_anchor"] = warehouse_anchor
+        if variant_sku: raw_data["variant_sku"] = variant_sku
+        if variant_key: raw_data["variant_key"] = variant_key
+        if brand_tax_percent: raw_data["brand_tax_percent"] = brand_tax_percent
+        
         # v4.7.1: Sourcing Provenance
         if source_platform:
             raw_data["source_platform"] = source_platform
@@ -249,14 +342,33 @@ class SupplyChainService:
             raw_data["backup_source_url"] = backup_source_url
 
         pricing_result = self.calculate_price(raw_data["price"], comp_price_usd or 0, category_type)
-        enriched_data = await self.translate_and_enrich(raw_data, strategy_tag)
+        
+        # v8.5: Full Pixel & Narrative Refinery (Desire Engine)
+        from app.utils.proxy_manager import get_proxy_for_country
+from app.services.refinery_gateway import refinery_gateway
+        refinery_input = {
+            "id": source_product_id,
+            "title_en": raw_data.get("title"),
+            "title_zh": raw_data.get("title"),
+            "amazon_link": amazon_link,
+            "amazon_price": comp_price_usd or pricing_result.get("amazon_price", 0),
+            "obuck_price": pricing_result.get("final_price_usd", 0),
+            "amazon_bullets": raw_data.get("description_zh", ""),
+            "images": json.dumps(raw_data.get("images", [])),
+            "warehouse_anchor": warehouse_anchor,
+            "shipping_days": shipping_days,
+            "cost_cny": raw_data["price"],
+            "brand_tax_percent": raw_data.get("brand_tax_percent", "300%")
+        }
+        refined = await refinery_gateway.refine_candidate(refinery_input)
 
         # Ensure Supplier exists
         supplier = self.db.query(Supplier).filter_by(supplier_id_1688=raw_data["supplier"]["id"]).first()
         if not supplier:
             location_province = raw_data["supplier"].get("province", "Guangdong")
             location_city = raw_data["supplier"].get("city", "Shenzhen")
-            warehouse = find_closest_warehouse(location_province, location_city)
+            country_code = raw_data["supplier"].get("country_code", "CN")
+            warehouse = find_closest_warehouse(location_province, location_city, country_code)
             
             supplier = Supplier(
                 supplier_id_1688=raw_data["supplier"]["id"],
@@ -264,7 +376,7 @@ class SupplyChainService:
                 rating=raw_data["supplier"].get("rating", 4.5),
                 location_province=location_province,
                 location_city=location_city,
-                warehouse_anchor=warehouse["name"]
+                warehouse_anchor=warehouse.get("country", warehouse["name"])
             )
             self.db.add(supplier)
             self.db.commit()
@@ -276,13 +388,13 @@ class SupplyChainService:
             self.db.add(product)
             
         product.title_zh = raw_data.get("title")
-        product.title_en = enriched_data["title_en"]
+        product.title_en = refined.get("title_polished", f"Global {raw_data.get('title')}")
         product.description_zh = raw_data.get("description")
-        product.description_en = enriched_data["description_en"]
+        product.description_en = refined.get("description_artisan", "Premium Artisan quality product.")
         
-        product.desire_hook = desire_hook or enriched_data.get("desire_hook")
-        product.desire_logic = desire_logic or enriched_data.get("desire_logic")
-        product.desire_closing = desire_closing or enriched_data.get("desire_closing")
+        product.desire_hook = desire_hook or refined.get("desire_hook", "Stop paying for brand tax.")
+        product.desire_logic = desire_logic or refined.get("desire_logic", "Factory-direct sourcing cuts middleman costs.")
+        product.desire_closing = desire_closing or refined.get("desire_closing", "Join the 20-phase rebate revolution.")
         
         product.original_price = cost_cny
         product.source_cost_usd = pricing_result.get("source_cost_usd")
@@ -295,7 +407,47 @@ class SupplyChainService:
         product.amazon_compare_at_price = amazon_compare_at_price
         product.ebay_compare_at_price = ebay_compare_at_price
         
+        # v7.0: Truth Engine & Industrial Arbitrage
+        product.amazon_link = raw_data.get("amazon_link")
+        product.amazon_list_price = amazon_compare_at_price
+        product.amazon_sale_price = amazon_price
+        product.hot_rating = raw_data.get("hot_rating")
+        product.profit_ratio = raw_data.get("profit_ratio")
+        product.entry_tag = raw_data.get("entry_tag")
+        product.platform_tag = raw_data.get("platform_tag", "CJ")
+        product.shipping_ratio = pricing_result.get("shipping_ratio")
+        product.shipping_warning = pricing_result.get("shipping_warning")
+        product.is_melted = raw_data.get("is_melted", False)
+        product.melt_reason = raw_data.get("melt_reason")
+        
+        # cj_fields_matrix.csv fields
+        product.category_name = raw_data.get("category_name")
+        product.primary_image = raw_data.get("primary_image")
+        product.variant_images = raw_data.get("variant_images", [])
+        product.detail_images_html = raw_data.get("detail_images_html")
+        product.sell_price = raw_data.get("sell_price")
+        product.variant_sell_price = raw_data.get("variant_sell_price")
+        product.dimensions_display = raw_data.get("dimensions_display")
+        product.weight_display = raw_data.get("weight_display")
+        product.freight_fee = raw_data.get("freight_fee")
+        product.shipping_days = raw_data.get("shipping_days")
+        product.warehouse_anchor = raw_data.get("warehouse_anchor")
+        product.variant_sku = raw_data.get("variant_sku")
+        product.variant_key = raw_data.get("variant_key")
+        
+        # CJ Specific Meta (Step 6)
+        product.cj_pid = raw_data.get("cj_pid")
+        product.category_id = raw_data.get("category_id")
+        product.is_test_product = raw_data.get("is_test_product", False)
+        product.packing_weight = raw_data.get("packing_weight")
+        product.product_weight = raw_data.get("product_weight")
+        product.inventory_total = raw_data.get("inventory_total")
+        product.entry_code = raw_data.get("entry_code")
+        product.entry_name = raw_data.get("entry_name")
+        product.product_props = raw_data.get("product_props", {})
+        
         product.is_reward_eligible = pricing_result.get("is_reward_eligible", True)
+        product.product_category_label = category_type # v8.5 labeling
         product.images = raw_data.get("images", [])
         product.media = raw_data.get("media", [])
         product.variants_data = raw_data.get("variants", [])
@@ -533,8 +685,9 @@ class SupplyChainService:
                     
                     # 1. Calculate Landed Cost (CJ Sell Price + Simulation Freight)
                     cost_usd_raw = p.get("sellPrice") or p.get("productSellPrice") or "0"
+                    # 取价格范围的最小值（最低拿货价，最保守成本估算）
                     if " -- " in str(cost_usd_raw):
-                        cost_usd = float(str(cost_usd_raw).split(" -- ")[1])
+                        cost_usd = float(str(cost_usd_raw).split(" -- ")[0].strip())
                     else:
                         cost_usd = float(str(cost_usd_raw))
                         
@@ -590,7 +743,7 @@ class SupplyChainService:
                     await self.ingest_to_candidate_pool({
                         "id_1688": f"cj_{pid}", # Using cj_ prefix for CJ source
                         "name": name,
-                        "cost_cny": landed_cost * 7.2 / 1.005, # Reverse buffer back to CNY for storage consistency
+                        "cost_cny": landed_cost / (settings.EXCHANGE_RATE * (1 + settings.EXCHANGE_BUFFER)), # Reverse buffer back to CNY for storage consistency
                         "comp_price": amazon_msrp,
                         "amazon_price": amazon_price,
                         "amazon_compare_at_price": amazon_msrp,
@@ -628,7 +781,29 @@ class SupplyChainService:
         logger.info(f"🏁 Brute-force Scan complete. Ingested {total_ingested} candidates.")
         return total_ingested
 
-    async def ingest_to_candidate_pool(self, data: Dict[str, Any]):
+    async def batch_process_pids(self, pid_list: List[str], category_type: str = "NORMAL"):
+        """
+        v8.5 Scaling Engine: Parallel processing for high-volume ingestion.
+        """
+        semaphore = asyncio.Semaphore(5) # Control concurrency to respect API limits
+        
+        async def process_one(pid):
+            async with semaphore:
+                try:
+                    logger.info(f"🚀 Scaling Engine: Processing PID {pid}...")
+                    # 1. Fetch from Alibaba
+                    raw_data = await self.fetch_product_details(pid)
+                    if not raw_data: return
+                    
+                    # 2. Ingest and Refine
+                    raw_data["category_type"] = category_type
+                    await self.ingest_to_candidate_pool(raw_data)
+                    logger.info(f"✅ Scaled: {pid} is now in candidate pool.")
+                except Exception as e:
+                    logger.error(f"❌ Scale Fail for {pid}: {e}")
+
+        tasks = [process_one(pid) for pid in pid_list]
+        await asyncio.gather(*tasks)
         product_id_1688 = data.get("id_1688")
         if not product_id_1688: return
 
@@ -649,26 +824,29 @@ class SupplyChainService:
             logger.warning(f"⚠️ Skipping ingestion for {data.get('name')}: No market comparison URL provided.")
             return
 
-        # Landed cost simulation (1688 Cost + Shipping Buffer)
-        # 0.6x Pricing Rule: Sale Price = Amazon MSRP * 0.6
-        # ROI = Sale Price / Landed Cost
-        landed_cost_usd = data.get("discovery_evidence", {}).get("landed_cost") or (cost_cny / 6.5 * 1.2)
-        target_sale_price = amazon_compare_at * 0.6
-        
-        roi = target_sale_price / landed_cost_usd if landed_cost_usd > 0 else 0
+        # v8.5 Truth Engine: Selection Threshold
+        # threshold = (Amazon Sale Price * 60%) / Alibaba Item Cost
+        alibaba_item_cost_usd = cost_cny * settings.EXCHANGE_RATE
+        selection_threshold = (amazon_price * 0.6) / alibaba_item_cost_usd if alibaba_item_cost_usd > 0 else 0
         
         category_type = data.get("category_type")
         is_cashback_eligible = data.get("is_cashback_eligible")
         
         if category_type is None:
-            if roi >= 4.0:
-                category_type = "PROFIT"
+            # Check for MAGNET Tier first (Zero-Cost arbitrage)
+            # MAGNET: Amazon Shipping > Our Total Landed Cost (roughly)
+            amz_shipping = data.get("discovery_evidence", {}).get("amazon_shipping_fee", 6.99)
+            if amz_shipping > landed_cost_usd:
+                category_type = "MAGNET"
+                is_cashback_eligible = False
+            elif selection_threshold >= 4.0:
+                category_type = "REBATE"
                 is_cashback_eligible = True
-            elif roi >= 1.5:
-                category_type = "TRAFFIC"
+            elif selection_threshold >= 1.5:
+                category_type = "NORMAL"
                 is_cashback_eligible = False
             else:
-                logger.warning(f"⏭️ Skipping: ROI {roi:.2f} < 1.5 for {product_id_1688}")
+                logger.warning(f"⏭️ Skipping: Threshold {selection_threshold:.2f} < 1.5 for {product_id_1688}")
                 return
             
         # v4.5 Mirror Sync
@@ -749,6 +927,7 @@ class SupplyChainService:
             
             # v5.4 Brute-force Tiering
             category_type=category_type,
+            product_category_label=category_type, # v8.5 labeling
             is_cashback_eligible=is_cashback_eligible,
             
             # v4.7.1: Sourcing Provenance
@@ -921,7 +1100,40 @@ class SupplyChainService:
                 amazon_price=candidate.amazon_price,
                 ebay_price=candidate.ebay_price,
                 amazon_compare_at_price=candidate.amazon_compare_at_price,
-                ebay_compare_at_price=candidate.ebay_compare_at_price
+                ebay_compare_at_price=candidate.ebay_compare_at_price,
+                
+                # v7.0: Truth Engine & Industrial Arbitrage
+                amazon_link=candidate.amazon_link,
+                hot_rating=candidate.hot_rating,
+                profit_ratio=candidate.profit_ratio,
+                entry_tag=candidate.entry_tag,
+                platform_tag=candidate.platform_tag,
+                cj_pid=candidate.cj_pid,
+                category_id=candidate.category_id,
+                is_test_product=candidate.is_test_product,
+                packing_weight=candidate.packing_weight,
+                product_weight=candidate.product_weight,
+                inventory_total=candidate.inventory_total,
+                entry_code=candidate.entry_code,
+                entry_name=candidate.entry_name,
+                product_props=candidate.product_props,
+                is_melted=candidate.is_melted,
+                melt_reason=candidate.melt_reason,
+                
+                # cj_fields_matrix.csv fields
+                category_name=candidate.category_name,
+                primary_image=candidate.primary_image,
+                variant_images=candidate.variant_images,
+                detail_images_html=candidate.detail_images_html,
+                sell_price=candidate.sell_price,
+                variant_sell_price=candidate.variant_sell_price,
+                dimensions_display=candidate.dimensions_display,
+                weight_display=candidate.weight_display,
+                freight_fee=candidate.freight_fee,
+                shipping_days=candidate.shipping_days,
+                warehouse_anchor=candidate.warehouse_anchor,
+                variant_sku=candidate.variant_sku,
+                variant_key=candidate.variant_key
             )
 
             from app.services.sync_shopify import SyncShopifyService

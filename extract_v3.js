@@ -1,50 +1,72 @@
-(async () => {
-  window.finalResults = null;
-  
-  const findItem = (text) => {
-    return Array.from(document.querySelectorAll('.navContent li')).find(li => li.innerText.trim().includes(text));
-  };
-
-  const results = {
-    procurement: [],
-    product: []
-  };
-  
-  const itemsToClick = [
-    { cat: 'procurement', text: '查询1688供应商' },
-    { cat: 'procurement', text: '查询1688商品' },
-    { cat: 'procurement', text: '查询1688账号' },
-    { cat: 'procurement', text: '创建1688订单' },
-    { cat: 'procurement', text: '根据供应商店域名获取供应商信息' },
-    { cat: 'procurement', text: '查询单个订单详情' },
-    { cat: 'procurement', text: '查询买家订单列表' },
-    { cat: 'product', text: '获取库存SKU' }
-  ];
-
-  for (const itemInfo of itemsToClick) {
-    const item = findItem(itemInfo.text);
-    if (item) {
-      item.click();
-      await new Promise(r => setTimeout(r, 500));
-      
-      const tables = Array.from(document.querySelectorAll('table'));
-      // Find the table that has an "action" row
-      let actionName = 'Unknown';
-      for (const table of tables) {
-        const rows = Array.from(table.querySelectorAll('tr'));
-        const actionRow = rows.find(row => row.cells[0] && row.cells[0].innerText.trim() === 'action');
-        if (actionRow) {
-          actionName = actionRow.cells[2].innerText.trim() || actionRow.cells[1].innerText.trim();
-          break;
+async function extract() {
+    function getGallery() {
+        // Main images are usually in the top slider
+        const slider = document.querySelector('.main-image-thumb-container, .detail-image-thumb-container, .image-list, .pdp-image-gallery');
+        let imgs = [];
+        if (slider) {
+            imgs = Array.from(slider.querySelectorAll('img')).map(img => img.src.split('_')[0]);
         }
-      }
-      
-      results[itemInfo.cat].push({
-        method: actionName,
-        description: itemInfo.text.replace(/\u200B/g, '')
-      });
+        if (imgs.length === 0) {
+            imgs = Array.from(document.querySelectorAll('.main-img, .detail-image-item img')).map(img => img.src.split('_')[0]);
+        }
+        return [...new Set(imgs.filter(s => s.startsWith('http')))];
     }
-  }
 
-  window.finalResults = results;
-})();
+    function getVideo() {
+        const video = document.querySelector('video source, video');
+        return video ? (video.src || video.getAttribute('src')) : null;
+    }
+
+    function getDetail() {
+        const containers = Array.from(document.querySelectorAll('div')).filter(div => {
+            const text = div.innerText.toLowerCase();
+            return text.includes('product description') || text.includes('供应商的产品说明');
+        });
+        let imgs = [];
+        containers.forEach(c => {
+            imgs = imgs.concat(Array.from(c.querySelectorAll('img')).map(img => img.src || img.getAttribute('data-src')));
+        });
+        return [...new Set(imgs.filter(s => s && s.startsWith('http') && !s.includes('icon') && !s.includes('logo')))];
+    }
+
+    function getSpecs() {
+        const specs = {};
+        const items = document.querySelectorAll('.attribute-item, .do-entry-item, .specification-item, tr');
+        items.forEach(item => {
+            const k = item.querySelector('.attribute-name, .do-entry-item-val, td:first-child')?.innerText?.trim();
+            const v = item.querySelector('.attribute-value, .do-entry-item-val, td:last-child')?.innerText?.trim();
+            if (k && v && k !== v) specs[k] = v;
+        });
+        return specs;
+    }
+
+    function getSupplier() {
+        const link = document.querySelector('.company-name a, .supplier-name a, .shop-link, a[href*="company_profile"]');
+        return {
+            name: link?.innerText?.trim(),
+            url: link?.href
+        };
+    }
+
+    function getCerts() {
+        return Array.from(document.querySelectorAll('.certificate-item, .cert-item, a[href*="certificate"]')).map(el => el.innerText.trim() || el.href).filter(Boolean);
+    }
+
+    // Scroll
+    window.scrollTo(0, 1000);
+    await new Promise(r => setTimeout(r, 500));
+    window.scrollTo(0, 3000);
+    await new Promise(r => setTimeout(r, 500));
+    window.scrollTo(0, document.body.scrollHeight);
+    await new Promise(r => setTimeout(r, 1000));
+
+    return {
+        gallery: getGallery(),
+        video: getVideo(),
+        detail: getDetail(),
+        specs: getSpecs(),
+        certificates: getCerts(),
+        supplier: getSupplier()
+    };
+}
+return await extract();

@@ -31,56 +31,73 @@ class PersonalizedMatrixService:
             logger.warning("GOOGLE_API_KEY not found in settings, Gemini features disabled.")
             self.model = None
 
-    async def get_personalized_discovery(self, user_id: int, limit: int = 10) -> Dict[str, Any]:
+    async def get_personalized_discovery(self, user_id: int, user_country: str = "US", mode: str = "local", limit: int = 20) -> Dict[str, Any]:
         """
-        Fetches a 2x5 matrix of products, with the first item personalized 
-        based on user LTM facts.
+        v8.0 Vortex Predictive Entry Service with Geofencing.
+        Links LTM (Memory) + IDS Strategy (Traffic) + UI Greeting.
         """
         # 1. Fetch Top 3 LTM facts to use as search query
         facts = []
         try:
-            # Check if UserMemoryFact table exists and query it
             facts = self.db.query(UserMemoryFact).filter(
                 UserMemoryFact.user_id == user_id,
                 UserMemoryFact.is_archived == False
             ).order_by(UserMemoryFact.confidence.desc()).limit(3).all()
         except Exception as e:
-            # If table is missing or query fails, just log and continue with empty facts
-            logger.warning(f"LTM Memory facts unavailable (table may be missing): {e}")
+            logger.warning(f"LTM Memory facts unavailable: {e}")
             facts = []
 
         search_query = " ".join([f"{f.key}: {f.value}" for f in facts]) if facts else "popular trending products"
         
-        # 2. Vector Search for matching products (Fall back to DB if search fails or is empty)
-        products = []
+        # 2. Query Products with Geofencing
         try:
-            vector = await vector_search_service.get_embedding(text=search_query)
-            products = vector_search_service.search(vector=vector, limit=limit)
-        except Exception as e:
-            logger.error(f"Vector search failed for personalized matrix: {e}")
-            products = []
+            query = self.db.query(Product).filter(
+                Product.is_active == True,
+                Product.sale_price >= 0,
+                Product.images != None,
+                Product.images != '[]'
+            )
             
-        if not products:
-            # Fallback to DB products if vector search is empty or failed
-            try:
-                db_products = self.db.query(Product).filter(Product.is_active == True).limit(limit).all()
-                products = []
-                for p in db_products:
-                    # Safely handle images (check for None and empty list)
-                    image_url = ""
-                    if p.images and isinstance(p.images, list) and len(p.images) > 0:
-                        image_url = p.images[0]
+            if mode == "local":
+                # v8.5 SOP: Local warehouse products ONLY visible to local users.
+                # Global products (CN) visible to everyone.
+                from sqlalchemy import or_
+                query = query.filter(
+                    or_(
+                        Product.warehouse_anchor.ilike(f"%{user_country}%"),
+                        Product.warehouse_anchor == "CN",
+                        Product.warehouse_anchor.is_(None)
+                    )
+                )
+            
+            # Order by sales volume and recency
+            db_products = query.order_by(Product.sales_volume.desc(), Product.updated_at.desc()).limit(limit).all()
+            
+            products = []
+            for p in db_products:
+                imgs = p.images
+                if isinstance(imgs, str):
+                    try: imgs = json.loads(imgs)
+                    except: imgs = []
+                
+                if not imgs or not isinstance(imgs, list) or len(imgs) == 0:
+                    continue
                     
-                    products.append({
-                        "id": str(p.id), 
-                        "name": p.title_en or p.title_zh or "Unknown Product", 
-                        "title": p.title_en or p.title_zh or "Unknown Product", 
-                        "price": p.sale_price or 0.0, 
-                        "image": image_url
-                    })
-            except Exception as e:
-                logger.error(f"DB fallback products failed: {e}")
-                products = []
+                products.append({
+                    "id": p.id,
+                    "title": p.title_en or p.title_zh or "Unknown Product",
+                    "price": float(p.sale_price),
+                    "image": imgs[0],
+                    "description": p.body_html or p.description_en or "",
+                    "category": p.category or "General",
+                    "warehouse_anchor": p.warehouse_anchor or "CN",
+                    "product_category_label": p.product_category_label or "NORMAL",
+                    "admin_tags": p.admin_tags or [],
+                    "handle": p.shopify_product_handle
+                })
+        except Exception as e:
+            logger.error(f"Discovery query failed: {e}")
+            products = []
 
         # 3. Generate Personalized Greeting (The Easter Egg)
         greeting = ""
@@ -90,8 +107,14 @@ class PersonalizedMatrixService:
             greeting = await self._generate_greeting(user_id, best_match, facts)
 
         return {
-            "products": products,
-            "butler_greeting": greeting or f"Boss, I've found a great deal just for you!",
+            "vortex_featured": products[:5],
+            "category_feeds": [
+                {
+                    "category": "Zero-Cost Magnets" if mode == "local" else "Global Best Sellers",
+                    "products": [p for p in products if p.get("product_category_label") == "MAGNET"] or products[5:15]
+                }
+            ],
+            "butler_greeting": greeting or f"Boss, I've found some great {mode} deals for you in {user_country}!",
             "highlight_index": 0 if best_match else -1,
             "persona_id": self._get_user_persona_id(user_id)
         }
@@ -99,7 +122,9 @@ class PersonalizedMatrixService:
     def _get_user_persona_id(self, user_id: int) -> str:
         try:
             profile = self.db.query(UserButlerProfile).filter_by(user_id=user_id).first()
-            return profile.active_persona_id if profile else "default"
+            if profile and profile.active_persona_id:
+                return profile.active_persona_id
+            return "default"
         except Exception:
             return "default"
 

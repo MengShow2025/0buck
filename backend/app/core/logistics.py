@@ -33,12 +33,23 @@ WAREHOUSES = [
     }
 ]
 
-def find_closest_warehouse(province: str, city: Optional[str] = None) -> Dict:
+def find_closest_warehouse(province: str, city: Optional[str] = None, country_code: str = "CN") -> Dict:
     """
-    Simple province-based matching for logistics anchors.
-    In the future, this can be expanded with coordinate-based distance calculation.
+    Simple country/province-based matching for logistics anchors.
+    v8.2: Support Global Country Codes.
     """
-    # 1. Direct province match
+    # 1. International Match (v8.2)
+    if country_code and country_code.upper() != "CN":
+        return {
+            "id": f"wh_{country_code.lower()}",
+            "name": f"{country_code.upper()} Local Warehouse",
+            "province": "",
+            "city": "",
+            "country": country_code.upper(),
+            "description": f"Verified local inventory in {country_code.upper()}."
+        }
+
+    # 2. Direct province match (China)
     for wh in WAREHOUSES:
         if wh["province"] == province:
             return wh

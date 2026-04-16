@@ -36,6 +36,14 @@ class Settings(BaseSettings):
     MINIMAX_API_KEY: str = os.getenv("MINIMAX_API_KEY", "")
     EXA_API_KEY: str = os.getenv("EXA_API_KEY", "")
     NOTION_TOKEN: str = os.getenv("NOTION_TOKEN", "")
+    
+    # v7.5: ACW Proxy Support
+    ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+    ANTHROPIC_BASE_URL: str = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
+    OPENAI_API_KEY: str = os.getenv("OPENAI_API_KEY", "")
+    OPENAI_BASE_URL: str = os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+    FAL_KEY: str = os.getenv("FAL_KEY", "")
+    
     QDRANT_HOST: str = os.getenv("QDRANT_HOST", "localhost")
     QDRANT_PORT: int = int(os.getenv("QDRANT_PORT", 6333))
     MASTER_SECRET_KEY: str = os.getenv("MASTER_SECRET_KEY", "0buck_default_master_key_for_api_keys_32")

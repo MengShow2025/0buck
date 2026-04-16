@@ -28,8 +28,8 @@ export const MerchantCard: React.FC<MerchantCardProps> = ({ merchant, onProductC
             <h3 className="text-xl font-black text-on-surface tracking-tight leading-tight group-hover:text-primary transition-colors">{merchant.name}</h3>
             <div className="flex items-center gap-2 text-[11px] text-on-surface-variant font-bold uppercase tracking-widest">
               <span className="flex items-center gap-1.5">
-                <img src="https://img.alicdn.com/tfs/TB1V286pY9YBuNjy0FgXXcpcXXa-64-64.png" className="w-4 h-4" alt="Alibaba" />
-                Alibaba.com
+                <div className="w-4 h-4 rounded-md bg-black flex items-center justify-center text-[8px] text-white font-black">0B</div>
+                0Buck Verified
               </span>
               <span className="w-1 h-1 rounded-full bg-outline-variant"></span>
               <span>{merchant.businessType}</span>

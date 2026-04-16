@@ -38,13 +38,18 @@ def product_search(query: str):
     try:
         shield = ShieldService(db)
         
+        # v7.5.4: Truth-First Search - Filter out products with 0 price or no images
         products = db.query(Product).filter(
+             (Product.is_active == True),
+             (Product.sale_price > 0),
+             (Product.images != None),
+             (Product.images != '[]'),
              (Product.title_en.ilike(f"%{query}%")) | 
              (Product.category.ilike(f"%{query}%"))
          ).limit(5).all()
         
         if not products:
-            return {"status": "info", "message": f"未找到与 '{query}' 相关的产品。"}
+            return {"status": "info", "message": f"未找到与 '{query}' 相关的有效产品。"}
             
         results = []
         for p in products:
@@ -91,7 +96,9 @@ async def _web_search_func(query: str) -> List[Dict[str, Any]]:
     }
     payload = {
         "query": query,
-        "numResults": 5
+        "numResults": 5,
+        "useAutoprompt": True,
+        "contents": {"text": {"maxCharacters": 1000}, "highlights": True}
     }
     
     async with httpx.AsyncClient() as client:

@@ -1,0 +1,154 @@
+{% comment %}
+  0Buck v8.5+ Fulfillment Shield (Truth Audit - Brand Pure Edition)
+  Extracts and displays the truth table from the product description.
+  DE-TECHNIFIED: All mentions of Alibaba/API 507580 are removed.
+{% endcomment %}
+
+<style>
+  .fulfillment-shield {
+    margin: 1rem 0 2rem;
+    border: 1px solid #D4AF37;
+    border-radius: 12px;
+    background-color: #000;
+    color: #D4AF37;
+    overflow: hidden;
+    font-family: var(--font-body--family);
+    box-shadow: 0 4px 15px rgba(212, 175, 55, 0.2);
+    grid-column: 1 / -1;
+    z-index: 10;
+  }
+  .shield-header {
+    background-color: #D4AF37;
+    color: #000;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    letter-spacing: 1.5px;
+  }
+  .shield-body {
+    padding: 16px;
+  }
+  .shield-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .shield-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .shield-label {
+    font-size: 0.75rem;
+    opacity: 0.8;
+    text-transform: uppercase;
+    font-weight: 500;
+    color: #D4AF37;
+  }
+  .shield-value {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #fff;
+  }
+  .shield-footer {
+    border-top: 1px solid #222;
+    padding: 8px 16px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+    text-align: right;
+    font-style: italic;
+  }
+  
+  @media screen and (max-width: 749px) {
+    .fulfillment-shield {
+      margin-top: 0;
+      margin-bottom: 2rem;
+      border-radius: 0;
+      border-left: none;
+      border-right: none;
+    }
+    .shield-grid {
+      gap: 12px;
+    }
+    .shield-value {
+      font-size: 0.85rem;
+    }
+  }
+</style>
+
+{% if product.description contains '[The Fulfillment Shield]' %}
+  <div class="fulfillment-shield" data-testid="truth-audit-shield">
+    <div class="shield-header">
+      <span>🛡️</span> 0Buck Truth Audit
+    </div>
+    <div class="shield-body">
+      <div class="shield-grid">
+        {% assign shield_content = product.description | split: '[The Fulfillment Shield]' | last | split: '####' | first %}
+        
+        {% if shield_content contains 'Origin:' %}
+          <div class="shield-item">
+            <span class="shield-label">Origin</span>
+            <span class="shield-value">{{ shield_content | split: 'Origin:' | last | split: '<br' | first | strip_html | strip }}</span>
+          </div>
+        {% else %}
+          <div class="shield-item">
+            <span class="shield-label">Origin</span>
+            <span class="shield-value">Global Hub Verified</span>
+          </div>
+        {% endif %}
+        
+        {% if shield_content contains 'Speed:' %}
+          <div class="shield-item">
+            <span class="shield-label">Delivery</span>
+            <span class="shield-value">{{ shield_content | split: 'Speed:' | last | split: '<br' | first | strip_html | strip }}</span>
+          </div>
+        {% else %}
+          <div class="shield-item">
+            <span class="shield-label">Delivery</span>
+            <span class="shield-value">3-7 Business Days</span>
+          </div>
+        {% endif %}
+        
+        <div class="shield-item">
+          <span class="shield-label">Protocol</span>
+          <span class="shield-value">0Buck Artisan Protocol</span>
+        </div>
+
+        <div class="shield-item">
+          <span class="shield-label">Manufacturer</span>
+          {% if shield_content contains 'Certification:' %}
+            <span class="shield-value">{{ shield_content | split: 'Certification:' | last | split: '<br' | first | strip_html | strip }}</span>
+          {% else %}
+            <span class="shield-value">Certified Tier-1 OEM</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="shield-footer">
+      Physical Identity Lineage: Verified by 0Buck Lead Auditor
+    </div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', function() {
+      const descriptions = document.querySelectorAll('.rte');
+      descriptions.forEach(rte => {
+        const elements = rte.querySelectorAll('h1, h2, h3, h4, h5, h6, p, div');
+        elements.forEach(el => {
+          if (el.textContent.includes('[The Fulfillment Shield]')) {
+            el.style.display = 'none';
+            let next = el.nextElementSibling;
+            while (next && !['H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(next.tagName)) {
+              next.style.display = 'none';
+              next = next.nextElementSibling;
+            }
+          }
+        });
+      });
+    });
+  </script>
+{% endif %}

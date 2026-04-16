@@ -70,8 +70,11 @@ export interface Product {
   moq?: string;
   quantity?: number;
   delivery?: string;
-  category_type?: 'TRAFFIC' | 'PROFIT';
+  category_type?: 'REBATE' | 'NORMAL' | 'MAGNET';
   is_cashback_eligible?: boolean;
+  warehouse_anchor?: string;
+  shopify_handle?: string;
+  admin_tags?: string[];
 }
 
 export interface CartItem {

@@ -1,0 +1,498 @@
+#!/usr/bin/env python3
+"""
+1688商品评论查询 - 评论查询脚本
+
+Usage:
+    python3 review_query.py query --product-id "B08XYZ123" --platform "amazon" --country "US"
+    python3 review_query.py query --product-id "B08XYZ123" "B09ABC456" --platform "amazon" --country "US" --min-rating 4.5
+"""
+
+import argparse
+import json
+import sys
+import os
+import time
+import requests
+import jwt
+from datetime import datetime, timezone
+from typing import Optional, Dict, Any, List
+
+# API配置 - 支持多环境
+API_ENDPOINTS = {
+    "prod": "https://api.alphashop.cn/opp.selection.productreview.query/1.0",
+    "pre": "https://pre-api.alphashop.cn/opp.selection.productreview.query/1.0",
+    "daily": "https://daily-api.alphashop.cn/opp.selection.productreview.query/1.0"
+}
+
+# 默认使用预发环境
+DEFAULT_ENV = os.environ.get("ALPHASHOP_ENV", "pre").lower()
+REVIEW_QUERY_ENDPOINT = API_ENDPOINTS.get(DEFAULT_ENV, API_ENDPOINTS["pre"])
+
+# 平台和国家配置
+PLATFORMS = ["amazon", "tiktok"]
+AMAZON_COUNTRIES = ["US", "UK", "ES", "FR", "DE", "IT", "CA", "JP"]
+TIKTOK_COUNTRIES = ["ID", "VN", "MY", "TH", "PH", "US", "SG", "BR", "MX", "GB", "ES", "FR", "DE", "IT", "JP"]
+
+
+def print_credential_help():
+    """打印凭证获取帮助信息"""
+    print("\n" + "="*70)
+    print("🔐 需要 AlphaShop API 凭证")
+    print("="*70)
+    print("\n本 skill 需要以下凭证才能使用：")
+    print("  • ALPHASHOP_ACCESS_KEY  - API 访问密钥")
+    print("  • ALPHASHOP_SECRET_KEY  - API 密钥\n")
+
+    print("📋 如何获取凭证：")
+    print("-" * 70)
+    print("1. 联系 AlphaShop/遨虾 平台获取 API 凭证")
+    print("   - 平台网址：https://www.alphashop.cn （或相关平台）")
+    print("   - 如果你是内部用户，请联系平台管理员\n")
+
+    print("2. 获取凭证后，有两种配置方式：\n")
+
+    print("   方式A：通过环境变量配置（临时使用）")
+    print("   " + "-" * 66)
+    print("   export ALPHASHOP_ACCESS_KEY='你的AccessKey'")
+    print("   export ALPHASHOP_SECRET_KEY='你的SecretKey'\n")
+
+    print("   方式B：通过 OpenClaw 配置（推荐）")
+    print("   " + "-" * 66)
+    print("   编辑 OpenClaw 配置文件，添加：")
+    print("   {")
+    print("     skills: {")
+    print("       entries: {")
+    print('         "1688-product-review-query": {')
+    print("           env: {")
+    print('             ALPHASHOP_ACCESS_KEY: "你的AccessKey",')
+    print('             ALPHASHOP_SECRET_KEY: "你的SecretKey"')
+    print("           }")
+    print("         }")
+    print("       }")
+    print("     }")
+    print("   }\n")
+
+    print("3. 配置完成后，重新运行命令即可\n")
+    print("="*70 + "\n")
+
+
+def get_jwt_token():
+    """生成 JWT token 用于 AlphaShop API 认证"""
+    ak = os.environ.get("ALPHASHOP_ACCESS_KEY", "").strip()
+    sk = os.environ.get("ALPHASHOP_SECRET_KEY", "").strip()
+
+    if not ak or not sk:
+        print_credential_help()
+
+        # 交互式询问用户是否要输入凭证
+        print("\n请选择：")
+        print("  1) 手动输入凭证（本次有效）")
+        print("  2) 退出")
+        print()
+
+        try:
+            choice = input("请选择 [1-2]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n已取消")
+            sys.exit(0)
+
+        if choice == "1":
+            try:
+                if not ak:
+                    ak = input("请输入 ALPHASHOP_ACCESS_KEY: ").strip()
+                if not sk:
+                    sk = input("请输入 ALPHASHOP_SECRET_KEY: ").strip()
+
+                if not ak or not sk:
+                    print("\n❌ 凭证不能为空")
+                    sys.exit(1)
+            except (EOFError, KeyboardInterrupt):
+                print("\n已取消")
+                sys.exit(0)
+        else:
+            print("已退出")
+            sys.exit(0)
+
+    # 生成 JWT Token (HS256 算法)
+    # 使用与AlphaShop平台兼容的JWT格式
+    now = int(time.time())
+    expired_at = now + 3600  # 1小时过期
+    not_before = now - 60    # 允许60秒时钟偏差
+
+    payload = {
+        "iss": ak,       # issuer: 使用 AccessKey
+        "exp": expired_at,  # expiration time
+        "nbf": not_before   # not before
+    }
+
+    try:
+        token = jwt.encode(
+            payload=payload,
+            key=sk,
+            algorithm="HS256",
+            headers={"alg": "HS256"}
+        )
+        return token
+    except Exception as e:
+        print(f"\n❌ 生成 JWT Token 失败: {str(e)}")
+        sys.exit(1)
+
+
+def validate_platform_country(platform: str, country: str) -> bool:
+    """验证平台和国家是否匹配"""
+    platform = platform.lower()
+    country = country.upper()
+
+    if platform not in PLATFORMS:
+        print(f"❌ 平台不合法: {platform}")
+        print(f"   支持的平台: {', '.join(PLATFORMS)}")
+        return False
+
+    if platform == "amazon" and country not in AMAZON_COUNTRIES:
+        print(f"❌ Amazon 平台不支持国家: {country}")
+        print(f"   支持的国家: {', '.join(AMAZON_COUNTRIES)}")
+        return False
+
+    if platform == "tiktok" and country not in TIKTOK_COUNTRIES:
+        print(f"❌ TikTok 平台不支持国家: {country}")
+        print(f"   支持的国家: {', '.join(TIKTOK_COUNTRIES)}")
+        return False
+
+    return True
+
+
+def parse_date_to_timestamp(date_str: str) -> Optional[int]:
+    """将日期字符串转换为 Unix 毫秒时间戳"""
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        dt = dt.replace(tzinfo=timezone.utc)
+        return int(dt.timestamp() * 1000)
+    except ValueError:
+        print(f"❌ 日期格式错误: {date_str}，正确格式为 yyyy-MM-dd（如 2025-01-01）")
+        return None
+
+
+def query_reviews(args):
+    """查询商品评论"""
+    # 验证平台和国家
+    if not validate_platform_country(args.platform, args.country):
+        sys.exit(1)
+
+    # 验证商品ID列表
+    if not args.product_id:
+        print("❌ 商品ID列表不能为空")
+        sys.exit(1)
+
+    if len(args.product_id) > 20:
+        print("❌ 商品ID列表最多支持20个")
+        sys.exit(1)
+
+    # 验证评分范围
+    if args.min_rating is not None and args.max_rating is not None:
+        if args.min_rating > args.max_rating:
+            print("❌ 最低评分不能大于最高评分")
+            sys.exit(1)
+
+    # 处理时间参数
+    start_time = None
+    end_time = None
+    if args.start_time:
+        start_time = parse_date_to_timestamp(args.start_time)
+        if start_time is None:
+            sys.exit(1)
+
+    if args.end_time:
+        end_time = parse_date_to_timestamp(args.end_time)
+        if end_time is None:
+            sys.exit(1)
+
+    if start_time and end_time and start_time > end_time:
+        print("❌ 开始时间不能晚于结束时间")
+        sys.exit(1)
+
+    # 国家代码转换：UK → GB（后端 API 统一使用 GB）
+    country_code = args.country.upper()
+    if country_code == "UK":
+        country_code = "GB"
+
+    # 构建请求参数
+    request_data = {
+        "productIdList": args.product_id,
+        "targetPlatform": args.platform.lower(),
+        "targetCountry": country_code,
+        "pageNum": args.page_num,
+        "pageSize": args.page_size,
+    }
+
+    # 添加可选参数
+    if args.min_rating is not None:
+        request_data["minRating"] = args.min_rating
+    if args.max_rating is not None:
+        request_data["maxRating"] = args.max_rating
+    if start_time is not None:
+        request_data["startTime"] = start_time
+    if end_time is not None:
+        request_data["endTime"] = end_time
+    if args.min_up_num is not None:
+        request_data["minUpNum"] = args.min_up_num
+    if args.sort_field:
+        request_data["sortField"] = args.sort_field
+    if args.sort_order:
+        request_data["sortOrder"] = args.sort_order
+
+    # 获取 JWT Token
+    token = get_jwt_token()
+
+    # 发送请求
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {token}"
+    }
+
+    print(f"\n🔍 查询商品评论...")
+    print(f"   平台: {args.platform}")
+    print(f"   国家: {args.country}")
+    print(f"   商品数: {len(args.product_id)}")
+
+    try:
+        response = requests.post(
+            REVIEW_QUERY_ENDPOINT,
+            json=request_data,
+            headers=headers,
+            timeout=30
+        )
+
+        if response.status_code != 200:
+            print(f"\n❌ 请求失败 (HTTP {response.status_code})")
+            print(f"   响应: {response.text}")
+            sys.exit(1)
+
+        result = response.json()
+
+        # 调试：输出完整响应
+        print(f"\n🔍 [DEBUG] HTTP状态码: {response.status_code}")
+        print(f"🔍 [DEBUG] 完整响应: {json.dumps(result, ensure_ascii=False, indent=2)}")
+
+        # 检查最外层结果码
+        if result.get("resultCode") != "SUCCESS":
+            print(f"\n❌ 查询失败")
+            print(f"   错误码: {result.get('resultCode', 'UNKNOWN')}")
+            print(f"   错误信息: {result.get('msg', '未知错误')}")
+            sys.exit(1)
+
+        # 提取 result 字段
+        inner_result = result.get("result", {})
+        if not inner_result.get("success"):
+            print(f"\n❌ 查询失败")
+            print(f"   错误码: {inner_result.get('code', 'UNKNOWN')}")
+            print(f"   错误信息: {inner_result.get('msg', '未知错误')}")
+            sys.exit(1)
+
+        data = inner_result.get("data", {})
+
+        # 输出结果
+        if args.json:
+            # JSON 格式输出
+            output_json = json.dumps(inner_result, ensure_ascii=False, indent=2)
+            if args.output:
+                with open(args.output, 'w', encoding='utf-8') as f:
+                    f.write(output_json)
+                print(f"\n✅ 结果已保存到: {args.output}")
+            else:
+                print(output_json)
+        else:
+            # 格式化输出
+            print_formatted_result(data, args)
+
+    except requests.Timeout:
+        print("\n❌ 请求超时，请稍后重试")
+        sys.exit(1)
+    except requests.RequestException as e:
+        print(f"\n❌ 请求失败: {str(e)}")
+        sys.exit(1)
+    except Exception as e:
+        print(f"\n❌ 处理失败: {str(e)}")
+        sys.exit(1)
+
+
+def print_formatted_result(data: Dict[str, Any], args):
+    """格式化输出查询结果"""
+    reviews = data.get("reviewList", [])
+    total_count = data.get("totalCount", 0)
+    page_num = data.get("pageNum", 1)
+    page_size = data.get("pageSize", 10)
+    total_pages = data.get("totalPages", 0)
+
+    print("\n" + "="*70)
+    print("=== 商品评论查询结果 ===")
+    print("="*70)
+
+    # 查询条件
+    print("\n查询条件:")
+    print(f"  平台: {args.platform}")
+    print(f"  国家: {args.country}")
+    print(f"  商品数: {len(args.product_id)}")
+
+    filters = []
+    if args.min_rating is not None or args.max_rating is not None:
+        min_r = args.min_rating if args.min_rating is not None else 0.0
+        max_r = args.max_rating if args.max_rating is not None else 5.0
+        filters.append(f"评分 {min_r}-{max_r}")
+
+    if args.start_time or args.end_time:
+        time_range = f"{args.start_time or '...'} ~ {args.end_time or '...'}"
+        filters.append(f"时间 {time_range}")
+
+    if args.min_up_num is not None:
+        filters.append(f"最小点赞数 {args.min_up_num}")
+
+    if filters:
+        print(f"  筛选: {', '.join(filters)}")
+
+    # 分页信息
+    print(f"\n找到评论: {total_count} 条")
+    print(f"当前页: {page_num} / {total_pages}")
+
+    if not reviews:
+        print("\n❌ 未找到符合条件的评论")
+        if args.min_rating or args.max_rating or args.min_up_num:
+            print("   建议：尝试放宽筛选条件")
+        return
+
+    # 输出评论列表
+    print("\n" + "━"*70)
+
+    for idx, review in enumerate(reviews, 1):
+        product_id = review.get("productId", "")
+        title = review.get("reviewTitle", "")
+        content = review.get("reviewContent", "")
+        rating = review.get("rating", 0.0)
+        review_time = review.get("reviewTime", "")
+        up_num = review.get("upNum", 0)
+        reviewer_name = review.get("reviewerName", "")
+        verified = review.get("verifiedPurchase", False)
+
+        print(f"\n[{idx}] ⭐ {rating} | 👍 {up_num} | {review_time}")
+        print(f"商品: {product_id}")
+        if title:
+            print(f"标题: {title}")
+        if content:
+            # 限制内容长度
+            if len(content) > 200:
+                content = content[:200] + "..."
+            print(f"内容: {content}")
+        if reviewer_name:
+            verified_mark = " ✓" if verified else ""
+            print(f"评论者: {reviewer_name}{verified_mark}")
+
+    print("\n" + "━"*70)
+    print(f"总计: {total_count} 条评论")
+
+    # 如果还有更多页，提示用户
+    if page_num < total_pages:
+        print(f"\n💡 还有 {total_pages - page_num} 页数据，使用 --page-num {page_num + 1} 查看下一页")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="1688商品评论查询工具",
+        formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="可用命令")
+
+    # query 命令
+    query_parser = subparsers.add_parser("query", help="查询商品评论")
+
+    # 必填参数
+    query_parser.add_argument(
+        "--product-id",
+        nargs='+',
+        required=True,
+        help="商品ID列表（最多20个）"
+    )
+    query_parser.add_argument(
+        "--platform",
+        required=True,
+        choices=["amazon", "tiktok"],
+        help="平台"
+    )
+    query_parser.add_argument(
+        "--country",
+        required=True,
+        help="国家代码（大写，如 US, UK, JP）"
+    )
+
+    # 分页参数
+    query_parser.add_argument(
+        "--page-num",
+        type=int,
+        default=1,
+        help="页码，从1开始（默认：1）"
+    )
+    query_parser.add_argument(
+        "--page-size",
+        type=int,
+        default=10,
+        help="每页数量（默认：10，最大：50）"
+    )
+
+    # 筛选参数
+    query_parser.add_argument(
+        "--min-rating",
+        type=float,
+        help="最低评分（0.0-5.0）"
+    )
+    query_parser.add_argument(
+        "--max-rating",
+        type=float,
+        help="最高评分（0.0-5.0）"
+    )
+    query_parser.add_argument(
+        "--start-time",
+        help="开始时间（格式：yyyy-MM-dd，如 2025-01-01）"
+    )
+    query_parser.add_argument(
+        "--end-time",
+        help="结束时间（格式：yyyy-MM-dd，如 2025-03-31）"
+    )
+    query_parser.add_argument(
+        "--min-up-num",
+        type=int,
+        help="最小点赞数"
+    )
+
+    # 排序参数
+    query_parser.add_argument(
+        "--sort-field",
+        choices=["review_time", "review_score", "up_num"],
+        help="排序字段"
+    )
+    query_parser.add_argument(
+        "--sort-order",
+        choices=["asc", "desc"],
+        default="desc",
+        help="排序方向（默认：desc）"
+    )
+
+    # 其他参数
+    query_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="输出JSON格式"
+    )
+    query_parser.add_argument(
+        "--output",
+        help="输出文件路径"
+    )
+
+    args = parser.parse_args()
+
+    if args.command == "query":
+        query_reviews(args)
+    else:
+        parser.print_help()
+
+
+if __name__ == "__main__":
+    main()

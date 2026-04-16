@@ -1,0 +1,10 @@
+{
+  "name": "alphashop-sel-product-search",
+  "version": "2.0.0",
+  "description": "商品搜索API：支持关键词搜索和图片搜索，发现Amazon/TikTok平台商品",
+  "scripts": {
+    "search": "scripts/search.py",
+    "imageSearch": "scripts/image_search.py"
+  },
+  "env": []
+}s

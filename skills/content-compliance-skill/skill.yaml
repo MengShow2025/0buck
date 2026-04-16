@@ -1,0 +1,36 @@
+name: ecommerce-content-compliance-review
+version: 2.0.0
+entry: skill.md
+
+description: >
+  跨境电商内容合规审查专家。当用户提到「合规审查」「内容违规」「listing 合规」
+  「商标侵权」「广告违规」「平台政策」「虚假宣传」「知识产权」「产品描述违规」
+  「跨境合规」「敏感词检测」「侵权风险」「平台封号风险」「内容审核」时触发。
+  对跨境电商产品标题、描述、图片文案、关键词等内容进行多维度合规风险扫描，
+  输出风险等级、具体问题定位、修改建议及合规版本。
+
+author: cross-border-ecommerce-skills
+tags:
+  - ecommerce
+  - compliance
+  - ip-protection
+  - cross-border
+  - amazon
+  - ebay
+  - shopee
+  - advertising-law
+  - trademark
+
+references:
+  - references/ip-trademark.md
+  - references/platform-policies.md
+  - references/advertising-law.md
+  - references/cross-border-regulations.md
+  - references/sensitive-words.md
+
+assets:
+  - assets/report-template.md
+  - assets/risk-checklist.md
+
+examples:
+  - examples/sample-review.md

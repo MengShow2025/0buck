@@ -13,6 +13,7 @@ langchain
 langgraph
 google-generativeai
 langchain-google-genai
+langchain-community
 pydantic[email]
 email-validator
 asyncio
@@ -26,3 +27,5 @@ itsdangerous
 pyotp
 qrcode[pil]
 redis
+celery
+flower

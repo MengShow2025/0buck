@@ -1,25 +1,45 @@
 import os
-import sys
 import json
 from sqlalchemy import create_engine, text
+from dotenv import load_dotenv
 
-# Ensure project root is in sys.path
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-backend_root = os.path.join(project_root, 'backend')
-if backend_root not in sys.path:
-    sys.path.append(backend_root)
+load_dotenv()
 
-from app.core.config import settings
+DATABASE_URL = "postgresql://neondb_owner:npg_0XasvoqHEz4Y@ep-still-voice-amdeu23b-pooler.c-5.us-east-1.aws.neon.tech/neondb?sslmode=require"
+engine = create_engine(DATABASE_URL)
 
-def inspect_candidate(cid):
-    engine = create_engine(settings.SQLALCHEMY_DATABASE_URI)
+def debug_candidate(cid):
     with engine.connect() as conn:
-        result = conn.execute(text(f"SELECT title_zh, discovery_evidence FROM candidate_products WHERE id = {cid}"))
-        row = result.fetchone()
-        if row:
-            print(f"Title: {row[0]}")
-            evidence = json.loads(row[1]) if isinstance(row[1], str) else row[1]
-            print(f"Evidence: {json.dumps(evidence, indent=2)}")
+        res = conn.execute(text("SELECT id, title_zh, title_en_preview, description_zh, description_en, images, variants, attributes, structural_data FROM candidate_products WHERE id = :id"), {"id": cid})
+        row = res.fetchone()
+        if not row:
+            print(f"❌ Candidate {cid} not found.")
+            return
+
+        print(f"\n--- Candidate ID: {row.id} ---")
+        print(f"Title ZH: {row.title_zh}")
+        print(f"Title EN: {row.title_en_preview}")
+        print(f"Desc ZH: {row.description_zh}")
+        print(f"Desc EN: {row.description_en}")
+        
+        try:
+            vars_data = json.loads(row.variants) if row.variants else []
+            print(f"Variants Count: {len(vars_data)}")
+            if vars_data:
+                print(f"First Variant Sample: {json.dumps(vars_data[0], indent=2, ensure_ascii=False)}")
+        except Exception as e:
+            print(f"Error parsing variants: {e}")
+
+        try:
+            attrs = json.loads(row.attributes) if row.attributes else []
+            print(f"Attributes Count: {len(attrs)}")
+            if attrs:
+                print(f"Attributes Sample: {json.dumps(attrs[:3], indent=2, ensure_ascii=False)}")
+        except Exception as e:
+            print(f"Error parsing attributes: {e}")
 
 if __name__ == "__main__":
-    inspect_candidate(12)
+    # The shoe from the screenshot might be 84 (from previous context)
+    debug_candidate(84)
+    debug_candidate(154)
+    debug_candidate(175)

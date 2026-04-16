@@ -168,7 +168,8 @@ def calculate_final_price(
     comp_price_usd: Optional[float] = None,
     sale_price_ratio: Optional[float] = None,
     compare_at_price_ratio: Optional[float] = None,
-    shipping_cost_usd: float = 0.0
+    shipping_cost_usd: float = 0.0,
+    is_magnet: bool = False
 ) -> dict:
     """
     v5.3 Freight-Aware Pricing Logic (Hybrid Strategy):
@@ -177,6 +178,7 @@ def calculate_final_price(
     3. Strikethrough: Comp Price * compare_at_price_ratio
     4. Safety: Price must cover (Product Cost + Shipping Cost) * 1.2
     
+    v8.5 MAGNET Update: If is_magnet is True, final_price_usd = 0.0
     STRICT: Uses Decimal for all currency calculations.
     """
     cost_cny_dec = Decimal(str(cost_cny))
@@ -189,14 +191,23 @@ def calculate_final_price(
     total_landed_cost = cost_usd + shipping_dec
     
     # Phase 2: Final Sale Price Calculation
-    if comp_price_usd and sale_price_ratio:
+    if is_magnet:
+        # v8.5 MAGNET: Product Price is always $0.00
+        final_price_usd = Decimal("0.0")
+        
+        # v8.5 Patch: 10% Logistics Buffer for Shipping
+        # We ensure the shipping charged to user covers total_landed_cost + 10% safety margin.
+        # But wait, final_price_usd is just the product price. 
+        # Shipping is handled separately in Shopify. 
+        # However, for Audit/Selection purposes, we must check if Shipping > Total_Landed_Cost * 1.1
+    elif comp_price_usd and sale_price_ratio:
         # Use Competitor-based pricing (60% rule)
         comp_dec = Decimal(str(comp_price_usd))
         ratio_dec = Decimal(str(sale_price_ratio))
         final_price_usd = comp_dec * ratio_dec
         
-        # Safety check: Price must be at least 1.2x landed cost (20% margin)
-        min_margin = Decimal("1.2")
+        # Safety check: v6.2.0 Truth Engine Floor: 1.5x Landed Cost
+        min_margin = Decimal("1.5")
         if final_price_usd < total_landed_cost * min_margin:
             final_price_usd = total_landed_cost * min_margin
     else:
@@ -216,10 +227,45 @@ def calculate_final_price(
         # Fallback: Just use the sale price (No strikethrough effect)
         compare_at_price = final_price_usd
     
+    # v7.0: Shipping Ratio Warning (Critical for conversion)
+    shipping_ratio = Decimal("0.0")
+    shipping_warning = False
+    if final_price_usd > 0:
+        shipping_ratio = shipping_dec / final_price_usd
+        if shipping_ratio > Decimal("0.4"):
+            shipping_warning = True
+
+    # v8.5 selection threshold: (Amazon Sale Price * 60%) / alibaba_item_cost (without shipping)
+    selection_threshold = Decimal("0.0")
+    if cost_usd > 0 and comp_price_usd:
+        comp_dec = Decimal(str(comp_price_usd))
+        ratio_dec = Decimal(str(sale_price_ratio or 0.6))
+        selection_threshold = (comp_dec * ratio_dec) / cost_usd
+
+    # v8.5 Patch: MAGNET Safety Audit (Amazon Shipping * 0.9 vs Landed Cost)
+    magnet_safety_passed = True
+    if is_magnet:
+        # Assuming amazon_standalone_shipping is around $6.99 (Boss's anchor)
+        amazon_shipping_anchor = Decimal("6.99") 
+        # Safety: (Amazon Shipping * 0.9) must cover Total Landed Cost
+        # v8.5.1 Logistics Patch: Shipping fee we charge to user
+        final_shipping_fee = amazon_shipping_anchor * Decimal("0.9")
+        if final_shipping_fee < total_landed_cost:
+            magnet_safety_passed = False
+
     return {
         "source_cost_usd": float(cost_usd.quantize(Decimal("0.01"))),
+        "shipping_cost_usd": float(shipping_dec.quantize(Decimal("0.01"))),
+        "total_landed_cost": float(total_landed_cost.quantize(Decimal("0.01"))),
         "final_price_usd": float(final_price_usd.quantize(Decimal("0.01"))),
-        "compare_at_price": float(compare_at_price.quantize(Decimal("0.01")))
+        "compare_at_price": float(compare_at_price.quantize(Decimal("0.01"))),
+        "profit_usd": float((final_price_usd - total_landed_cost).quantize(Decimal("0.01"))),
+        "roi": float((final_price_usd / total_landed_cost).quantize(Decimal("0.01"))) if total_landed_cost > 0 else 0.0,
+        "selection_threshold": float(selection_threshold.quantize(Decimal("0.01"))),
+        "is_reward_eligible": selection_threshold >= Decimal("4.0"),
+        "magnet_safety_passed": magnet_safety_passed,
+        "shipping_ratio": float(shipping_ratio.quantize(Decimal("0.001"))),
+        "shipping_warning": shipping_warning
     }
 
 class FinanceEngine:
@@ -251,3 +297,35 @@ class FinanceEngine:
             return True, res["message"]
         else:
             return False, res["message"]
+
+    def handle_paid_order(self, payload: Dict[str, Any]):
+        """
+        v4.0: Handle Shopify orders/paid.
+        1. Create local Order record.
+        2. Calculate Rewards & Points.
+        3. Trigger Cashback Plan if eligible.
+        """
+        from app.models.ledger import Order
+        shopify_order_id = str(payload.get("id"))
+        order_number = payload.get("order_number")
+        customer = payload.get("customer", {})
+        total_price = payload.get("total_price")
+
+        # 1. Create Local Order
+        existing = self.db.query(Order).filter_by(shopify_order_id=shopify_order_id).first()
+        if not existing:
+            new_order = Order(
+                shopify_order_id=shopify_order_id,
+                order_number=order_number,
+                user_id=customer.get("id"),
+                total_price=float(total_price or 0),
+                status="paid",
+                created_at=datetime.now()
+            )
+            self.db.add(new_order)
+            self.db.commit()
+            print(f"✅ Local Order Created: {order_number}")
+        
+        # 2. Rewards (Placeholder for v6.2.0)
+        # TODO: Implement full reward calculation based on 20-Phase rules
+        pass

@@ -1,113 +1,98 @@
-
+import logging
 import asyncio
-from datetime import datetime
-from decimal import Decimal
+from typing import List
 from sqlalchemy.orm import Session
-from app.db.session import SessionLocal
 from app.models.product import Product
-from app.services.supply_chain import SupplyChainService
-from app.services.sync_shopify import SyncShopifyService
-from app.services.config_service import ConfigService
+from app.services.cj_service import CJDropshippingService
+from app.services.sync_shopify import ShopifySyncService
+
+logger = logging.getLogger(__name__)
 
 class MeltingService:
+    """
+    v7.1 Circuit Breaker & High-Frequency Radar.
+    Monitors Price Spikes and Stock Outs.
+    Automatically un-lists products on Shopify if melting conditions met.
+    """
     def __init__(self, db: Session):
         self.db = db
-        self.config_service = ConfigService(db)
-        self.sc_service = SupplyChainService(db)
-        self.shopify_service = SyncShopifyService()
+        self.cj_service = CJDropshippingService()
+        self.shopify_sync = ShopifySyncService()
 
-    async def scan_and_melt(self):
+    async def run_radar_scan(self, batch_size: int = 50, priority: int = None):
         """
-        v3.1 Industrial-grade Price Melting Engine:
-        1. Tiered Scanning: High (Hourly), Med (4h), Low (12h).
-        2. Cooling-off Period: Skip melt if product manually reactivated within 24h.
-        3. Detailed Traceability: Log melted_at and last_stable_cost.
+        Scans products in batches.
         """
-        now = datetime.utcnow()
-        print(f"🚀 [{now}] Starting Tiered Price Melting Scan...")
+        query = self.db.query(Product).filter(Product.is_melted == False)
+        if priority:
+            query = query.filter(Product.scan_priority <= priority)
         
-        # Global threshold from Admin Config
-        global_threshold = float(self.config_service.get("GLOBAL_PRICE_MELTING_THRESHOLD", 0.15))
+        products = query.all()
+        logger.info(f"❄️ Melting Radar: Scanning {len(products)} active products...")
         
-        # v3.1: Tiered logic based on current hour
-        # (Simplified: High is always scanned, Med every 4 scans, Low every 12)
-        hour = now.hour
-        priority_filter = [1] # Always scan priority 1 (Hot sellers)
-        if hour % 4 == 0: priority_filter.append(2)
-        if hour % 12 == 0: priority_filter.append(3)
+        for i in range(0, len(products), batch_size):
+            batch = products[i:i + batch_size]
+            tasks = [self._monitor_single_product(p) for p in batch]
+            results = await asyncio.gather(*tasks)
+            # Sync back to DB every batch
+            self.db.commit()
+            await asyncio.sleep(2.0) # Respect CJ API limits
 
-        products = self.db.query(Product).filter(
-            Product.is_active == True,
-            Product.scan_priority.in_(priority_filter)
-        ).all()
+    async def _monitor_single_product(self, product: Product) -> bool:
+        """
+        Check CJ for stock and price. Trigger melting if needed.
+        """
+        try:
+            cj_detail = await self.cj_service.get_product_detail(product.cj_pid)
+            if not cj_detail:
+                return await self._melt_product(product, "CJ PID Lost")
+            
+            variants = cj_detail.get("variants", [])
+            total_stock = sum([int(v.get("variantInventory", 0)) for v in variants])
+            
+            # Price Spike Detection
+            current_min_price = 0.0
+            if variants:
+                current_min_price = min([float(v.get("variantSellPrice", 0.0)) for v in variants])
+            
+            old_cost = float(product.source_cost_usd or 0.0)
+            
+            # Thresholds
+            is_out_of_stock = total_stock < 50
+            is_price_spike = False
+            if old_cost > 0 and current_min_price > 0:
+                price_increase = (current_min_price - old_cost) / old_cost
+                if price_increase > 0.15: # 15% threshold
+                    is_price_spike = True
+            
+            if is_out_of_stock or is_price_spike:
+                reason = f"{'Low Stock' if is_out_of_stock else 'Price Spike'}: Inv={total_stock}, Price=${current_min_price}"
+                return await self._melt_product(product, reason)
+            
+            # Update last monitored timestamp
+            product.last_synced_at = func.now()
+            return False
+
+        except Exception as e:
+            logger.error(f"❌ Melting Monitor Error for {product.id}: {e}")
+            return False
+
+    async def _melt_product(self, product: Product, reason: str) -> bool:
+        """
+        Physical Melting: Set is_melted=True and UNPUBLISH on Shopify.
+        """
+        logger.error(f"❄️ MELTING Product {product.id}: {reason}")
+        product.is_melted = True
+        product.melt_reason = reason
         
-        stats = {"scanned": 0, "melted": 0, "updated": 0, "errors": 0}
-        
-        for product in products:
-            stats["scanned"] += 1
+        # Unpublish on Shopify
+        if product.shopify_product_id:
             try:
-                # Cooling-off Check: If manually un-melted within 24h, skip automatic melting
-                # (Prevents SEO oscillation)
-                if product.is_melted == False and product.melted_at:
-                    hours_since_last_melt = (now - product.melted_at).total_seconds() / 3600
-                    if hours_since_last_melt < 24:
-                        print(f"  ❄️ Cooling-off period for {product.title_en}. Skipping scan.")
-                        continue
-
-                raw_details = await self.sc_service.fetch_product_details(product.product_id_1688)
-                new_cost_cny = Decimal(str(raw_details.get("price", product.original_price)))
-                old_cost_cny = Decimal(str(product.original_price))
-                
-                if old_cost_cny <= 0: continue
-                    
-                fluctuation_ratio = (new_cost_cny - old_cost_cny) / old_cost_cny
-                threshold = Decimal(str(product.price_fluctuation_threshold or global_threshold))
-                
-                if fluctuation_ratio > threshold:
-                    # 🔥 MELT TRIGGERED
-                    print(f"  ⚠️ MELT TRIGGERED for {product.title_en} (Ratio: {fluctuation_ratio:.2%})")
-                    product.is_melted = True
-                    product.melted_at = now # Traceability v3.1
-                    product.last_stable_cost = float(old_cost_cny) # Traceability v3.1
-                    product.melting_reason = f"Cost increased by {fluctuation_ratio:.2%} (from {old_cost_cny} to {new_cost_cny})"
-                    
-                    if product.shopify_product_id:
-                        import shopify
-                        sp = shopify.Product.find(product.shopify_product_id)
-                        if sp:
-                            sp.status = "draft"
-                            sp.save()
-                    
-                    stats["melted"] += 1
-                
-                elif abs(fluctuation_ratio) > Decimal("0.01"):
-                    # ✅ SYNC PRICE (Normal fluctuation)
-                    product.original_price = float(new_cost_cny)
-                    pricing = self.sc_service.calculate_price(float(new_cost_cny), float(product.compare_at_price / 0.95) if product.compare_at_price else None)
-                    
-                    if pricing.get("sale_price"):
-                        product.sale_price = pricing["sale_price"]
-                        product.compare_at_price = pricing.get("display_price")
-                        product.source_cost_usd = pricing["cost_usd_buffered"]
-                        self.shopify_service.sync_to_shopify(product)
-                        stats["updated"] += 1
-                
-                product.last_synced_at = now
-                self.db.commit()
-
-            except Exception as e:
-                print(f"  ❌ Error scanning {product.title_en}: {str(e)}")
-                stats["errors"] += 1
-                self.db.rollback()
+                # We can update the status to 'archived' or 'draft' on Shopify
+                # Using our ShopifySyncService helper if available
+                self.shopify_sync.unpublish_product(product.shopify_product_id)
+                logger.info(f"   ✅ Unlisted {product.id} from Shopify.")
+            except Exception as se:
+                logger.error(f"   ❌ Failed to unlist {product.id} from Shopify: {se}")
         
-        print(f"✅ Tiered Scan completed: {stats}")
-        return stats
-
-async def run_cron():
-    db = SessionLocal()
-    service = MeltingService(db)
-    await service.scan_and_melt()
-    db.close()
-
-if __name__ == "__main__":
-    asyncio.run(run_cron())
+        return True

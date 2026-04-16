@@ -1,25 +1,21 @@
+import httpx
+import asyncio
+
 import os
-import requests
-from dotenv import load_dotenv
+shop_name = "pxjkad-zt"
+access_token = os.getenv("SHOPIFY_ACCESS_TOKEN")
+headers = {"X-Shopify-Access-Token": access_token}
 
-load_dotenv()
-
-SHOP_URL = f"{os.getenv('SHOPIFY_SHOP_NAME')}.myshopify.com"
-ACCESS_TOKEN = os.getenv("SHOPIFY_ACCESS_TOKEN")
-API_VERSION = "2024-01"
-
-def nuke_shopify():
-    url = f"https://{SHOP_URL}/admin/api/{API_VERSION}/products.json?limit=250"
-    headers = {"X-Shopify-Access-Token": ACCESS_TOKEN}
-    
-    resp = requests.get(url, headers=headers)
-    products = resp.json().get('products', [])
-    print(f"🧹 Found {len(products)} products to delete.")
-    
-    for p in products:
-        del_url = f"https://{SHOP_URL}/admin/api/{API_VERSION}/products/{p['id']}.json"
-        requests.delete(del_url, headers=headers)
-        print(f"✅ Deleted: {p['title']}")
+async def delete_all():
+    async with httpx.AsyncClient() as client:
+        while True:
+            resp = await client.get(f"https://{shop_name}.myshopify.com/admin/api/2024-01/products.json?limit=250", headers=headers)
+            products = resp.json().get("products", [])
+            if not products:
+                break
+            print(f"Deleting {len(products)} products...")
+            tasks = [client.delete(f"https://{shop_name}.myshopify.com/admin/api/2024-01/products/{p['id']}.json", headers=headers) for p in products]
+            await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
-    nuke_shopify()
+    asyncio.run(delete_all())

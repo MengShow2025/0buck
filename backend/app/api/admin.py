@@ -122,6 +122,7 @@ def assign_coupon_category(code: str, data: CouponAssignRequest, db: Session = D
 # --- Global Config & AI Rules ---
 
 @router.get("/config/ai-rules")
+@router.get("/ai/rules")
 def get_ai_rules(db: Session = Depends(get_db)):
     """v3.1 Get AI Coupon Issuance rules and daily budget"""
     budget = db.query(SystemConfig).filter_by(key="AI_COUPON_DAILY_BUDGET").first()
@@ -141,6 +142,7 @@ def update_global_config(data: GlobalConfigUpdate, db: Session = Depends(get_db)
     return {"status": "success", "key": data.key, "value": data.value}
 
 @router.get("/config/reward-rates")
+@router.get("/reward/rates")
 def get_reward_rates(db: Session = Depends(get_db)):
     """v3.4.5 Get current reward rates from SystemConfig"""
     from app.services.config_service import ConfigService
@@ -168,6 +170,7 @@ def update_reward_rates(data: RewardRatesUpdate, db: Session = Depends(get_db)):
 # --- Pricing Strategy (v4.6.8) ---
 
 @router.get("/config/pricing-strategy")
+@router.get("/pricing/strategy")
 def get_pricing_strategy(db: Session = Depends(get_db)):
     """v4.6.8 Get current pricing strategy from SystemConfig"""
     from app.services.config_service import ConfigService
@@ -215,6 +218,7 @@ def update_sourcing_strategy(data: SourcingStrategyUpdate, db: Session = Depends
 # --- Talent (KOL) Audit (v4.6.8) ---
 
 @router.get("/talents/pending")
+@router.get("/talent/applications")
 def list_pending_talents(db: Session = Depends(get_db)):
     """v4.6.8 List users waiting for KOL approval"""
     pending = db.query(UserExt).filter(UserExt.kol_status == "pending").all()
@@ -267,6 +271,7 @@ def get_balance_sheet(db: Session = Depends(get_db)):
         "cashback_reserve": float(cashback_reserve)
     }
 
+@router.get("/summary")
 @router.get("/dashboard/kpis")
 def get_dashboard_kpis(db: Session = Depends(get_db)):
     """Admin v3.0/v3.1 Dashboard KPIs"""
@@ -381,6 +386,7 @@ def get_melting_queue(db: Session = Depends(get_db)):
 # --- AI Persona & Memory OS (v3.2) ---
 
 @router.get("/ai/persona-templates")
+@router.get("/ai/personas")
 def list_persona_templates(db: Session = Depends(get_db)):
     """v3.2 List all L2 Persona Templates"""
     templates = db.query(PersonaTemplate).all()
@@ -426,7 +432,7 @@ class CandidateUpdate(BaseModel):
 
 @router.get("/sourcing/candidates")
 def list_sourcing_candidates(
-    status: Optional[str] = "new", 
+    status: Optional[str] = "pending", 
     skip: int = 0, 
     limit: int = 50, 
     db: Session = Depends(get_db)
@@ -586,6 +592,7 @@ def reject_sourcing_candidate(candidate_id: int, reason: str, db: Session = Depe
     return {"status": "success"}
 
 @router.get("/ai/usage-stats")
+@router.get("/ai/usage")
 def get_ai_usage_stats(db: Session = Depends(get_db)):
     """v3.2 Token Economics & Usage Analytics"""
     stats = db.query(
@@ -770,7 +777,7 @@ async def sync_approved_products(db: Session = Depends(get_db)):
                  results.append({"name": p['name'], "status": "failed", "reason": product_obj.get("error")})
                  continue
                  
-            shopify_service.sync_to_shopify(product_obj)
+            await shopify_service.sync_to_shopify(product_obj)
             # Update Notion (Mocked here for brevity, actual uses curl PATCH)
             results.append({"name": p['name'], "status": "synced"})
         return {"status": "success", "synced_count": len(results)}
@@ -780,12 +787,14 @@ async def sync_approved_products(db: Session = Depends(get_db)):
 # --- C2M Management (v3.3) ---
 
 @router.get("/c2m/wishes")
+@router.get("/wishes")
 def list_user_wishes(db: Session = Depends(get_db)):
     """v3.3 List all user wishes from the Wishing Well"""
     wishes = db.query(UserWish).order_by(UserWish.created_at.desc()).all()
     return wishes
 
 @router.get("/c2m/insights")
+@router.get("/demand/insights")
 async def get_demand_insights(db: Session = Depends(get_db)):
     """v3.3 Get AI-clustered demand insights from LTM"""
     service = C2MService(db)

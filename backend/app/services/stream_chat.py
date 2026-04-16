@@ -1,12 +1,44 @@
+from app.core.bap_protocol import BAP_ProductGrid, BAP_CashbackRadar, BAPType
+import json
+import logging
+from typing import Optional, List, Dict, Any
 from stream_chat import StreamChat
 from app.core.config import settings
-from typing import List, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 class StreamChatService:
     def __init__(self):
         self.api_key = settings.STREAM_API_KEY
         self.api_secret = settings.STREAM_API_SECRET
         self.server_client = StreamChat(api_key=self.api_key, api_secret=self.api_secret)
+
+    async def send_targeted_bap_card(self, user_id: int, bap_payload: Any, channel_id: str = "vortex-global"):
+        """
+        v4.0: VCC Targeted Card Emitter.
+        Sends a rich BAP card message that only the target user can see (or standard if public).
+        """
+        try:
+            msg_payload = {
+                "text": "Sent you a Vortex BAP Card! 🚀",
+                "user_id": "0buck-butler",
+                "attachments": [
+                    {
+                        "type": bap_payload.type.value,
+                        "bap_data": bap_payload.dict()
+                    }
+                ],
+                "silent": True # Don't trigger push notifications for UI cards
+            }
+            
+            # Send to the channel
+            channel = self.server_client.channel("messaging", channel_id)
+            channel.send_message(msg_payload, "0buck-butler")
+            logger.info(f"✨ BAP Card {bap_payload.type} sent to channel {channel_id}")
+            return True
+        except Exception as e:
+            logger.error(f"❌ Stream BAP Error: {str(e)}")
+            return False
 
     def generate_user_token(self, user_id: str) -> str:
         """

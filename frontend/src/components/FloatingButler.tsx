@@ -9,6 +9,7 @@ import { useAppContext } from '../context/AppContext';
 import { useQuery } from '@tanstack/react-query';
 
 import confetti from 'canvas-confetti';
+import { PageAgent } from 'page-agent';
 
 interface Message {
   id: string;
@@ -36,6 +37,8 @@ export default function FloatingButler({ onProductClick }: FloatingButlerProps) 
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [notification, setNotification] = useState<string | null>(null);
+  const [pageAgent, setPageAgent] = useState<PageAgent | null>(null);
+  const [isGuiActing, setIsGuiActing] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -89,6 +92,30 @@ export default function FloatingButler({ onProductClick }: FloatingButlerProps) 
       }]);
     }
   }, [butlerName, messages.length]);
+
+  // v5.7.55: Initialize PageAgent (GUI Agent)
+  useEffect(() => {
+    const apiKey = (import.meta as any).env?.VITE_PAGE_AGENT_API_KEY;
+    const model = (import.meta as any).env?.VITE_PAGE_AGENT_MODEL || 'qwen-plus';
+    const baseURL = (import.meta as any).env?.VITE_PAGE_AGENT_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1';
+
+    if (apiKey) {
+      try {
+        const agent = new PageAgent({
+          model,
+          baseURL,
+          apiKey,
+          language: 'zh-CN', // Default to Chinese as per project context
+        });
+        setPageAgent(agent);
+        console.log('🤖 PageAgent (GUI Agent) initialized successfully.');
+      } catch (e) {
+        console.error('❌ Failed to initialize PageAgent:', e);
+      }
+    } else {
+      console.warn('⚠️ PageAgent skipped: VITE_PAGE_AGENT_API_KEY is not set in environment.');
+    }
+  }, []);
 
   const [realProducts, setRealProducts] = useState<Product[]>([]);
 
@@ -186,6 +213,26 @@ export default function FloatingButler({ onProductClick }: FloatingButlerProps) 
 
     setMessages(prev => [...prev, newMessage]);
     setInputValue('');
+
+    // v5.7.55: Trigger PageAgent (GUI) if user asks for an action
+    // Keywords detection for GUI actions
+    const guiKeywords = ['点击', '打开', '跳到', '帮我', '去', '进入', 'click', 'open', 'go to', 'fill'];
+    const isGuiRequest = guiKeywords.some(kw => valueToSend.toLowerCase().includes(kw));
+    
+    if (pageAgent && isGuiRequest) {
+      const executeGui = async () => {
+        setIsGuiActing(true);
+        try {
+          console.log('🚀 Executing GUI Action:', valueToSend);
+          await pageAgent.execute(valueToSend);
+        } catch (e) {
+          console.error('❌ GUI Action Failed:', e);
+        } finally {
+          setIsGuiActing(false);
+        }
+      };
+      executeGui();
+    }
 
     // Call to backend AI endpoint
     const fetchAIResponse = async () => {
@@ -367,6 +414,25 @@ export default function FloatingButler({ onProductClick }: FloatingButlerProps) 
                   className="bg-[#FF5C00] text-white px-4 py-2 text-xs font-black uppercase tracking-widest text-center overflow-hidden z-20 shadow-lg"
                 >
                   {notification}
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* v5.7.55: GUI Action Overlay */}
+            <AnimatePresence>
+              {isGuiActing && (
+                <motion.div 
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-[25] rounded-[32px] pointer-events-none"
+                >
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-12 h-12 border-4 border-[#FF5C00] border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs font-black text-white uppercase tracking-widest bg-[#FF5C00] px-4 py-1.5 rounded-full shadow-2xl">
+                      GUI Agent Acting...
+                    </span>
+                  </div>
                 </motion.div>
               )}
             </AnimatePresence>

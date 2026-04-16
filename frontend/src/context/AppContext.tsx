@@ -19,6 +19,10 @@ interface AppContextType {
   setSecurePayBackView: React.Dispatch<React.SetStateAction<ViewType>>;
   previousView: ViewType;
   setPreviousView: React.Dispatch<React.SetStateAction<ViewType>>;
+  sourcingMode: 'LOCAL' | 'GLOBAL';
+  setSourcingMode: React.Dispatch<React.SetStateAction<'LOCAL' | 'GLOBAL'>>;
+  userCountry: string;
+  setUserCountry: React.Dispatch<React.SetStateAction<string>>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -40,10 +44,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [securePayPayload, setSecurePayPayload] = useState<SecurePayPayload | null>(null);
   const [securePayBackView, setSecurePayBackView] = useState<ViewType>('chat');
   const [previousView, setPreviousView] = useState<ViewType>('prime');
+  const [sourcingMode, setSourcingMode] = useState<'LOCAL' | 'GLOBAL'>(() => (localStorage.getItem('sourcingMode') as any) || 'LOCAL');
+  const [userCountry, setUserCountry] = useState(() => localStorage.getItem('userCountry') || 'US');
 
   useEffect(() => {
     localStorage.setItem('0buck_cart', JSON.stringify(cartItems));
   }, [cartItems]);
+
+  useEffect(() => {
+    localStorage.setItem('sourcingMode', sourcingMode);
+  }, [sourcingMode]);
+
+  useEffect(() => {
+    localStorage.setItem('userCountry', userCountry);
+  }, [userCountry]);
 
   useEffect(() => {
     const handleNameChange = () => {
@@ -69,8 +83,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     securePayBackView,
     setSecurePayBackView,
     previousView,
-    setPreviousView
-  }), [cartItems, agentName, selectedProduct, selectedMerchant, securePayPayload, securePayBackView, previousView]);
+    setPreviousView,
+    sourcingMode,
+    setSourcingMode,
+    userCountry,
+    setUserCountry
+  }), [cartItems, agentName, selectedProduct, selectedMerchant, securePayPayload, securePayBackView, previousView, sourcingMode, userCountry]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };

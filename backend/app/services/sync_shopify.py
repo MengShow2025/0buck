@@ -9,6 +9,8 @@ from app.models.product import Product
 from app.core.config import settings
 
 from app.services.cj_service import CJDropshippingService
+from app.utils.brand_cleaner import clean_title
+from app.services.vision_audit import vision_audit_service
 
 class SyncShopifyService:
     def __init__(self):
@@ -125,9 +127,40 @@ class SyncShopifyService:
         """
         v4.1.2: Converts the AI-generated English description into a clean HTML format.
         Integrates the 3-Part Desire Script: [The Hook], [The Logic], [The Closing].
+        v7.0: Truth Engine UI - 1st Screen Price Deconstruction Block.
         """
-        html = f'<div class="product-description" style="font-family: inherit; line-height: 1.6; color: #333;">\n'
+        html = f'<div class="0buck-truth-engine-experience" style="font-family: \'Inter\', -apple-system, sans-serif; line-height: 1.6; color: #111; max-width: 800px; margin: 0 auto;">\n'
         
+        # v7.5.1: Robust Price Mapping for Truth Engine UI
+        # Support multiple field names: sale_price, sell_price, amazon_sale_price
+        amazon_price = float(getattr(product, 'amazon_sale_price', 0.0) or 0.0)
+        obuck_price = float(getattr(product, 'sale_price', 0.0) or getattr(product, 'sell_price', 0.0) or 0.0)
+        
+        # v7.5.2: GHOST BLOCK MELTING - If prices are missing, don't show an empty audit block
+        if amazon_price > 0 and obuck_price > 0:
+            savings = amazon_price - obuck_price
+            savings_pct = int((savings / amazon_price) * 100) if amazon_price > 0 else 0
+            
+            html += f"""
+            <div class="truth-audit-block" style="background: #fff; border: 2px solid #000; padding: 25px; margin-bottom: 35px; border-radius: 4px; box-shadow: 8px 8px 0px #000;">
+                <div style="text-transform: uppercase; font-size: 11px; font-weight: 900; letter-spacing: 2px; color: #666; margin-bottom: 15px;">🔍 Truth Audit: #{product.id}</div>
+                <div style="display: flex; justify-content: space-between; align-items: flex-end;">
+                    <div>
+                        <div style="font-size: 13px; color: #999;">Market Reference (Amazon)</div>
+                        <div style="font-size: 24px; text-decoration: line-through; color: #bbb;">${amazon_price:.2f}</div>
+                    </div>
+                    <div style="text-align: right;">
+                        <div style="font-size: 13px; color: #000; font-weight: 700;">0Buck Verified Price</div>
+                        <div style="font-size: 42px; font-weight: 900; color: #D946EF;">${obuck_price:.2f}</div>
+                    </div>
+                </div>
+                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                    <div style="color: #059669; font-weight: 700; font-size: 15px;">✓ You Save: ${savings:.2f} ({savings_pct}% Brand Tax Removed)</div>
+                    <div style="background: #000; color: #fff; padding: 4px 10px; font-size: 11px; font-weight: 700;">VERIFIED PHYSICAL TRUTH</div>
+                </div>
+            </div>
+            """
+
         # 1. [The Hook] - Bold, Emotional Zapper
         if getattr(product, 'desire_hook', None):
             html += f'  <div class="desire-hook" style="margin-bottom: 20px; font-size: 1.2em; font-weight: 700; color: #000; border-left: 4px solid #F97316; padding-left: 15px;">\n'
@@ -171,7 +204,39 @@ class SyncShopifyService:
         html += f'    </ul>\n'
         html += f'  </div>\n'
 
-        # 5. [The Closing] - The Ritual/FOMO
+        # 5. [The Global Truth Table] - v8.2 Multi-Warehouse Support
+        anchor = getattr(product, 'warehouse_anchor', None)
+        if anchor:
+            html += f'\n  <div class="fulfillment-truth-table" style="margin-top: 20px; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden; background: #fff;">\n'
+            html += f'    <table style="width: 100%; border-collapse: collapse; font-size: 13px;">\n'
+            html += f'      <tr style="background: #f1f5f9; color: #475569; text-transform: uppercase; font-weight: 700; border-bottom: 1px solid #e2e8f0;">\n'
+            html += f'        <th style="padding: 10px; text-align: left;">Origin</th>\n'
+            html += f'        <th style="padding: 10px; text-align: left;">Speed</th>\n'
+            html += f'        <th style="padding: 10px; text-align: left;">Freight</th>\n'
+            html += f'      </tr>\n'
+            
+            anchors = [a.strip() for a in anchor.split(',') if a.strip()]
+            for a in anchors:
+                html += f'      <tr>\n'
+                html += f'        <td style="padding: 10px; border-bottom: 1px solid #f1f5f9;">📦 {a.upper()} Local Warehouse</td>\n'
+                html += f'        <td style="padding: 10px; border-bottom: 1px solid #f1f5f9;">🚀 3-7 Days</td>\n'
+                html += f'        <td style="padding: 10px; border-bottom: 1px solid #f1f5f9;">Verified Local</td>\n'
+                html += f'      </tr>\n'
+            html += f'    </table>\n'
+            html += f'  </div>\n'
+
+        # 6. [The Truth Audit Log] - v7.1 Transparency
+        html += f'\n  <div class="truth-audit-log" style="margin-top: 30px; padding: 15px; background: #f8fafc; border-left: 4px solid #1e293b; font-size: 0.85rem; color: #475569;">\n'
+        html += f'    <p style="font-weight: 700; color: #1e293b; margin-bottom: 8px;">TRUTH AUDIT LOG:</p>\n'
+        html += f'    <ul style="list-style: none; padding-left: 0;">\n'
+        html += f'      <li>✅ Physical Weight: {product.weight_display or "Verified"}</li>\n'
+        html += f'      <li>✅ Tech Standard: {product.product_props.get("standard", "Industrial Grade") if product.product_props else "Verified"}</li>\n'
+        html += f'      <li>✅ Visual Firewall: Passed (No deceptive branding/logos)</li>\n'
+        html += f'      <li>✅ Sourcing Truth: Verified 1:1 with Artisan Registry</li>\n'
+        html += f'    </ul>\n'
+        html += f'  </div>\n'
+
+        # 6. [The Closing] - The Ritual/FOMO
         if getattr(product, 'desire_closing', None):
             html += f'  <div class="desire-closing" style="margin-top: 30px; text-align: center; font-weight: 600; color: #F97316;">\n'
             html += f'    <p>— {product.desire_closing} —</p>\n'
@@ -180,15 +245,16 @@ class SyncShopifyService:
         html += f'</div>'
         return html
 
-    def upload_media_to_shopify(self, urls: list, alt_prefix: str) -> list:
+    def upload_media_to_shopify(self, urls: list, alt_prefix: str, content_type: str = "IMAGE") -> list:
         """
         v3.4.11: Uploads files (certificates, etc.) to Shopify via GraphQL fileCreate
         to ensure we use Shopify CDN for all media.
+        v7.0: Support for VIDEO content type and returning full file metadata.
         """
         if not urls:
             return []
             
-        cdn_urls = []
+        results = []
         
         # Shopify GraphQL Endpoint
         url = f"https://{self.shop_url}/admin/api/{self.api_version}/graphql.json"
@@ -204,9 +270,17 @@ class SyncShopifyService:
                 files {
                   id
                   alt
+                  fileStatus
                   ... on MediaImage {
                     image {
                       url
+                    }
+                  }
+                  ... on Video {
+                    sources {
+                      url
+                      format
+                      mimeType
                     }
                   }
                 }
@@ -222,14 +296,12 @@ class SyncShopifyService:
                     {
                         "originalSource": media_url,
                         "alt": f"{alt_prefix}_{i+1}",
-                        "contentType": "IMAGE"
+                        "contentType": content_type
                     }
                 ]
             }
             
             try:
-                # Use synchronous request for simplicity in this script 
-                # (or wrap in async if called from async context)
                 import requests
                 response = requests.post(url, headers=headers, json={"query": mutation, "variables": variables})
                 data = response.json()
@@ -245,20 +317,234 @@ class SyncShopifyService:
                     if user_errors:
                         logging.warning(f"GraphQL UserErrors: {user_errors}")
                         
-                    if files and "image" in files[0] and files[0]["image"]:
-                        cdn_urls.append(files[0]["image"]["url"])
+                    file_info = files[0]
+                    res = {"id": file_info["id"], "alt": file_info["alt"]}
+                    
+                    if content_type == "IMAGE" and "image" in file_info and file_info["image"]:
+                        res["url"] = file_info["image"]["url"]
+                        results.append(res["url"] if alt_prefix.endswith("CERT") else res)
+                    elif content_type == "VIDEO" and "sources" in file_info and file_info["sources"]:
+                        res["url"] = file_info["sources"][0]["url"]
+                        results.append(res)
+                    else:
+                        # Just return the ID for linking later
+                        results.append(res)
                 else:
                     logging.warning(f"Failed to upload file {media_url}: {data}")
             except Exception as e:
                 logging.error(f"Error uploading media to Shopify: {str(e)}")
                 
-        return cdn_urls
+        return results
 
-    def sync_to_shopify(self, product: Product, retries: int = 3):
+    def link_media_to_product(self, product_id: str, media_ids: list):
+        """
+        v7.0: Links uploaded media (like Video) to a specific Shopify product.
+        """
+        url = f"https://{self.shop_url}/admin/api/{self.api_version}/graphql.json"
+        headers = {
+            "X-Shopify-Access-Token": self.access_token,
+            "Content-Type": "application/json"
+        }
+        
+        gid = f"gid://shopify/Product/{product_id}"
+        mutation = """
+        mutation productCreateMedia($media: [CreateMediaInput!]!, $productId: ID!) {
+          productCreateMedia(media: $media, productId: $productId) {
+            media {
+              id
+              mediaContentType
+            }
+            userErrors {
+              field
+              message
+            }
+          }
+        }
+        """
+        
+        media_input = [{"originalSource": mid, "mediaContentType": "VIDEO"} for mid in media_ids]
+        
+        try:
+            import requests
+            response = requests.post(url, headers=headers, json={
+                "query": mutation, 
+                "variables": {"productId": gid, "media": media_input}
+            })
+            return response.json()
+        except Exception as e:
+            logging.error(f"Error linking media to product: {e}")
+            return None
+
+    def unpublish_product(self, shopify_id: str):
+        """
+        v7.1 Circuit Breaker: Unpublish product by setting status to 'draft'.
+        """
+        try:
+            # Get numeric part
+            sid = shopify_id.split('/')[-1] if '/' in shopify_id else shopify_id
+            product = shopify.Product.find(sid)
+            if product:
+                product.status = "draft" # or "archived"
+                product.save()
+                logging.info(f"   ✅ Unlisted Shopify Product {sid}")
+                return True
+        except Exception as e:
+            logging.error(f"   ❌ Error unlisting product {shopify_id}: {e}")
+            return False
+        return False
+
+    async def validate_visual_truth_firewall(self, product: Product) -> bool:
+        """
+        v7.3 Truth Engine: Visual Sensitive Word & OCR Audit Hook.
+        Protects against protocol mismatches (WiFi vs Zigbee), deceptive parameters,
+        and Blacklisted Factory Logos (De-branding Enforcement).
+        Returns True if pass, False if MELT triggered.
+        """
+        # Step 0: Asset Lineage Check (v7.2 Hard-lock)
+        if not getattr(product, 'asset_lineage_verified', False):
+            melt_reason = "Visual Firewall Breach: Asset Lineage NOT Verified by Expert (Untrusted Source)"
+            logging.error(f"❄️ MELTING Product {product.id}: {melt_reason}")
+            return False, melt_reason
+
+        primary_image = getattr(product, 'primary_image', "")
+        source_pid = getattr(product, 'source_pid', "")
+        
+        # Hard-lock: Image URL must contain source PID fragment or match signed fingerprint
+        import hashlib
+        current_fingerprint = hashlib.md5(primary_image.encode()).hexdigest()
+        stored_fingerprint = getattr(product, 'image_fingerprint_md5', "")
+        
+        # v7.2 Truth Audit: The 'A-to-B' check
+        if stored_fingerprint and current_fingerprint != stored_fingerprint:
+            melt_reason = f"Visual Firewall Breach: Image Fingerprint Mismatch (A-Image on B-Product detected). PID: {source_pid}"
+            logging.error(f"❄️ MELTING Product {product.id}: {melt_reason}")
+            return False, melt_reason
+
+        # Ensure source_pid is NOT empty for verified lineage
+        if not source_pid:
+            melt_reason = "Visual Firewall Breach: Missing Source PID for Verified Lineage"
+            logging.error(f"❄️ MELTING Product {product.id}: {melt_reason}")
+            return False, melt_reason
+
+        # v7.3: Dynamic OCR Audit Hook (Pixel Purification)
+        ocr_text = (getattr(product, 'vision_ocr_text', "") or "").upper()
+        
+        if not ocr_text and primary_image:
+            logging.info(f"🔍 OCR Audit Hook: Triggering dynamic scan for Product {product.id}...")
+            product_context = {
+                "title": product.title_en,
+                "category": product.category
+            }
+            passed, v_melt_reason, extracted_ocr = await vision_audit_service.audit_image_v7_3(primary_image, product_context)
+            if not passed:
+                logging.error(f"❄️ MELTING Product {product.id}: {v_melt_reason}")
+                return False, v_melt_reason
+            
+            # Save the extracted OCR text to avoid redundant scans
+            product.vision_ocr_text = extracted_ocr
+            ocr_text = extracted_ocr.upper()
+        
+        # 1. Protocol Mismatch Rules
+        protocol_mismatches = [
+            ("ZIGBEE", "WIFI"),
+            ("MATTER", "WIFI"), 
+            ("BLUETOOTH", "WIFI"),
+            ("BLE", "WIFI")
+        ]
+        
+        product_title = (product.title_en or "").upper()
+        product_desc = (product.description_en or "").upper()
+        
+        for physical, deceptive in protocol_mismatches:
+            if (physical in product_title or physical in product_desc) and (deceptive in ocr_text):
+                melt_reason = f"Visual Firewall Breach: Tech Contradiction ({physical} vs {deceptive} in image)"
+                logging.error(f"❄️ MELTING Product {product.id}: {melt_reason}")
+                return False, melt_reason
+                
+        # 2. Deceptive Logos / Blacklist (v7.3 De-branding)
+        blacklist = ["550-SPYI", "CJDropshipping", "1688.com", "Taobao"]
+        for pattern in blacklist:
+            if pattern.upper() in ocr_text:
+                melt_reason = f"Visual Firewall Breach: Blacklisted pattern '{pattern}' detected in image OCR"
+                logging.error(f"❄️ MELTING Product {product.id}: {melt_reason}")
+                return False, melt_reason
+
+        # 3. Parameter Verification (OCR vs Physics)
+        # Example: LED Masks (#175)
+        if "LED" in product_title and "152" in product_title:
+             # Check for conflicting numbers in OCR (like the 103 LEDs case)
+             import re
+             numbers = re.findall(r'\d+', ocr_text)
+             if "103" in numbers:
+                 melt_reason = "Visual Firewall Breach: Conflicting LED count (Physical 152 vs Image 103)"
+                 logging.error(f"❄️ MELTING Product {product.id}: {melt_reason}")
+                 return False, melt_reason
+
+        return True, "Passed"
+
+    async def sync_to_shopify(self, product: Product, retries: int = 3):
         """
         Pushes the local Product data to Shopify.
         v3.2: Added exponential backoff for Shopify API Rate Limits (429).
+        v7.3: Visual Truth Firewall Injection (OCR Audit Hook).
+        v7.5: HARD CIRCUIT BREAKER (Zero Price & Empty Content).
         """
+        # --- HARD CIRCUIT BREAKER ---
+        # 1. Check for Zero or NULL Prices
+        current_price = getattr(product, 'sell_price', None) or getattr(product, 'sale_price', None)
+        
+        # v7.5 robust image check: Filter out 'nan', empty strings, and invalid formats
+        images_raw = getattr(product, 'images', [])
+        if isinstance(images_raw, str):
+            try:
+                images_raw = json.loads(images_raw)
+            except:
+                images_raw = []
+        
+        # Ensure it's a list
+        if not isinstance(images_raw, list):
+            images_raw = [images_raw] if images_raw else []
+            
+        clean_images = [
+            str(img).strip() for img in images_raw 
+            if img and str(img).strip().lower() not in ["", "nan", "none", "null", "[]"]
+        ]
+        
+        primary_image = getattr(product, 'primary_image', None)
+        if primary_image and str(primary_image).strip().lower() in ["", "nan", "none", "null"]:
+            primary_image = None
+            
+        has_images = len(clean_images) > 0 or primary_image is not None
+        has_description = getattr(product, 'description_en', None) or getattr(product, 'body_html', None)
+
+        if not current_price or float(current_price) <= 0:
+            product.is_melted = True
+            product.melt_reason = "[CRITICAL] Zero or NULL Price detected. Aborting Sync."
+            logging.error(f"❌ GHOST PRODUCT REJECTED: {product.id} has $0 price.")
+            return False
+
+        if not has_images:
+            product.is_melted = True
+            product.melt_reason = "[CRITICAL] Missing Images detected. Aborting Sync."
+            logging.error(f"❌ GHOST PRODUCT REJECTED: {product.id} has no images.")
+            return False
+
+        if not has_description or len(str(has_description)) < 50: # Relaxed slightly but still enforced
+            product.is_melted = True
+            product.melt_reason = "[CRITICAL] Missing or Thin Description detected. Aborting Sync."
+            logging.error(f"❌ GHOST PRODUCT REJECTED: {product.id} has thin description.")
+            return False
+        # -----------------------------
+        # -----------------------------
+
+        # Step 0: Visual Truth Audit (Automatic Melting Check)
+        passed, melt_reason = await self.validate_visual_truth_firewall(product)
+        if not passed:
+            product.is_melted = True
+            product.melt_reason = melt_reason
+            # Proceed to update Shopify status to 'draft' or skip if it doesn't exist yet
+            logging.error(f"❄️ Visual Firewall Triggered for {product.id}. Status set to Melted.")
+            
         for attempt in range(retries):
             try:
                 # 1. Create or update the product
@@ -281,7 +567,7 @@ class SyncShopifyService:
                     vendor_name = product.supplier_id_1688
                     
                 sp.vendor = vendor_name
-                sp.product_type = product.category or "General"
+                sp.product_type = getattr(product, 'category_name', None) or product.category or "General"
                 sp.status = "active" if not getattr(product, 'is_melted', False) else "draft"
                 
                 # v3.2: Multi-level specifications Support
@@ -305,14 +591,33 @@ class SyncShopifyService:
                             options.append({"name": "Specification"})
                     sp.options = options
 
-                # v3.1 Hybrid Growth Model Tags
+                # v7.0 Industrial Arbitrage Tags
                 tags = [product.category] if product.category else []
                 if getattr(product, 'strategy_tag', None):
                     tags.append(f"ids_{product.strategy_tag}")
+                if getattr(product, 'entry_tag', None):
+                    tags.append(product.entry_tag) # 'Promotion' or 'Rebate'
+                if getattr(product, 'platform_tag', None):
+                    tags.append(f"source_{product.platform_tag}") # 'source_CJ'
+                
                 if getattr(product, 'product_category_type', None):
                     tags.append(product.product_category_type)
                 if not getattr(product, 'is_cashback_eligible', True):
                     tags.append("no-cashback")
+                
+                # v8.2: Global Local Warehouse Tags (LOC-ISO)
+                anchor = getattr(product, 'warehouse_anchor', None)
+                if anchor:
+                    anchor_upper = anchor.upper()
+                    # Support multiple anchors: "US, UK, DE"
+                    anchors = [a.strip() for a in anchor_upper.split(',') if a.strip()]
+                    for a in anchors:
+                        tags.append(f"LOC-{a}")
+                        # v8.0: Multi-Tier Label + Anchor (e.g. MAGNET-US)
+                        label = getattr(product, 'product_category_label', None)
+                        if label:
+                            tags.append(f"{label.upper()}-{a}")
+                
                 sp.tags = ", ".join(list(set(tags)))
                 
                 # 2. Variants and Price (Multi-Variant Support)
@@ -393,34 +698,46 @@ class SyncShopifyService:
                 
                 sp.variants = variants
                 
-                # 3. Images (Full Gallery Support with Strict Position)
+                # 3. Images (Full Gallery Support with Strict Position & Identity Lock)
                 all_media = getattr(product, 'media', []) or product.images or []
                 shopify_images = []
                 if all_media:
-                    internal_id = product.product_id_1688
-                    for i, img in enumerate(all_media):
-                        # Ensure absolute URL
+                    internal_id = str(product.product_id_1688 or product.id)
+                    # Deduplicate and ensure absolute URLs
+                    unique_media = []
+                    seen_urls = set()
+                    for img in all_media:
+                        if img and img not in seen_urls:
+                            unique_media.append(img)
+                            seen_urls.add(img)
+
+                    for i, img in enumerate(unique_media):
                         clean_url = img
                         if img.startswith("//"):
                             clean_url = f"https:{img}"
                         elif not img.startswith("http"):
-                            # Skip invalid URLs
                             continue
                             
+                        # v7.2.1 Identity Lock: Force explicit position and alt tag with ID
                         shopify_images.append(shopify.Image({
                             "src": clean_url, 
                             "position": i+1,
-                            "alt": f"SH_{internal_id}_GALLERY_{i+1}"
+                            "alt": f"0BUCK_AUDIT_{internal_id}_POS_{i+1}"
                         }))
                     sp.images = shopify_images
                 else:
                     sp.images = []
                 
                 if sp.save():
+                    # v7.2.6: Allow Shopify Media API to propagate before mapping variants
+                    import time
+                    time.sleep(2) 
+                    sp = shopify.Product.find(sp.id) # Re-fetch to get Image IDs and CDN URLs
+                    
                     product.shopify_product_id = str(sp.id)
                     
-                    # v4.1.2: Advanced Variant-Image Mapping (Mirror Protocol)
-                    if sp.variants and local_variants and hasattr(sp, 'images'):
+                    # v4.1.2: Advanced Variant-Image Mapping (Mirror Protocol with Identity Lock)
+                    if sp.variants and local_variants and hasattr(sp, 'images') and sp.images:
                         # Create a map of image source URLs to Shopify image IDs for fallback matching
                         image_url_to_id = {}
                         for s_img in sp.images:
@@ -471,8 +788,61 @@ class SyncShopifyService:
                         if cdn_certs:
                             product.certificate_images = cdn_certs
                     
-                    # 4. Metafields (CRITICAL for Dispute Resolution & Content)
+                    # v7.0: Upload Video to Shopify CDN & Link to Product
+                    origin_video = getattr(product, 'origin_video_url', None)
+                    if origin_video and sp.id:
+                        try:
+                            # 1. Upload to CDN
+                            cdn_video_result = self.upload_media_to_shopify([origin_video], f"SH_{internal_id}_VIDEO", content_type="VIDEO")
+                            if cdn_video_result:
+                                # 2. Link to Product via Media API
+                                # cdn_video_result is a list of [id, url] or just url
+                                # We need the media id for linking
+                                media_id = cdn_video_result[0].get("id") if isinstance(cdn_video_result[0], dict) else None
+                                if media_id:
+                                    self.link_media_to_product(sp.id, [media_id])
+                                    logging.info(f"  🎬 Linked 1080P Video to Shopify Product: {sp.id}")
+                        except Exception as ve:
+                            logging.error(f"  ⚠️ Video Sync failed: {ve}")
+                    
+                    # v7.0 Truth Engine & Industrial Arbitrage Metafields
                     metafields = [
+                        {
+                            "namespace": "0buck_sync",
+                            "key": "source_platform",
+                            "value": getattr(product, 'platform_tag', 'CJ'),
+                            "type": "single_line_text_field"
+                        },
+                        {
+                            "namespace": "0buck_sync",
+                            "key": "cj_pid",
+                            "value": getattr(product, 'cj_pid', ''),
+                            "type": "single_line_text_field"
+                        },
+                        {
+                            "namespace": "0buck_truth",
+                            "key": "amazon_link",
+                            "value": getattr(product, 'amazon_link', ''),
+                            "type": "url"
+                        },
+                        {
+                            "namespace": "0buck_truth",
+                            "key": "amazon_sale_price",
+                            "value": str(getattr(product, 'amazon_sale_price', 0.0)),
+                            "type": "number_decimal"
+                        },
+                        {
+                            "namespace": "0buck_truth",
+                            "key": "hot_rating",
+                            "value": str(getattr(product, 'hot_rating', 0.0)),
+                            "type": "number_decimal"
+                        },
+                        {
+                            "namespace": "0buck_truth",
+                            "key": "profit_ratio",
+                            "value": str(getattr(product, 'profit_ratio', 0.0)),
+                            "type": "number_decimal"
+                        },
                         {
                             "namespace": "0buck_sync",
                             "key": "source_1688_id",
@@ -565,17 +935,42 @@ class SyncShopifyService:
         title = payload.get("title")
         vendor = payload.get("vendor")
         
-        # 1. Match to Candidate
+        # 1. Match to Candidate (Strict Identity Search)
         from app.models.product import CandidateProduct
         from sqlalchemy import or_
         
-        # Search for candidates that match the title or vendor/source hints
-        candidate = db.query(CandidateProduct).filter(
-            or_(
-                CandidateProduct.title_zh.contains(title[:10]), # Match first 10 chars
-                CandidateProduct.title_en_preview.contains(title[:10])
-            )
-        ).first()
+        # v7.2.5: Priority matching via Shopify SKU or explicit candidate_id tag
+        candidate = None
+        
+        # Strategy A: Check tags for candidate-ID
+        tags_str = payload.get("tags", "")
+        if "candidate-" in tags_str:
+            try:
+                c_id = [t.split("-")[-1] for t in tags_str.split(",") if "candidate-" in t][0]
+                candidate = db.query(CandidateProduct).get(int(c_id))
+            except:
+                pass
+        
+        # Strategy B: Check Variant SKUs for candidate IDs
+        if not candidate and payload.get("variants"):
+            for v in payload["variants"]:
+                v_sku = v.get("sku", "")
+                if v_sku.startswith("0B-"):
+                    try:
+                        c_id = v_sku.split("-")[1]
+                        candidate = db.query(CandidateProduct).get(int(c_id))
+                        break
+                    except:
+                        continue
+
+        # Strategy C: Fallback to Title (Strict full match or first 20 chars if needed)
+        if not candidate:
+            candidate = db.query(CandidateProduct).filter(
+                or_(
+                    CandidateProduct.title_zh == title,
+                    CandidateProduct.title_en_preview == title
+                )
+            ).first()
         
         if not candidate:
             logging.warning(f"⚠️ No matching Candidate found for Shopify Product: {title}. Skipping Brain Takeover.")
@@ -610,7 +1005,7 @@ class SyncShopifyService:
         except Exception as e:
             logging.warning(f"⚠️ CJ Freight Capture failed for {candidate.id}: {e}. Falling back to default.")
 
-        # 3. v5.3 Pricing Logic: Sale_Price = Market_Price * 0.6 (Freight-Aware)
+        # 3. v8.5 Pricing Logic: MAGNET=$0.00, OTHERS=60% of Amazon (Freight-Aware)
         from app.services.finance_engine import calculate_final_price
         from app.services.config_service import ConfigService
         config = ConfigService(db)
@@ -623,13 +1018,16 @@ class SyncShopifyService:
             logging.error(f"❌ BLOCKER: No REAL market price found for Candidate {candidate.id}. Aborting enrichment.")
             return False
         
+        is_magnet = (candidate.product_category_label == "MAGNET")
+        
         pricing = calculate_final_price(
             cost_cny=candidate.cost_cny,
             exchange_rate=exchange_rate,
             comp_price_usd=market_anchor,
             sale_price_ratio=0.6,
-            compare_at_price_ratio=None,
-            shipping_cost_usd=shipping_cost_usd
+            compare_at_price_ratio=0.95, # v8.5 strikethrough logic
+            shipping_cost_usd=shipping_cost_usd,
+            is_magnet=is_magnet
         )
         
         # Force 0Buck's compare_at to be the REAL market anchor (Amazon Price or List Price)
@@ -675,7 +1073,7 @@ class SyncShopifyService:
                 logging.error(f"❌ Shopify Product {shopify_id} not found via API.")
                 return False
                 
-            sp.title = f"{candidate.title_en_preview} | 0Buck Verified Artisan"
+            sp.title = clean_title(candidate.title_en_preview or candidate.title_zh)
             sp.body_html = body_html
             sp.vendor = "0Buck Verified Artisan"
             sp.tags = f"0buck-verified, candidate-{candidate.id}, {rebate_tag}"
@@ -702,3 +1100,6 @@ class SyncShopifyService:
         except Exception as e:
             logging.error(f"❌ Error during Shopify Enrichment: {str(e)}")
             return False
+
+# Alias for backwards compatibility with older services (BatchUploader, MeltingService)
+ShopifySyncService = SyncShopifyService

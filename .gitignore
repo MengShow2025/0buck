@@ -75,3 +75,5 @@ migrate_*.py
 sync_all.py
 sync_approved_products_v2.py
 audit_v3_2_full_system.py
+backend/venv_bu/
+backend/venv_bu/

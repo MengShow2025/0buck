@@ -140,6 +140,7 @@ interface RewardRates {
 interface AuditCandidate {
   id: number;
   name: string;
+  title_en: string;
   product_id_1688: string;
   cost_cny: number;
   comp_price_usd: number;
@@ -156,6 +157,18 @@ interface AuditCandidate {
   cj_sourcing_price?: number;
   cj_shipping_cost?: number;
 }
+
+const SummaryCard: React.FC<{ icon: React.ReactNode, title: string, value: string | number, color: string }> = ({ icon, title, value, color }) => (
+  <div className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm flex items-center gap-4">
+    <div className={`p-3 rounded-2xl ${color} text-white`}>
+      {icon}
+    </div>
+    <div>
+      <p className="text-[10px] font-black text-gray-400 uppercase tracking-wider">{title}</p>
+      <p className="text-2xl font-black text-gray-900">{value}</p>
+    </div>
+  </div>
+);
 
 const AdminDashboard: React.FC = () => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -181,6 +194,7 @@ const AdminDashboard: React.FC = () => {
   const [isAuditMode, setIsAuditMode] = useState(true);
   const [selectedCandidateIds, setSelectedCandidateIds] = useState<number[]>([]);
   const [filterCategory, setFilterCategory] = useState('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -189,31 +203,45 @@ const AdminDashboard: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [sumRes, coupRes, ruleRes, persRes, usageRes, wishRes, insightRes, auditRes, priceRes, talentRes, rewardRes] = await Promise.all([
-        fetchWithAuth('/api/admin/summary'),
-        fetchWithAuth('/api/admin/coupons'),
-        fetchWithAuth('/api/admin/ai/rules'),
-        fetchWithAuth('/api/admin/ai/personas'),
-        fetchWithAuth('/api/admin/ai/usage'),
-        fetchWithAuth('/api/admin/wishes'),
-        fetchWithAuth('/api/admin/demand/insights'),
-        fetchWithAuth('/api/admin/sourcing/candidates'),
-        fetchWithAuth('/api/admin/pricing/strategy'),
-        fetchWithAuth('/api/admin/talent/applications'),
-        fetchWithAuth('/api/admin/reward/rates')
-      ]);
+      const endpoints = [
+        '/api/v1/admin/summary',
+        '/api/v1/admin/coupons',
+        '/api/v1/admin/ai/rules',
+        '/api/v1/admin/ai/personas',
+        '/api/v1/admin/ai/usage',
+        '/api/v1/admin/wishes',
+        '/api/v1/admin/demand/insights',
+        '/api/v1/admin/sourcing/candidates?status=pending',
+        '/api/v1/admin/pricing/strategy',
+        '/api/v1/admin/talent/applications',
+        '/api/v1/admin/reward/rates'
+      ];
 
-      setSummary(await sumRes.json());
-      setCoupons(await coupRes.json());
-      setAiRules(await ruleRes.json());
-      setPersonas(await persRes.json());
-      setUsageStats(await usageRes.json());
-      setWishes(await wishRes.json());
-      setInsights(await insightRes.json());
-      setAuditQueue(await auditRes.json());
-      setPricingStrategy(await priceRes.json());
-      setTalentApplications(await talentRes.json());
-      setRewardRates(await rewardRes.json());
+      const responses = await Promise.all(endpoints.map(ep => fetchWithAuth(ep).catch(e => null)));
+      
+      const data = await Promise.all(responses.map(async (res) => {
+        if (res && res.ok) return await res.json();
+        return null;
+      }));
+
+      const [sum, coup, rule, pers, usage, wish, insight, audit, price, talent, reward] = data;
+
+      setSummary(sum || null);
+      setCoupons(Array.isArray(coup) ? coup : []);
+      setAiRules(rule || null);
+      setPersonas(Array.isArray(pers) ? pers : []);
+      setUsageStats(Array.isArray(usage) ? usage : []);
+      setWishes(Array.isArray(wish) ? wish : []);
+      setInsights(Array.isArray(insight) ? insight : []);
+      setAuditQueue(Array.isArray(audit) ? audit : []);
+      setPricingStrategy(price || {
+        sale_price_ratio: 0.6,
+        compare_at_price_ratio: 1.5,
+        amazon_weight: 0.8,
+        ebay_weight: 0.2
+      });
+      setTalentApplications(Array.isArray(talent) ? talent : []);
+      setRewardRates(reward || null);
     } catch (err) {
       console.error("Fetch error:", err);
     } finally {
@@ -223,7 +251,7 @@ const AdminDashboard: React.FC = () => {
 
   const handleApprove = async (id: number) => {
     try {
-      await fetchWithAuth(`/api/admin/sourcing/candidates/${id}/approve`, { method: 'POST' });
+      await fetchWithAuth(`/api/v1/admin/sourcing/candidates/${id}/approve`, { method: 'POST' });
       setAuditQueue(prev => prev.filter(c => c.id !== id));
     } catch (err) {
       console.error("Approve error:", err);
@@ -232,7 +260,7 @@ const AdminDashboard: React.FC = () => {
 
   const handleBatchApprove = async () => {
     try {
-      await fetchWithAuth('/api/admin/sourcing/candidates/batch-approve', {
+      await fetchWithAuth('/api/v1/admin/sourcing/candidates/batch-approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ids: selectedCandidateIds })
@@ -258,9 +286,13 @@ const AdminDashboard: React.FC = () => {
     );
   };
 
-  const filteredQueue = filterCategory === 'ALL' 
-    ? auditQueue 
-    : auditQueue.filter(c => c.status === filterCategory);
+  const filteredQueue = auditQueue.filter(c => {
+    const matchesCat = filterCategory === 'ALL' || c.status === filterCategory;
+    const matchesSearch = !searchQuery || 
+      (c.title_en || c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (c.source_pid || '').toString().includes(searchQuery);
+    return matchesCat && matchesSearch;
+  });
 
   return (
     <div className="min-h-screen bg-[#F8F9FB] text-gray-900 font-sans selection:bg-blue-100">
@@ -297,6 +329,25 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* v5.3: Summary Statistics Grid */}
+        <section className="mb-10">
+          <h2 className="text-xl font-black text-gray-800 mb-6 flex items-center gap-3">
+            <Activity size={20} className="text-blue-600" />
+            SUMMARY STATISTICS
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <SummaryCard icon={<Ticket size={24} />} title="Coupons" value={coupons.length} color="bg-blue-600 shadow-lg shadow-blue-100" />
+            <SummaryCard icon={<Settings size={24} />} title="Rules" value={aiRules ? 1 : 0} color="bg-purple-600 shadow-lg shadow-purple-100" />
+            <SummaryCard icon={<Activity size={24} />} title="Usage" value={usageStats.length} color="bg-green-600 shadow-lg shadow-green-100" />
+            <SummaryCard icon={<Star size={24} />} title="Wishes" value={wishes.length} color="bg-amber-600 shadow-lg shadow-amber-100" />
+            <SummaryCard icon={<TrendingUp size={24} />} title="Insights" value={insights.length} color="bg-cyan-600 shadow-lg shadow-cyan-100" />
+            <SummaryCard icon={<Database size={24} />} title="Candidates" value={auditQueue.length} color="bg-indigo-600 shadow-lg shadow-indigo-100" />
+            <SummaryCard icon={<Zap size={24} />} title="Strategy" value={pricingStrategy ? 1 : 0} color="bg-orange-600 shadow-lg shadow-orange-100" />
+            <SummaryCard icon={<ShoppingBag size={24} />} title="Applications" value={talentApplications.length} color="bg-pink-600 shadow-lg shadow-pink-100" />
+            <SummaryCard icon={<Coins size={24} />} title="Rates" value={rewardRates ? 1 : 0} color="bg-yellow-600 shadow-lg shadow-yellow-100" />
+          </div>
+        </section>
+
         {/* Audit Queue Section */}
         <section className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden">
           <div className="p-8 border-b border-gray-50 flex items-center justify-between">
@@ -314,6 +365,18 @@ const AdminDashboard: React.FC = () => {
                     {cat}
                   </button>
                 ))}
+              </div>
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <Activity size={12} className="text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder="搜索标题或 1688 PID..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9 pr-4 py-2 bg-gray-50 border-none text-[10px] font-black rounded-xl focus:ring-2 focus:ring-blue-500/20 w-64 transition-all"
+                />
               </div>
             </div>
             {selectedCandidateIds.length > 0 && (
@@ -383,7 +446,7 @@ const AdminDashboard: React.FC = () => {
                       <div className="flex items-center gap-3">
                         <img src={item.images?.[0]} className="w-10 h-10 rounded-lg object-cover bg-gray-50" alt="" />
                         <div>
-                          <p className="font-black text-[12px] text-gray-800 line-clamp-1">{item.name}</p>
+                          <p className="font-black text-[12px] text-gray-800 line-clamp-1">{item.title_en || item.name}</p>
                           {item.source_url && (
                             <a href={item.source_url} target="_blank" rel="noreferrer" className="text-[10px] text-blue-500 font-bold flex items-center gap-1 mt-0.5">
                               <ExternalLink size={10} /> 访问采购源

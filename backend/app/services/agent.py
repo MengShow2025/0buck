@@ -4,6 +4,9 @@ import asyncio
 from typing import Annotated, Any, Dict, List, Optional, TypedDict
 
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.chat_models import MiniMaxChat
+from app.core.config import settings
+from app.models.ledger import UserExt as User, Order, SystemConfig
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from langgraph.graph import StateGraph, END
 from langgraph.prebuilt import ToolNode
@@ -40,21 +43,31 @@ tool_node = ToolNode(tools)
 
 def get_dynamic_llm(user_id: int, db: SessionLocal):
     """
-    v3.1 Dynamic LLM Initialization.
-    Priority: User's BYOK Key > System Flash Key.
+    v5.7.56 Dynamic LLM Initialization.
+    Priority: MiniMax (System) > User's BYOK Key > System Flash Key.
     """
     config_service = ConfigService(db)
-    profile = db.query(UserButlerProfile).filter_by(user_id=user_id).first()
     
+    # 1. v5.7.56: Check for Global MiniMax Key (Highest priority for v4.0 project)
+    minimax_key = db.query(SystemConfig).filter_by(key="MINIMAX_API_KEY").first()
+    if minimax_key and minimax_key.value and len(minimax_key.value) > 20:
+        logger.info(f"🤖 Using MiniMax (minimaxi.com) for User {user_id}")
+        return MiniMaxChat(
+            minimax_api_key=minimax_key.value,
+            model="abab6.5-chat",
+            temperature=0.7
+        ), False
+
+    # 2. Check for User's BYOK Key
+    profile = db.query(UserButlerProfile).filter_by(user_id=user_id).first()
     if profile and profile.ai_api_key:
-        # Use User's Pro Key (BYOK)
         return ChatGoogleGenerativeAI(
             model="gemini-2.0-flash",
             google_api_key=profile.ai_api_key,
             temperature=0
         ), True
     
-    # Use System Flash Key (Subsidy)
+    # 3. Use System Flash Key (Fallback)
     return ChatGoogleGenerativeAI(
         model="gemini-2.0-flash",
         google_api_key=config_service.get_api_key("GOOGLE_API_KEY"),
@@ -89,22 +102,37 @@ async def supervisor(state: AgentState):
         currency = state.get("currency", "USD")
         system_prompt += f"\n\n### Current Context\n- Locale: {locale}\n- Currency: {currency}\n- Response Language: {locale}"
         
-        # v5.7.10: Industrial-grade Model Failover (Cheapest -> Pro)
-        model_tier = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.0-pro"]
-        last_error = None
+        # v5.8.2: Industrial-grade Model Failover with Multi-Provider Support
+        # Priority: User BYOK > MiniMax (System) > Google Tier (System)
         
+        llm, is_byok = get_dynamic_llm(user_id, db)
+        
+        # If it's not BYOK and not MiniMax, we use the Google Tier for failover
+        if not is_byok and not isinstance(llm, MiniMaxChat):
+            model_tier = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-2.0-pro"]
+        else:
+            # For BYOK or MiniMax, we just use the selected LLM directly
+            model_tier = [getattr(llm, "model", "default")]
+
+        last_error = None
         config_service = ConfigService(db)
         profile = db.query(UserButlerProfile).filter_by(user_id=user_id).first()
         api_key = profile.ai_api_key if profile and profile.ai_api_key else config_service.get_api_key("GOOGLE_API_KEY")
 
+        response = None
         for model_name in model_tier:
             try:
-                llm = ChatGoogleGenerativeAI(
-                    model=model_name,
-                    google_api_key=api_key,
-                    temperature=0
-                )
-                llm_with_tools = llm.bind_tools(tools)
+                # v5.8.2: Use the already initialized LLM if it matches the first tier
+                if model_tier.index(model_name) == 0:
+                    current_llm = llm
+                else:
+                    current_llm = ChatGoogleGenerativeAI(
+                        model=model_name,
+                        google_api_key=api_key,
+                        temperature=0
+                    )
+                
+                llm_with_tools = current_llm.bind_tools(tools)
                 messages = [SystemMessage(content=system_prompt)] + state["messages"]
                 response = await llm_with_tools.ainvoke(messages)
                 
@@ -112,13 +140,16 @@ async def supervisor(state: AgentState):
                 logger.info(f"✅ AI Success using model: {model_name}")
                 
                 # Tag the response with the model used for usage tracking
+                if not hasattr(response, "response_metadata"):
+                    response.response_metadata = {}
                 response.response_metadata["model_used"] = model_name
                 break 
             except Exception as e:
                 last_error = e
                 logger.warning(f"⚠️ Model {model_name} failed: {str(e)}. Trying next...")
                 continue
-        else:
+        
+        if response is None:
             # All models failed
             raise last_error if last_error else Exception("All models in failover tier failed.")
 

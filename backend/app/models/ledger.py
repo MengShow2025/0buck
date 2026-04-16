@@ -1,5 +1,5 @@
-from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, JSON, ForeignKey, Boolean, Enum, Numeric, Date
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, JSON, ForeignKey, Boolean, Enum, Numeric, Date, Text
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
 import uuid
 from .product import Base
@@ -153,6 +153,23 @@ class ProcessedWebhookEvent(Base):
     event_id = Column(String(100), primary_key=True) # Unique ID from provider (msg_id, order_id, etc.)
     provider = Column(String(50), index=True) # 'stream', 'shopify', 'whatsapp'
     processed_at = Column(DateTime, default=func.now())
+
+class WebhookEvent(Base):
+    """
+    v4.0: Queue/Audit Log for all incoming raw webhook payloads.
+    Used for asynchronous processing and debugging.
+    """
+    __tablename__ = "webhook_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    event_id = Column(String(100), index=True) # Shopify-Message-ID or similar
+    topic = Column(String(100), index=True) # e.g. 'orders/paid'
+    provider = Column(String(50), default="shopify")
+    payload = Column(JSONB)
+    status = Column(String(20), default="pending") # 'pending', 'processed', 'failed'
+    error_log = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    processed_at = Column(DateTime, nullable=True)
 
 class AISession(Base):
     __tablename__ = "ai_sessions"

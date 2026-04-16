@@ -1,0 +1,65 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id              String   @id @default(uuid())
+  trendId         String   @unique // 来自热门榜单的原始 ID
+  cjSku           String   @unique
+  amazonTitle     String
+  amazonCategory  String
+  amazonPrice     Float
+  cjCost          Float
+  salePrice       Float
+  comparePrice    Float
+  status          String   // 'DRAFT', 'PUBLISHED', 'PENDING_MANUAL_REVIEW'
+  productType     String   // 'NORMAL', 'CASHBACK'
+  riskLevel       String   // 'HIGH_RISK', 'LOW_RISK'
+  shopifyId       String?  // 推送到 Shopify 后回填的 ID
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  priceLogs     PriceLog[]
+  inventoryLogs InventoryLog[]
+  auditLogs     AuditLog[]
+}
+
+model PriceLog {
+  id            String   @id @default(uuid())
+  productId     String
+  product       Product  @relation(fields: [productId], references: [id])
+  oldAmazonPrice Float
+  newAmazonPrice Float
+  oldSalePrice   Float
+  newSalePrice   Float
+  triggerReason  String   // 例如: "Amazon price drop > 10%"
+  createdAt      DateTime @default(now())
+}
+
+model InventoryLog {
+  id             String   @id @default(uuid())
+  productId      String
+  product        Product  @relation(fields: [productId], references: [id])
+  cjInventory    Int
+  shopifyInventory Int
+  createdAt      DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  action      String   // 例如: "PRICE_CIRCUIT_BREAKER_TRIGGERED", "HIGH_RISK_FLAGGED"
+  details     String   // 详细的 JSON 或文本描述
+  createdAt   DateTime @default(now())
+}

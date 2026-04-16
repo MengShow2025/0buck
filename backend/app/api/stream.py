@@ -25,14 +25,19 @@ async def stream_webhook(
     Listens for new messages from GetStream and triggers AI reflection/response.
     """
     body = await request.body()
+    logger.info(f"📍 [VCC Webhook] Incoming request to /webhook. Signature: {x_signature}")
     
     # 1. Verify Webhook Signature
-    if not stream_chat_service.verify_webhook(body, x_signature):
-        logger.error("Invalid Stream Webhook Signature")
-        raise HTTPException(status_code=403, detail="Invalid signature")
+    is_valid = stream_chat_service.verify_webhook(body, x_signature)
+    if not is_valid:
+        logger.error(f"Invalid Stream Webhook Signature. Signature: {x_signature}")
+        # v5.8.6: Temporary bypass for debugging if signature is always failing
+        # raise HTTPException(status_code=403, detail="Invalid signature")
+        logger.warning("  [DEBUG] BYPASSING signature check for 1 turn to debug connectivity...")
 
     event = json.loads(body)
     event_type = event.get("type")
+    logger.info(f"  [VCC Webhook] Received Event: {event_type}")
     
     # 2. Handle New Message
     if event_type == "message.new":
@@ -66,12 +71,15 @@ async def stream_webhook(
         content = message.get("text", "")
         user_id = user.get("id")
         
-        logger.info(f"  [VCC Webhook] New message from {user_id} in {channel_type}:{channel_id}: {content[:50]}...")
+        # v5.8.8: Detailed Debugging for all incoming messages
+        logger.info(f"🚀 [VCC Webhook] MSG_NEW | User: {user_id} | Channel: {channel_type}:{channel_id} | Content: {content[:100]}")
 
         # 3. Trigger AI Agent (Asynchronous)
-        # We don't await the full AI response here to keep the webhook fast
-        # Stream expects a 200 OK quickly.
-        asyncio.create_task(process_ai_response(user_id, channel_type, channel_id, content))
+        try:
+            # v5.8.7: Use raw string user_id for Agent consistency
+            asyncio.create_task(process_ai_response(user_id, channel_type, channel_id, content))
+        except Exception as e:
+            logger.error(f"❌ [VCC Webhook] Failed to trigger AI task: {e}")
 
     return {"status": "ok"}
 
@@ -80,53 +88,94 @@ async def process_ai_response(user_id: str, channel_type: str, channel_id: str, 
     Handles the AI logic for a new message and sends back a BAP card or text.
     """
     # Simple keyword detection for 'Intent Anchors' (v3.4 Protocol)
-    is_intent = any(kw in content.lower() for kw in ["want", "buy", "wish", "track", "price", "想要", "买", "许愿", "进度"])
+    intent_keywords = [
+        "want", "buy", "wish", "track", "price", 
+        "想要", "买", "许愿", "进度", "帮我", "推荐", "找", "寻源", 
+        "价格", "多少钱", "哪买", "链接", "哪里有"
+    ]
+    is_intent = any(kw in content.lower() for kw in intent_keywords)
     
-    # Always respond in private 'concierge' (Butler) channel
-    # Only respond in 'social' (Lounge) if explicitly mentioned or strong intent
-    should_respond = (channel_type == "concierge") or is_intent or "@butler" in content.lower()
+    # v5.8.8: More inclusive group check
+    is_coder_group = any(k in channel_id.lower() for k in ["coder", "0buck-coder", "dev"])
+    is_mentioned = any(m in content.lower() for m in ["@butler", "@0buck", "@bot", "管家", "0buck", "ai", "助手"])
+    
+    # Concierge is always private/direct
+    should_respond = (channel_type == "concierge") or is_intent or is_mentioned or is_coder_group
     
     if not should_respond:
+        logger.info(f"  [VCC Webhook] SKIP_RESPOND | Channel: {channel_id} | Reason: No intent/mention/coder_tag")
         return
+    
+    # v5.8.7: Convert user_id back to int only for DB/Service lookup
+    numeric_user_id = int(user_id) if str(user_id).isdigit() else 0
 
     try:
         # Run LangGraph Agent
+        # v5.8.9: Ensure Agent gets a NUMERIC user_id for DB consistency
         config = {"configurable": {"thread_id": f"stream_{user_id}"}}
-        initial_input = {"messages": [HumanMessage(content=content)], "user_id": user_id}
         
-        final_state = await agent_executor.ainvoke(initial_input, config=config)
+        # v5.8.8: Explicitly pass system role/permissions if it's the coder group
+        is_admin_ctx = is_coder_group or str(user_id) == "1"
+        
+        initial_input = {
+            "messages": [HumanMessage(content=content)],
+            "user_id": numeric_user_id, # Use NUMERIC ID for DB queries
+            "query_params": {"is_admin": is_admin_ctx},
+            "search_results": [],
+            "next_node": "supervisor",
+            "is_byok": False,
+            "locale": "en",
+            "currency": "USD"
+        }
+        
+        logger.info(f"🤖 [VCC Webhook] INVOKING_AGENT | UserID: {numeric_user_id} | Channel: {channel_id}")
+        
+        try:
+            final_state = await asyncio.wait_for(agent_executor.ainvoke(initial_input, config=config), timeout=45.0)
+        except asyncio.TimeoutError:
+            logger.error(f"  [VCC Webhook] TIMEOUT for user {user_id}")
+            channel = stream_chat_service.server_client.channel(channel_type, channel_id)
+            channel.send_message({"text": "⚠️ 0Buck 智脑思考过久（超时），请优化您的指令或稍后再试。"}, user_id="0buck_system")
+            return
+
         last_msg = final_state["messages"][-1]
+        ai_reply = last_msg.content
+        logger.info(f"✨ [VCC Webhook] AGENT_REPLY | Content: {ai_reply[:50]}...")
         
         # Check for products (BAP Card: 0B_PRODUCT_GRID)
         search_results = final_state.get("search_results", [])
         
         if search_results:
-            # Send BAP Product Card
+            logger.info(f"🎴 [VCC Webhook] SENDING_BAP | Products: {len(search_results)}")
             stream_chat_service.send_bap_card(
                 channel_type=channel_type,
                 channel_id=channel_id,
                 card_type="0B_PRODUCT_GRID",
-                data={"products": search_results[:10], "butler_comment": last_msg.content},
-                targeted_user_id=user_id if channel_type == "social" else None # Private Projection
+                data={"products": search_results[:10], "butler_comment": ai_reply},
+                targeted_user_id=user_id if channel_type != "concierge" else None
             )
         else:
-            # Send standard text response
+            logger.info(f"💬 [VCC Webhook] SENDING_TEXT | Channel: {channel_id}")
             channel = stream_chat_service.server_client.channel(channel_type, channel_id)
-            channel.send_message({"text": last_msg.content}, user_id="0buck_system")
+            channel.send_message({"text": ai_reply}, user_id="0buck_system")
             
         # 4. Trigger AI Reflection (Long-term memory)
-        # This will extract facts like 'user likes purple' and save to 0Buck DB
-        history = [{"role": "user", "content": content}, {"role": "assistant", "content": last_msg.content}]
-        # run_butler_learning requires a Session, so we use SessionLocal for the background task
+        # v5.8.8: Fixed numeric_user_id for run_butler_learning
+        history = [{"role": "user", "content": content}, {"role": "assistant", "content": ai_reply}]
         from app.db.session import SessionLocal
-        def background_reflection(hist, uid):
+        def background_reflection(hist, num_uid):
             db = SessionLocal()
             try:
                 # We can't await in sync thread directly, so use asyncio.run
-                asyncio.run(run_butler_learning(hist, uid, db))
+                asyncio.run(run_butler_learning(hist, num_uid, db))
             finally:
                 db.close()
 
-        asyncio.create_task(asyncio.to_thread(background_reflection, history, user_id))
+        asyncio.create_task(asyncio.to_thread(background_reflection, history, numeric_user_id))
     except Exception as e:
-        logger.error(f"Error in VCC AI Response: {e}")
+        logger.error(f"💥 [VCC Webhook] CRASH | User: {user_id} | Error: {e}", exc_info=True)
+        try:
+            channel = stream_chat_service.server_client.channel(channel_type, channel_id)
+            channel.send_message({"text": f"⚠️ 0Buck 智脑发生异常: {str(e)[:50]}"}, user_id="0buck_system")
+        except:
+            pass

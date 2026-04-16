@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Depends, Request, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
+print("!!! MAIN.PY LOADING !!!")
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -44,7 +45,9 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Create tables if they don't exist
+print("!!! CREATE ALL TABLES STARTING !!!")
 Base.metadata.create_all(bind=engine)
+print("!!! CREATE ALL TABLES DONE !!!")
 
 def sync_db_schema():
     """
@@ -318,7 +321,17 @@ def sync_db_schema():
                 except Exception as e:
                     print(f"⚠️ Index creation failed (might already exist): {e}")
 
+print("!!! SYNC DB SCHEMA STARTING !!!")
 sync_db_schema()
+
+# v7.5.3: TRUTH RESET - Force re-sync for weightless products
+from sqlalchemy import text
+with engine.connect() as conn:
+    res = conn.execute(text("UPDATE candidate_products SET status = 'draft', shopify_product_handle = NULL WHERE status = 'synced'"))
+    conn.commit()
+    print(f"!!! TRUTH RESET DONE: {res.rowcount} PRODUCTS RETURNED TO DRAFT !!!")
+
+print("!!! SYNC DB SCHEMA DONE !!!")
 
 app = FastAPI(title="0Buck Backend", version="3.9.7")
 
@@ -377,12 +390,30 @@ async def sync_1688_product(product_id: str, db: Session = Depends(get_db)):
     product = await sync_1688.sync_product(product_id)
     
     sync_shopify = SyncShopifyService()
-    shopify_res = sync_shopify.sync_to_shopify(product)
+    shopify_res = await sync_shopify.sync_to_shopify(product)
     
     return {
         "status": "success", 
         "product": product.title_en, 
         "shopify_id": product.shopify_product_id
+    }
+
+@api_router.get("/users/me")
+async def get_current_user_profile(db: Session = Depends(get_db)):
+    # v3.5.1: Real 'me' endpoint
+    # In a real app, we'd get the user from the token/session
+    # For now, fallback to user 1 for the dashboard to load
+    rewards = RewardsService(db, current_user_id=1)
+    summary = rewards.get_wallet_summary(1)
+    level_info = rewards.get_user_level(1)
+    
+    return {
+        "id": "1",
+        "name": "Admin User",
+        "wallet_balance": summary["available"],
+        "level": level_info["level"],
+        "invitees": 0,
+        "total_volume": 0
     }
 
 @api_router.get("/users/{customer_id}")
@@ -499,6 +530,7 @@ async def root_spa():
 app.include_router(api_router, tags=["api"])
 app.include_router(agent_router, prefix=f"{settings.API_V1_STR}/agent", tags=["agent"])
 app.include_router(admin_router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
+app.include_router(admin_router, prefix="/api/admin", tags=["admin_legacy"])
 app.include_router(webhooks_router, prefix=f"{settings.API_V1_STR}/webhooks", tags=["webhooks"])
 app.include_router(butler_router, prefix=f"{settings.API_V1_STR}/butler", tags=["butler"])
 app.include_router(rewards_router, prefix=f"{settings.API_V1_STR}/rewards", tags=["rewards"])

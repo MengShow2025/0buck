@@ -1,0 +1,9 @@
+{
+  "name": "1688-image-opp-analyze",
+  "version": "1.0.0",
+  "description": "1688图片市场机会分析SKILL：根据商品ID分析下游市场（Amazon/TikTok）销售机会，提供B2B和C端销量趋势分析",
+  "scripts": {
+    "analyze": "scripts/analyze.py"
+  },
+  "env": []
+}

@@ -1,0 +1,488 @@
+#!/usr/bin/env python3
+"""
+1688遨虾AI选品 - Google Trends 趋势分析脚本
+
+Usage:
+    python3 google_trends.py query --keywords "wireless earbuds" --region "US"
+    python3 google_trends.py query --keywords "phone case" "phone holder" --region "US" --json
+"""
+
+import argparse
+import json
+import sys
+import os
+import time
+import requests
+import jwt
+from typing import List, Optional, Dict, Any
+
+# API 配置
+API_BASE_URL_PRE = "https://pre-api.alphashop.cn"
+API_BASE_URL_PROD = "https://api.alphashop.cn"
+GOOGLE_TRENDS_ENDPOINT = "/ai.sel.global1688.googleTrendsReportExecuteApi/1.0"
+
+# 支持的国家代码
+SUPPORTED_COUNTRIES = [
+    "US", "UK", "GB", "JP", "DE", "FR", "IT", "ES", "CA",
+    "AU", "NZ", "BR", "MX", "IN", "SG", "TH", "VN", "ID", "MY", "PH"
+]
+
+
+def print_credential_help():
+    """打印凭证获取帮助信息"""
+    print("\n" + "="*70)
+    print("🔐 需要 AlphaShop API 凭证")
+    print("="*70)
+    print("\n本 skill 需要以下凭证才能使用：")
+    print("  • ALPHASHOP_ACCESS_KEY  - API 访问密钥")
+    print("  • ALPHASHOP_SECRET_KEY  - API 密钥\n")
+
+    print("📋 如何获取凭证：")
+    print("-" * 70)
+    print("1. 联系 AlphaShop/遨虾 平台获取 API 凭证")
+    print("   - 平台网址：https://www.alphashop.cn （或相关平台）")
+    print("   - 如果你是内部用户，请联系平台管理员\n")
+
+    print("2. 获取凭证后，有两种配置方式：\n")
+
+    print("   方式A：通过环境变量配置（临时使用）")
+    print("   " + "-" * 66)
+    print("   export ALPHASHOP_ACCESS_KEY='你的AccessKey'")
+    print("   export ALPHASHOP_SECRET_KEY='你的SecretKey'\n")
+
+    print("   方式B：通过 OpenClaw 配置（推荐）")
+    print("   " + "-" * 66)
+    print("   编辑 OpenClaw 配置文件，添加：")
+    print("   {")
+    print("     skills: {")
+    print("       entries: {")
+    print('         "1688-google-trends": {')
+    print("           env: {")
+    print('             ALPHASHOP_ACCESS_KEY: "你的AccessKey",')
+    print('             ALPHASHOP_SECRET_KEY: "你的SecretKey"')
+    print("           }")
+    print("         }")
+    print("       }")
+    print("     }")
+    print("   }\n")
+
+    print("3. 配置完成后，重新运行命令即可\n")
+    print("="*70 + "\n")
+
+
+def get_jwt_token():
+    """生成 JWT token 用于 AlphaShop API 认证"""
+    ak = os.environ.get("ALPHASHOP_ACCESS_KEY", "").strip()
+    sk = os.environ.get("ALPHASHOP_SECRET_KEY", "").strip()
+
+    if not ak or not sk:
+        print_credential_help()
+
+        # 交互式询问用户是否要输入凭证
+        print("\n请选择：")
+        print("  1) 手动输入凭证（本次有效）")
+        print("  2) 退出")
+        print()
+
+        try:
+            choice = input("请选择 [1-2]: ").strip()
+        except (EOFError, KeyboardInterrupt):
+            print("\n已取消")
+            sys.exit(0)
+
+        if choice == "1":
+            try:
+                if not ak:
+                    ak = input("请输入 ALPHASHOP_ACCESS_KEY: ").strip()
+                if not sk:
+                    sk = input("请输入 ALPHASHOP_SECRET_KEY: ").strip()
+
+                if not ak or not sk:
+                    raise ValueError("凭证不能为空")
+            except (EOFError, KeyboardInterrupt):
+                print("\n已取消")
+                sys.exit(0)
+        elif choice == "2":
+            print("退出")
+            sys.exit(0)
+        else:
+            print("❌ 无效选择")
+            sys.exit(1)
+
+    if not ak or not sk:
+        missing = []
+        if not ak:
+            missing.append("ALPHASHOP_ACCESS_KEY")
+        if not sk:
+            missing.append("ALPHASHOP_SECRET_KEY")
+        raise ValueError(f"缺少必需的环境变量: {', '.join(missing)}")
+
+    try:
+        current_time = int(time.time())
+        expired_at = current_time + 1800  # 30分钟后过期
+        not_before = current_time - 5
+
+        token = jwt.encode(
+            payload={
+                "iss": ak,
+                "exp": expired_at,
+                "nbf": not_before
+            },
+            key=sk,
+            algorithm="HS256",
+            headers={"alg": "HS256"}
+        )
+
+        if isinstance(token, bytes):
+            token = token.decode("utf-8")
+        return token
+    except Exception as e:
+        raise ValueError(f"生成 JWT token 失败: {e}")
+
+
+def call_google_trends_api(keywords: List[str], region: str, user_id: str, env: str = "pre") -> Dict[str, Any]:
+    """
+    调用 Google Trends API（通过 HTTP 接口）
+
+    Args:
+        keywords: 关键词列表
+        region: 目标区域代码
+        user_id: 用户ID
+        env: 环境（pre/prod）
+
+    Returns:
+        API 响应结果
+    """
+    # 选择 API 基础 URL
+    base_url = API_BASE_URL_PRE if env == "pre" else API_BASE_URL_PROD
+    api_url = base_url + GOOGLE_TRENDS_ENDPOINT
+
+    # 构建请求数据
+    payload = {
+        "keywords": keywords,
+        "region": region.upper(),
+        "userId": user_id
+    }
+
+    try:
+        # 获取 JWT token
+        token = get_jwt_token()
+
+        print(f"→ 正在查询 Google Trends: {', '.join(keywords)} @ {region.upper()}")
+        print(f"→ 请求中... (响应时间约10秒内)")
+
+        response = requests.post(
+            api_url,
+            json=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {token}"
+            },
+            timeout=30
+        )
+        response.raise_for_status()
+
+        result = response.json()
+
+        # 检查 API 网关层错误
+        result_code = result.get("resultCode")
+        if result_code and result_code != "SUCCESS":
+            raise Exception(f"API 错误 [{result_code}]: {result.get('message', '未知错误')}")
+
+        # 提取业务结果
+        business_result = result.get("result", {})
+
+        # 检查业务层错误
+        success = business_result.get("success")
+        if success is not None and not success:
+            code = business_result.get("code", "UNKNOWN")
+            msg = business_result.get("msg", "未知错误")
+            raise Exception(f"业务错误 [{code}]: {msg}")
+
+        return business_result
+
+    except requests.exceptions.Timeout:
+        raise Exception("请求超时，请稍后重试")
+    except requests.exceptions.RequestException as e:
+        raise Exception(f"网络请求失败: {str(e)}")
+
+
+def parse_trend_data(trend_data_str: str) -> List[Dict[str, Any]]:
+    """
+    解析趋势数据字符串为结构化数据
+
+    Args:
+        trend_data_str: 趋势数据字符串，如 "[250316-250322=53, ...]"
+
+    Returns:
+        解析后的数据点列表
+    """
+    if not trend_data_str or trend_data_str == "N/A":
+        return []
+
+    # 移除方括号
+    trend_data_str = trend_data_str.strip("[]")
+
+    data_points = []
+    for item in trend_data_str.split(", "):
+        if "=" not in item:
+            continue
+
+        try:
+            date_range, score = item.split("=")
+            start_date, end_date = date_range.split("-")
+
+            # 解析日期 YYMMDD -> YYYY-MM-DD
+            year = "20" + start_date[:2]
+            month = start_date[2:4]
+            day = start_date[4:6]
+            formatted_start = f"{year}-{month}-{day}"
+
+            year = "20" + end_date[:2]
+            month = end_date[2:4]
+            day = end_date[4:6]
+            formatted_end = f"{year}-{month}-{day}"
+
+            data_points.append({
+                "start_date": formatted_start,
+                "end_date": formatted_end,
+                "score": int(score),
+                "period": f"{formatted_start} 至 {formatted_end}"
+            })
+        except:
+            continue
+
+    return data_points
+
+
+def analyze_trend(data_points: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    分析趋势数据，提取关键洞察
+
+    Args:
+        data_points: 解析后的数据点列表
+
+    Returns:
+        趋势分析结果
+    """
+    if not data_points or len(data_points) < 2:
+        return {
+            "direction": "数据不足",
+            "average_score": 0,
+            "peak_score": 0,
+            "growth_rate": "N/A",
+            "summary": "趋势数据不足，无法分析"
+        }
+
+    scores = [p["score"] for p in data_points]
+    avg_score = sum(scores) / len(scores)
+    peak_score = max(scores)
+
+    # 计算趋势方向（对比前半段和后半段）
+    mid_point = len(scores) // 2
+    first_half_avg = sum(scores[:mid_point]) / mid_point
+    second_half_avg = sum(scores[mid_point:]) / (len(scores) - mid_point)
+
+    growth_rate = ((second_half_avg - first_half_avg) / first_half_avg) * 100 if first_half_avg > 0 else 0
+
+    if growth_rate > 10:
+        direction = "⬆️ 上升趋势"
+        summary = f"搜索热度呈上升趋势，近期增长约 {growth_rate:.1f}%，市场需求在增加"
+    elif growth_rate < -10:
+        direction = "⬇️ 下降趋势"
+        summary = f"搜索热度呈下降趋势，近期下降约 {abs(growth_rate):.1f}%，市场需求在减少"
+    else:
+        direction = "➡️ 稳定趋势"
+        summary = f"搜索热度相对稳定，波动较小（{abs(growth_rate):.1f}%），市场需求稳定"
+
+    return {
+        "direction": direction,
+        "average_score": round(avg_score, 1),
+        "peak_score": peak_score,
+        "growth_rate": f"{growth_rate:+.1f}%",
+        "summary": summary
+    }
+
+
+def print_result(response: Dict[str, Any], json_output: bool = False):
+    """
+    打印查询结果
+
+    Args:
+        response: API 响应
+        json_output: 是否以 JSON 格式输出
+    """
+    if json_output:
+        print(json.dumps(response, indent=2, ensure_ascii=False))
+        return
+
+    print("\n" + "="*70)
+    print("Google Trends 趋势分析结果")
+    print("="*70 + "\n")
+
+    if not response.get("success"):
+        print(f"❌ 查询失败: {response.get('msg', '未知错误')}")
+        print(f"   错误代码: {response.get('code', 'UNKNOWN')}")
+        return
+
+    print("✅ 查询成功！\n")
+
+    data = response.get("data", {})
+    trends_list = data.get("trendsList", [])
+
+    if not trends_list:
+        print("⚠️  未查询到任何趋势数据\n")
+        return
+
+    for idx, trend in enumerate(trends_list, 1):
+        if len(trends_list) > 1:
+            print(f"\n{'='*70}")
+            print(f"关键词 {idx}/{len(trends_list)}: {trend.get('keyword', 'N/A')}")
+            print("="*70)
+        else:
+            print("-" * 70)
+            print(f"关键词: {trend.get('keyword', 'N/A')}")
+            print("-" * 70)
+
+        # 解析并分析趋势数据
+        trend_data_str = trend.get("trendData", "N/A")
+        data_points = parse_trend_data(trend_data_str)
+        analysis = analyze_trend(data_points)
+
+        # 显示趋势概览
+        print(f"\n  📊 趋势概览:")
+        print(f"     方向: {analysis['direction']}")
+        print(f"     平均热度: {analysis['average_score']}/100")
+        print(f"     峰值热度: {analysis['peak_score']}/100")
+        print(f"     近期变化: {analysis['growth_rate']}")
+
+        # 显示峰值月份
+        heat_month = trend.get("heatMonth", "N/A")
+        print(f"\n  🔥 峰值时间: {heat_month}")
+
+        # 显示趋势解读
+        print(f"\n  💡 趋势解读:")
+        print(f"     {analysis['summary']}")
+
+        # 选品建议
+        if analysis['peak_score'] >= 80:
+            print(f"\n  ✅ 选品建议: 高热度关键词，市场需求旺盛，适合入局")
+        elif analysis['peak_score'] >= 50:
+            print(f"\n  ⚠️  选品建议: 中等热度，需结合其他指标综合判断")
+        else:
+            print(f"\n  ⛔ 选品建议: 热度较低，市场需求不足，需谨慎考虑")
+
+        # 如果需要查看详细数据
+        if len(data_points) > 0:
+            print(f"\n  📅 近期趋势 (最近8周):")
+            # 只显示最近8周的数据
+            recent_points = data_points[-8:] if len(data_points) > 8 else data_points
+            for point in recent_points:
+                score = point["score"]
+                bar_length = int(score / 10)  # 0-100 映射到 0-10
+                bar = "█" * bar_length + "░" * (10 - bar_length)
+                print(f"     {point['start_date'][:10]:10s}  {bar}  {score:3d}")
+
+        print()
+
+    print("="*70 + "\n")
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="1688遨虾AI选品 - Google Trends 趋势分析",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+使用示例:
+  # 查询单个关键词
+  python3 google_trends.py query --keywords "wireless earbuds" --region US
+
+  # 查询多个关键词（对比分析）
+  python3 google_trends.py query --keywords "wireless earbuds" "bluetooth headphones" --region US
+
+  # 以 JSON 格式输出
+  python3 google_trends.py query --keywords "phone case" --region US --json
+
+  # 指定环境
+  python3 google_trends.py query --keywords "smart watch" --region US --env prod
+
+支持的国家代码:
+  US, UK, GB, JP, DE, FR, IT, ES, CA, AU, NZ, BR, MX, IN, SG, TH, VN, ID, MY, PH
+        """
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="可用命令")
+
+    # query 命令
+    query_parser = subparsers.add_parser("query", help="查询 Google Trends 趋势数据")
+    query_parser.add_argument(
+        "--keywords",
+        nargs="+",
+        required=True,
+        help="关键词列表（最多5个），例如：\"wireless mouse\" \"bluetooth keyboard\""
+    )
+    query_parser.add_argument(
+        "--region",
+        required=True,
+        help="目标区域代码（两位国家代码），例如：US, UK, JP"
+    )
+    query_parser.add_argument(
+        "--user-id",
+        default="cli_user",
+        help="用户ID（默认：cli_user）"
+    )
+    query_parser.add_argument(
+        "--env",
+        choices=["pre", "prod"],
+        default="prod",
+        help="环境（默认：prod）"
+    )
+    query_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="以 JSON 格式输出结果"
+    )
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        return
+
+    if args.command == "query":
+        # 参数校验
+        if not args.keywords:
+            print("❌ 错误：关键词不能为空")
+            sys.exit(1)
+
+        if len(args.keywords) > 5:
+            print("❌ 错误：关键词数量不能超过5个")
+            sys.exit(1)
+
+        region = args.region.upper()
+        if len(region) != 2:
+            print("❌ 错误：区域代码应为两位国家代码（例如：US, UK, JP）")
+            sys.exit(1)
+
+        # 调用 API
+        try:
+            response = call_google_trends_api(
+                keywords=args.keywords,
+                region=region,
+                user_id=args.user_id,
+                env=args.env
+            )
+
+            # 打印结果
+            print_result(response, args.json)
+
+            # 根据成功状态设置退出码
+            sys.exit(0 if response.get("success") else 1)
+
+        except Exception as e:
+            print(f"\n❌ 执行失败: {str(e)}\n")
+            sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
