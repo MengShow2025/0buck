@@ -488,3 +488,9 @@
 - 已完成：新增单测 `backend/tests/test_checkout_block_reason_schema.py`，覆盖“非法 reason 拒绝 + 合法 reason 通过”。
 - 已验证：`PYTHONPATH=backend python3 -m pytest -q backend/tests/test_checkout_block_reason_schema.py` 通过（2 passed）。
 - 已验证：`python3 -m py_compile backend/app/core/checkout_block_reason.py backend/app/schemas/products.py` 通过，`GetDiagnostics` 无新增错误。
+
+## 本轮进展（第 71 批：Quote 响应 Schema 强类型化）
+- 已完成：新增 `backend/app/schemas/checkout.py`，定义 `CheckoutQuoteResponse` 等数据模型，明确 `checkout_block_reason` 与 `not_ready_reasons` 的结构与枚举约束。
+- 已完成：修改 `backend/app/api/rewards.py` 中的 `quote` 接口，使用 `CheckoutQuoteResponse` 作为 `response_model`，提升 OpenAPI 文档准确性与返回值类型安全。
+- 已完成：新增 TDD 单测 `backend/tests/test_checkout_quote_schema.py`，验证 Quote 响应的默认值回退、枚举字段校验等边界场景，并强制添加到 Git 版本控制中。
+- 已验证：`PYTHONPATH=backend python3 -m pytest -q backend/tests/test_checkout_quote_schema.py` 通过；`py_compile` 通过；`GetDiagnostics` 无新增错误。

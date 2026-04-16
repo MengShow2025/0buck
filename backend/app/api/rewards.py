@@ -28,6 +28,7 @@ from app.core.checkout_block_reason import (
     CHECKOUT_BLOCK_REASON_INACTIVE,
     CHECKOUT_BLOCK_REASON_NOT_PUBLISHED,
 )
+from app.schemas.checkout import CheckoutQuoteResponse
 
 
 router = APIRouter()
@@ -1257,7 +1258,7 @@ def create_payment_order(
     return res
 
 
-@router.post("/payment/quote")
+@router.post("/payment/quote", response_model=CheckoutQuoteResponse)
 def create_checkout_quote(
     payload: CheckoutQuoteRequest,
     db: Session = Depends(get_db),
