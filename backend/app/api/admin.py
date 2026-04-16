@@ -481,6 +481,10 @@ def list_sourcing_candidates(
             try: c.structural_data = json.loads(c.structural_data)
             except: c.structural_data = {}
         
+        if isinstance(c.admin_tags, str):
+            try: c.admin_tags = json.loads(c.admin_tags)
+            except: c.admin_tags = []
+        
         # v4.6.7: Ensure Desire Engine fields are strings, not None
         c.desire_hook = c.desire_hook or ""
         c.desire_logic = c.desire_logic or ""

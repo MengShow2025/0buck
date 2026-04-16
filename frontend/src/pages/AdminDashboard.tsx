@@ -287,10 +287,14 @@ const AdminDashboard: React.FC = () => {
   };
 
   const filteredQueue = auditQueue.filter(c => {
-    const matchesCat = filterCategory === 'ALL' || c.status === filterCategory;
+    // v8.5.6: Filter by product_category_label (MAGNET/HOT etc) or admin_tags
+    const matchesCat = filterCategory === 'ALL' || 
+                      (c as any).product_category_label === filterCategory || 
+                      c.status === filterCategory ||
+                      (Array.isArray((c as any).admin_tags) && (c as any).admin_tags.includes(filterCategory));
     const matchesSearch = !searchQuery || 
       (c.title_en || c.name || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (c.source_pid || '').toString().includes(searchQuery);
+      (c.product_id_1688 || '').toString().includes(searchQuery);
     return matchesCat && matchesSearch;
   });
 
@@ -354,7 +358,7 @@ const AdminDashboard: React.FC = () => {
             <div className="flex items-center gap-6">
               <h2 className="text-xl font-black text-gray-800">候选池审核 (Candidate Pool)</h2>
               <div className="flex bg-gray-50 p-1 rounded-xl">
-                {['ALL', 'HOT', 'TOPIC', 'DEMAND'].map(cat => (
+                {['ALL', 'MAGNET', 'REBATE', 'NORMAL', 'HOT'].map(cat => (
                   <button
                     key={cat}
                     onClick={() => setFilterCategory(cat)}

@@ -42,28 +42,34 @@ async def sync_to_db():
     session = Session()
 
     print("🧹 Cleaning up old pending items...")
-    session.execute(text("DELETE FROM candidate_products WHERE status = 'pending_review'"))
+    session.execute(text("DELETE FROM candidate_products WHERE status = 'pending'"))
     
     for item in mixed_squad:
         pid = item['pid']
         asset = ASSETS.get(pid, {})
         title = asset.get("title", f"Professional {item['cat']}").split('|')[0].strip()
-        title = ' '.join([w for w in title.split() if not w.isdigit() and len(w) > 1])[:80]
+        # Clean noisy keywords
+        clean_words = []
+        skip_words = {'Best', 'Advanced', 'Hot', 'Sale', 'MINI', 'Rts', 'USB', 'Charging', 'Portable', 'Mini', 'Fast', 'Delivery', 'Dropshipping'}
+        for w in title.split():
+            if w.isdigit() or len(w) <= 1 or w in skip_words:
+                continue
+            clean_words.append(w)
+        
+        title = ' '.join(clean_words[:6]) # Keep it short
         
         image = asset.get("image", "")
         sale_price = 0.0 if item['tier'] == "MAGNET" else round(item['amz'] * 0.6, 2)
         
-        # admin_tags is likely JSONB or TEXT? The error suggests it's trying to parse 'Certified' as JSON.
-        # Let's check: 'invalid input syntax for type json ... Token "Certified" is invalid'
-        # This means admin_tags is JSON but we are sending a plain string.
         creds_json = json.dumps([item['creds']])
-        images_json = json.dumps([image])
+        # Mocking multiple images for visual check
+        images_json = json.dumps([image, image.replace('.jpg', '_2.jpg'), image.replace('.jpg', '_3.jpg')])
         
         sql = text("""
             INSERT INTO candidate_products 
             (product_id_1688, title_en, category_name, product_category_label, 
              sell_price, amazon_compare_at_price, images, description_en, status, admin_tags, created_at)
-            VALUES (:pid, :title, :cat, :tier, :price, :amz, CAST(:images AS jsonb), :desc, 'pending_review', CAST(:creds AS jsonb), NOW())
+            VALUES (:pid, :title, :cat, :tier, :price, :amz, CAST(:images AS jsonb), :desc, 'pending', CAST(:creds AS jsonb), NOW())
         """)
         
         session.execute(sql, {

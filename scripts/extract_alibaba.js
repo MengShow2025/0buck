@@ -1,61 +1,56 @@
 (async () => {
-  const result = {};
+  const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
   
-  // 1. Title
-  result.title = document.querySelector('h1')?.innerText?.trim() || '';
-  
-  // 2. Gallery Images
-  const galleryImgs = Array.from(document.querySelectorAll('.main-layout .main-gallery img, .main-layout .gallery-items img, .product-image img'))
-    .map(img => img.src.replace(/_(\d+)x(\d+)\.jpg$/, ''))
-    .filter(src => src && !src.includes('placeholder'));
-  result.gallery = [...new Set(galleryImgs)];
-  
-  // 3. Video
-  const video = document.querySelector('video');
-  result.video = video ? video.src : '';
-  
-  // 4. Specs
-  const specs = {};
-  const specItems = document.querySelectorAll('.do-entry-item, .attribute-item, .product-attribute-list li');
-  specItems.forEach(item => {
-    const key = item.querySelector('.do-entry-item-val, .attr-name')?.innerText?.trim();
-    const value = item.querySelector('.do-entry-item-val, .attr-value')?.innerText?.trim();
-    if (key && value) specs[key] = value;
-  });
-  // Fallback for specs in text block
-  if (Object.keys(specs).length === 0) {
-    const textSpecs = document.querySelector('.product-property-list, .do-entry-list')?.innerText;
-    if (textSpecs) {
-      const lines = textSpecs.split('\n');
-      lines.forEach(line => {
-        const parts = line.split(':');
-        if (parts.length >= 2) specs[parts[0].trim()] = parts.slice(1).join(':').trim();
-      });
-    }
+  // Try to find the description container and scroll into view to trigger lazy loading
+  const descContainer = document.querySelector('.product-description, .detail-common-description, #product-detail, #module_product_specification, [class*="description"]');
+  if (descContainer) {
+    descContainer.scrollIntoView();
+    await wait(1000);
   }
-  result.specs = specs;
-  
-  // 5. Certificates
-  const certs = [];
-  const bodyText = document.body.innerText;
-  const certKeywords = ['CE', 'ISO', 'FCC', 'RoHS'];
-  certKeywords.forEach(kw => {
-    if (bodyText.includes(kw)) certs.push(kw);
-  });
-  result.certificates = certs;
-  
-  // 6. Supplier
-  const supplierLink = document.querySelector('.company-name a, .supplier-info a');
-  result.supplier = {
-    name: supplierLink?.innerText?.trim() || '',
-    url: supplierLink?.href || ''
+
+  const result = {
+    gallery: [],
+    video: '',
+    detail_images: [],
+    certs: []
   };
+
+  // 1. Gallery images
+  // Look for the main image area
+  const thumbImages = document.querySelectorAll('.main-image-thumb-item img, .image-list img, .bc-main-image img, .gallery-list img');
+  if (thumbImages.length > 0) {
+    result.gallery = Array.from(thumbImages).map(img => (img.src || img.getAttribute('data-src') || '').replace(/_\d+x\d+.*$/, '')).filter(src => src.startsWith('http'));
+  }
   
-  // 7. Detail Images (long images in description)
-  const detailImages = Array.from(document.querySelectorAll('#product_description img, .description-detail-content img, .detail-images img'))
-    .map(img => img.src || img.getAttribute('data-src'))
-    .filter(src => src && !src.includes('placeholder'));
-  result.detail_images = [...new Set(detailImages)];
-  
-  return result;
+  if (result.gallery.length === 0) {
+    const mainImg = document.querySelector('.magic-main-image img, .main-image img, [class*="main-image"] img');
+    if (mainImg) result.gallery.push(mainImg.src.replace(/_\d+x\d+.*$/, ''));
+  }
+  result.gallery = [...new Set(result.gallery)];
+
+  // 2. Video URL
+  const videoElem = document.querySelector('video');
+  if (videoElem) {
+    result.video = videoElem.src || videoElem.querySelector('source')?.src || '';
+  }
+
+  // 3. Detail images (top 10)
+  const detailImgElems = document.querySelectorAll('.detail-common-description img, .product-description img, #product-detail img, .module_product_specification img, [class*="description"] img');
+  result.detail_images = Array.from(detailImgElems)
+    .map(img => img.src || img.getAttribute('data-src') || img.getAttribute('lazy-src') || img.getAttribute('data-lazy-src'))
+    .filter(src => src && src.startsWith('http') && !src.includes('clear.png') && !src.includes('loading.gif'))
+    .slice(0, 10);
+
+  // 4. Certifications
+  const certKeywords = ['certificate', 'certification', 'test report', 'iso', 'ce', 'rohs', 'fcc', 'ul', 'tuv'];
+  const allImages = document.querySelectorAll('img');
+  const certImages = Array.from(allImages).filter(img => {
+    const alt = (img.alt || '').toLowerCase();
+    const src = (img.src || '').toLowerCase();
+    const parentText = (img.parentElement?.innerText || '').toLowerCase();
+    return certKeywords.some(kw => alt.includes(kw) || src.includes(kw) || parentText.includes(kw));
+  });
+  result.certs = Array.from(new Set(certImages.map(img => img.src || img.getAttribute('data-src')))).filter(src => src && src.startsWith('http'));
+
+  return { __result: result };
 })()

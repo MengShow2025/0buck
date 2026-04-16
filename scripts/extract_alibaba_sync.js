@@ -1,42 +1,79 @@
 (() => {
   const result = {
-    title: document.querySelector('h1')?.innerText?.trim() || '',
     gallery: [],
     video: '',
     detail_images: [],
-    specs: {},
-    certificates: [],
-    supplier: { name: '', url: '' }
+    certs: []
   };
 
-  const galleryImgs = Array.from(document.querySelectorAll('img'))
-    .filter(img => img.width > 200 && img.height > 200)
-    .map(img => img.src.replace(/_(\d+)x(\d+)\.(jpg|png|webp|svg)$/, ''));
-  result.gallery = [...new Set(galleryImgs)];
-
-  const videoEl = document.querySelector('video');
-  if (videoEl) result.video = videoEl.src || videoEl.querySelector('source')?.src || '';
-
-  const specItems = document.querySelectorAll('.do-entry-item, .attribute-item, .product-attribute-list li');
-  specItems.forEach(item => {
-    const children = item.children;
-    if (children.length >= 2) {
-      const key = children[0].innerText.trim();
-      const value = children[1].innerText.trim();
-      if (key && value && key !== value) result.specs[key] = value;
+  try {
+    // 1. Gallery images
+    const thumbImages = document.querySelectorAll('.main-image-thumb-item img, .image-list img, .bc-main-image img, .gallery-list img');
+    if (thumbImages.length > 0) {
+      result.gallery = Array.from(thumbImages).map(img => (img.src || img.getAttribute('data-src') || '').replace(/_\d+x\d+.*$/, '')).filter(src => src.startsWith('http'));
     }
-  });
+    
+    if (result.gallery.length === 0) {
+      const mainImg = document.querySelector('.magic-main-image img, .main-image img, [class*="main-image"] img');
+      if (mainImg) result.gallery.push(mainImg.src.replace(/_\d+x\d+.*$/, ''));
+    }
+    result.gallery = [...new Set(result.gallery)];
 
-  const supplierEl = document.querySelector('.company-name a, .supplier-info a, .name-link');
-  if (supplierEl) {
-    result.supplier.name = supplierEl.innerText.trim();
-    result.supplier.url = supplierEl.href;
+    // 2. Video URL
+    const videoElem = document.querySelector('video');
+    if (videoElem) {
+      result.video = videoElem.src || videoElem.querySelector('source')?.src || '';
+    }
+
+    // 3. Detail images (top 10)
+    // Check main document first
+    const getImagesFromDoc = (doc) => {
+      const imgs = doc.querySelectorAll('.detail-common-description img, .product-description img, #product-detail img, .module_product_specification img, [class*="description"] img');
+      return Array.from(imgs)
+        .map(img => img.src || img.getAttribute('data-src') || img.getAttribute('lazy-src') || img.getAttribute('data-lazy-src'))
+        .filter(src => src && src.startsWith('http') && !src.includes('clear.png') && !src.includes('loading.gif'));
+    };
+
+    result.detail_images = getImagesFromDoc(document);
+
+    // Check iframes
+    const iframes = document.querySelectorAll('iframe');
+    iframes.forEach(iframe => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        if (doc) {
+          result.detail_images = result.detail_images.concat(getImagesFromDoc(doc));
+        }
+      } catch (e) {}
+    });
+
+    result.detail_images = [...new Set(result.detail_images)].slice(0, 10);
+
+    // 4. Certifications
+    const certKeywords = ['certificate', 'certification', 'test report', 'iso', 'ce', 'rohs', 'fcc', 'ul', 'tuv'];
+    const allImages = Array.from(document.querySelectorAll('img'));
+    
+    // Also check iframes for certs
+    iframes.forEach(iframe => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
+        if (doc) {
+          allImages.push(...Array.from(doc.querySelectorAll('img')));
+        }
+      } catch (e) {}
+    });
+
+    const certImages = allImages.filter(img => {
+      const alt = (img.alt || '').toLowerCase();
+      const src = (img.src || img.getAttribute('data-src') || '').toLowerCase();
+      const parentText = (img.parentElement?.innerText || '').toLowerCase();
+      return certKeywords.some(kw => alt.includes(kw) || src.includes(kw) || parentText.includes(kw));
+    });
+    result.certs = Array.from(new Set(certImages.map(img => img.src || img.getAttribute('data-src')))).filter(src => src && src.startsWith('http') && !src.includes('clear.png') && !src.includes('loading.gif'));
+
+  } catch (e) {
+    return { error: e.message };
   }
-
-  const bodyText = document.body.innerText;
-  ['CE', 'ISO', 'FCC', 'RoHS'].forEach(cert => {
-    if (bodyText.includes(cert)) result.certificates.push(cert);
-  });
 
   return result;
 })()
