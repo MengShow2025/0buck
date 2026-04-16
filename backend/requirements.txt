@@ -13,6 +13,7 @@ langchain
 langgraph
 google-generativeai
 langchain-google-genai
+langchain-openai
 langchain-community
 pydantic[email]
 email-validator
