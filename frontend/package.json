@@ -4,9 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "vite",
+    "i18n:sync": "python3 scripts/sync_i18n.py",
+    "dev:vite": "vite",
+    "dev": "node scripts/dev.mjs",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "keywords": [],
   "author": "",
@@ -24,13 +28,19 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.28",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^6.0.1",
+    "@vitest/ui": "^4.1.4",
     "autoprefixer": "^10.4.27",
+    "jsdom": "^29.0.2",
     "postcss": "^8.5.9",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2",
-    "vite": "^8.0.7"
+    "vite": "^8.0.7",
+    "vitest": "^4.1.4"
   }
 }
