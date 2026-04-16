@@ -162,14 +162,49 @@ export const CheckoutDrawer: React.FC = () => {
     setCheckoutError(null);
     setSecuringStep('securing');
     try {
+      const submitToken = (crypto.randomUUID().replace(/-/g, '') + '00000000000000000000000000000000').slice(0, 32);
       const quotePayload = {
         items: [{ product_id: checkoutProductId, quantity: 1 }],
         balance_used: useBalance ? Number(actualBalanceCost.toFixed(2)) : 0,
         applied_discount_codes: appliedDiscounts,
         is_full_payment: isFullBalancePayment,
-        client_submit_token: (crypto.randomUUID().replace(/-/g, '') + '00000000000000000000000000000000').slice(0, 32)
+        client_submit_token: submitToken
       };
-      await orderApi.createQuote(quotePayload);
+      const quoteResp = await orderApi.createQuote(quotePayload);
+      const quoteToken = quoteResp?.data?.quote_token;
+      if (!quoteToken) {
+        throw new Error('quote_token_missing');
+      }
+
+      const createResp = await orderApi.create({
+        ...quotePayload,
+        quote_token: quoteToken
+      });
+      const createData = createResp?.data || {};
+
+      if (createData?.status === 'error') {
+        const msg = Array.isArray(createData?.message)
+          ? createData.message.join(', ')
+          : String(createData?.message || 'create_order_failed');
+        throw new Error(msg);
+      }
+
+      if (createData?.invoice_url) {
+        setSecuringStep('generating');
+        await new Promise(r => setTimeout(r, 700));
+        setShopifyCheckoutUrl(createData.invoice_url);
+        (window as any)._pendingOrderId = String(createData.draft_order_id || createData.order_id || 'DRAFT');
+        setIsShopifyCheckoutOpen(true);
+        return;
+      }
+
+      if (createData?.order_id) {
+        setSecuringStep('generating');
+        await new Promise(r => setTimeout(r, 500));
+        setPaidOrderId(String(createData.order_id));
+        setShowSuccessScreen(true);
+        return;
+      }
 
       let giftCardCode = undefined;
       if (balanceDeduction > 0) {
@@ -191,8 +226,21 @@ export const CheckoutDrawer: React.FC = () => {
         setCheckoutError('该商品价格待补全，暂不可下单。');
       } else if (detail.startsWith('product_not_found')) {
         setCheckoutError('商品不存在或已下架。');
+      } else if (detail.startsWith('quote_')) {
+        setCheckoutError('报价已过期或不一致，请重试一次。');
+      } else if (detail.startsWith('duplicate_checkout_submission')) {
+        setCheckoutError('检测到重复提交，请稍后查看订单状态。');
+      } else if (detail.startsWith('insufficient_balance_for_full_payment')) {
+        setCheckoutError('余额不足，无法完成全额余额支付。');
       } else {
-        setCheckoutError('下单校验失败，请稍后重试。');
+        const message = String(error?.message || '').toLowerCase();
+        if (message.includes('quote_token_missing')) {
+          setCheckoutError('报价失败，未生成有效报价单。');
+        } else if (message.includes('shopify')) {
+          setCheckoutError('订单创建失败（网关暂不可用），请稍后重试。');
+        } else {
+          setCheckoutError('下单校验失败，请稍后重试。');
+        }
       }
       console.error('Checkout failed:', error);
     } finally {
