@@ -514,3 +514,10 @@
 - 已完成：测试了“账户余额不足”情况下的前置拦截和 `ValueError` 异常抛出。
 - 已完成：测试了成功生成 Voucher 并正确回调下游服务的链路。
 - 已验证：`PYTHONPATH=backend python3 -m pytest backend/tests/test_rewards_points.py` 全部通过（2 passed）。积分兑换后端核心扣减逻辑安全性得到单测保障，在矩阵中将其提级为“高完成”。
+
+## 本轮进展（第 77 批：Admin 管理控制台全面铺开）
+- 已完成：基于 Tailwind 纯手工构建了高复用的 Admin UI 组件集（Card, Button, Input, Textarea, Table, Badge），彻底避开了 Tailwind v4 与外部组件库潜在的构建冲突。
+- 已完成：打通 `/admin/ai` AI Butler 配置页，支持查看总 Token、总 Session 以及在线编辑和保存 `PersonaTemplate` 的 System Prompt。
+- 已完成：打通 `/admin/products` 商品选品审核页，渲染了完整的 `candidate_products` Data Table，并接通了 Approve/Reject 前端 API 交互。
+- 已完成：打通 `/admin/finance` 财务监控页，绘制了顶部的核心系统级 KPI（总用户数、激活计划、总发分、待提现）统计面板。
+- 已验证：前端 `npm run build` 和全局 `verify_release_gate.sh` 全部通过，Admin 路由完全不会干扰主 App 路由。
