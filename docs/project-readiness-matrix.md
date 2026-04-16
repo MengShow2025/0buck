@@ -407,3 +407,16 @@
 - 已完成：`en.json/zh.json` 新增对应 `checkout.*` 文案键，前端改为统一走 `t(...)`，避免中英混杂回归。
 - 已验证：前端 `npm run build` 通过（exit code 0），`GetDiagnostics` 无新增诊断错误。
 - 已验证：后端 `healthz` 连续探测与重启后探测均返回 `200`，当前未复现“启动后健康检查阻塞”问题。
+
+## 本轮进展（第 58 批：Checkout 剩余可见硬编码清零）
+- 已完成：清理 `CheckoutDrawer` 剩余可见硬编码文案（`Save`、`Tap to toggle`、`Min. spend`、`free`、`Long`），全部改为 `t('checkout.*')`。
+- 已完成：补齐 `en.json/zh.json` 新增词条（`checkout.save_prefix`、`checkout.free_suffix`），避免中英混杂。
+- 已验证：`GetDiagnostics` 无新增诊断错误；前端 `npm run build` 通过（exit code 0）。
+
+## 本轮进展（第 59 批：登录态 Checkout Smoke 与 500 降级修复）
+- 已完成：登录态接口级 smoke（`auth/login -> payment/quote -> payment/create-order`）回归，当前口径为：
+  - `login=200`、`quote=200`；
+  - `create-order` 对 `product_id 1..40` 返回 `400 product_not_ready_for_checkout` 或 `400 invalid_product_price`（无 5xx）。
+- 已定位并修复：`product_id=35` 触发 `quote 500` 的根因是查询 `cj_raw_products` 表在部分库不存在导致未捕获异常。
+- 已完成：`rewards.py` 与 `products.py` 对 `cj_raw_products` 缺表场景增加 `SQLAlchemyError` 兜底，避免抛出 500，降级为业务可解释错误（`product_not_found`/`404`）。
+- 已验证：`python3 -m py_compile backend/app/api/rewards.py backend/app/api/products.py` 通过，`GetDiagnostics` 无新增错误。

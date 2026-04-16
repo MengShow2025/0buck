@@ -12,7 +12,7 @@ import hmac
 import json
 import time
 import uuid
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 
 from app.db.session import get_db
 from app.models.ledger import CheckinPlan, GroupBuyCampaign, Order, AvailableCoupon, ProcessedWebhookEvent
@@ -414,10 +414,14 @@ def _prepare_checkout_context(
                     sanitized_items.append({"product_id": product_id, "quantity": quantity})
                     continue
                 raise HTTPException(status_code=400, detail=f"product_not_ready_for_checkout:{product_id}")
-            cj_row = db.execute(
-                text("SELECT id FROM cj_raw_products WHERE id = :pid LIMIT 1"),
-                {"pid": product_id},
-            ).first()
+            try:
+                cj_row = db.execute(
+                    text("SELECT id FROM cj_raw_products WHERE id = :pid LIMIT 1"),
+                    {"pid": product_id},
+                ).first()
+            except SQLAlchemyError:
+                # Some deployments don't provision cj_raw_products; degrade to product_not_found.
+                cj_row = None
             if cj_row:
                 raise HTTPException(status_code=400, detail=f"product_not_ready_for_checkout:{product_id}")
             raise HTTPException(status_code=400, detail=f"product_not_found:{product_id}")
