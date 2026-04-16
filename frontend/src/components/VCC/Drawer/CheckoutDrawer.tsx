@@ -16,8 +16,7 @@ type CheckoutDiscountItem = {
 };
 
 // Step indicator
-const StepBar: React.FC<{ step: number }> = ({ step }) => {
-  const steps = ['Review', 'Address', 'Payment'];
+const StepBar: React.FC<{ step: number; steps: [string, string, string] }> = ({ step, steps }) => {
   return (
     <div className="flex items-center justify-center gap-0 px-6 py-4">
       {steps.map((label, i) => {
@@ -206,14 +205,14 @@ export const CheckoutDrawer: React.FC = () => {
     (crypto.randomUUID().replace(/-/g, '') + '00000000000000000000000000000000').slice(0, 32);
 
   const mapCheckoutError = (detail: string, fallbackMessage?: string) => {
-    if (detail.startsWith('product_not_ready_for_checkout')) return '该商品尚未完成上架结算配置，暂不可下单。';
-    if (detail.startsWith('invalid_product_price')) return '该商品价格待补全，暂不可下单。';
-    if (detail.startsWith('product_not_found')) return '商品不存在或已下架。';
-    if (detail.startsWith('quote_')) return '报价已过期或不一致，请重试一次。';
-    if (detail.startsWith('duplicate_checkout_submission')) return '检测到重复提交，请稍后查看订单状态。';
-    if (detail.startsWith('insufficient_balance_for_full_payment')) return '余额不足，无法完成全额余额支付。';
-    if (detail.startsWith('not_authenticated') || detail.startsWith('unauthorized')) return '请先登录后再下单。';
-    return fallbackMessage || '下单校验失败，请稍后重试。';
+    if (detail.startsWith('product_not_ready_for_checkout')) return t('checkout.error.product_not_ready');
+    if (detail.startsWith('invalid_product_price')) return t('checkout.error.invalid_product_price');
+    if (detail.startsWith('product_not_found')) return t('checkout.error.product_not_found');
+    if (detail.startsWith('quote_')) return t('checkout.error.quote_invalid');
+    if (detail.startsWith('duplicate_checkout_submission')) return t('checkout.error.duplicate_submission');
+    if (detail.startsWith('insufficient_balance_for_full_payment')) return t('checkout.error.insufficient_balance');
+    if (detail.startsWith('not_authenticated') || detail.startsWith('unauthorized')) return t('checkout.error.auth_required');
+    return fallbackMessage || t('checkout.error.validation_failed');
   };
 
   useEffect(() => {
@@ -343,11 +342,11 @@ export const CheckoutDrawer: React.FC = () => {
       const detail = String(error?.response?.data?.detail || '');
       const message = String(error?.message || '').toLowerCase();
       const fallback = message.includes('quote_token_missing')
-        ? '报价失败，未生成有效报价单。'
+        ? t('checkout.error.quote_token_missing')
         : message.includes('shopify')
-        ? '订单创建失败（网关暂不可用），请稍后重试。'
+        ? t('checkout.error.create_order_gateway_unavailable')
         : message.includes('create_order_missing_redirect')
-        ? '下单成功但未返回支付跳转信息，请联系管理员排查。'
+        ? t('checkout.error.create_order_missing_redirect')
         : undefined;
       setCheckoutError(mapCheckoutError(detail, fallback));
       console.error('Checkout failed:', error);
@@ -371,10 +370,10 @@ export const CheckoutDrawer: React.FC = () => {
   };
 
   const ctaLabel = () => {
-    if (step === 1) return `Continue to Address`;
-    if (step === 2) return `Continue to Payment`;
-    if (isPreflightChecking) return '校验商品价格中...';
-    if (isCheckoutBlocked) return '当前商品暂不可下单';
+    if (step === 1) return t('checkout.cta_continue_address');
+    if (step === 2) return t('checkout.cta_continue_payment');
+    if (isPreflightChecking) return t('checkout.preflight_checking');
+    if (isCheckoutBlocked) return t('checkout.blocked_unavailable');
     if (isFullBalancePayment) return t('checkout.full_balance_payment');
     return `${t('checkout.place_order')} · ${currencySymbol}${formatPrice(effectiveFinalDue)}`;
   };
@@ -413,9 +412,9 @@ export const CheckoutDrawer: React.FC = () => {
             {t('checkout.securing_connection')}
           </p>
           <p className="text-[12px] text-gray-400 font-medium animate-pulse">
-            {securingStep === 'securing' ? 'Authenticating Identity...' :
-             securingStep === 'freezing' ? 'Allocating 0Buck Balance Assets...' :
-             'Syncing with Shopify Gateway...'}
+            {securingStep === 'securing' ? t('checkout.securing_authenticating') :
+             securingStep === 'freezing' ? t('checkout.securing_allocating_balance') :
+             t('checkout.securing_syncing_gateway')}
           </p>
         </div>
       )}
@@ -439,7 +438,10 @@ export const CheckoutDrawer: React.FC = () => {
         </div>
 
         {/* Step progress bar */}
-        <StepBar step={step} />
+        <StepBar
+          step={step}
+          steps={[t('checkout.step_review'), t('checkout.step_address'), t('checkout.step_payment')]}
+        />
       </div>
 
       {/* ── Scrollable content ── */}
@@ -475,7 +477,7 @@ export const CheckoutDrawer: React.FC = () => {
               <div className="pt-3 space-y-2">
                 <div className="flex justify-between text-[13px]">
                   <span className="text-gray-500">{t('checkout.tax')}</span>
-                  <span className="font-medium text-gray-700 dark:text-gray-300">At gateway settlement</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-300">{t('checkout.tax_gateway_settlement')}</span>
                 </div>
                 <div className="flex justify-between text-[13px]">
                   <span className="text-gray-500">{t('order.shipping_cost')}</span>
@@ -523,7 +525,7 @@ export const CheckoutDrawer: React.FC = () => {
                   {isLoadingDiscounts ? (
                     <div className="flex items-center justify-center py-4 gap-2">
                       <Loader2 className="w-4 h-4 animate-spin text-[var(--wa-teal)]" />
-                      <span className="text-[12px] text-gray-400">Loading discounts...</span>
+                      <span className="text-[12px] text-gray-400">{t('checkout.loading_discounts')}</span>
                     </div>
                   ) : availableDiscounts.map((discount) => {
                     const isApplied = appliedDiscounts.includes(discount.code);
@@ -596,7 +598,7 @@ export const CheckoutDrawer: React.FC = () => {
                 </div>
                 {isPrime && (
                   <div className="flex justify-between text-[10px] text-indigo-500">
-                    <span className="font-medium">Prime 1.2× benefit</span>
+                    <span className="font-medium">{t('checkout.prime_benefit')}</span>
                     <span className="font-bold">-{currencySymbol}{formatPrice(effectiveBalanceUsed - actualBalanceCost)} free</span>
                   </div>
                 )}
@@ -616,7 +618,7 @@ export const CheckoutDrawer: React.FC = () => {
                 <MapPin className="w-5 h-5 text-[var(--wa-teal)]" />
               </div>
               <div>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">Delivery Address</p>
+                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">{t('checkout.delivery_address')}</p>
                 <p className="text-[16px] font-semibold text-gray-900 dark:text-gray-100 mb-0.5">
                   Long <span className="text-[13px] font-normal text-gray-400">+1 123-456-7890</span>
                 </p>
@@ -643,8 +645,8 @@ export const CheckoutDrawer: React.FC = () => {
 
             <div className="space-y-2.5">
               {[
-                { id: 'paypal' as const, icon: <CreditCard className="w-5 h-5" />, bg: 'bg-indigo-100 dark:bg-indigo-500/20', color: 'text-indigo-600', title: 'Shopify Secure', subtitle: 'Visa, Apple Pay, PayPal...' },
-                { id: 'usdc' as const, icon: <DollarSign className="w-5 h-5" />, bg: 'bg-blue-100 dark:bg-blue-500/20', color: 'text-blue-600', title: t('checkout.crypto_pay'), subtitle: 'USDC · Fast & cheap' },
+                { id: 'paypal' as const, icon: <CreditCard className="w-5 h-5" />, bg: 'bg-indigo-100 dark:bg-indigo-500/20', color: 'text-indigo-600', title: t('checkout.payment_shopify_secure_title'), subtitle: t('checkout.payment_shopify_secure_subtitle') },
+                { id: 'usdc' as const, icon: <DollarSign className="w-5 h-5" />, bg: 'bg-blue-100 dark:bg-blue-500/20', color: 'text-blue-600', title: t('checkout.crypto_pay'), subtitle: t('checkout.payment_usdc_subtitle') },
               ].map(({ id, icon, bg, color, title, subtitle }) => (
                 <div
                   key={id}
@@ -677,7 +679,7 @@ export const CheckoutDrawer: React.FC = () => {
           <div className="bg-green-50 dark:bg-green-900/15 rounded-[22px] p-5 border border-green-200 dark:border-green-900/30 text-center">
             <CheckCircle2 className="w-10 h-10 text-green-500 mx-auto mb-2" />
             <p className="text-[15px] font-semibold text-green-700 dark:text-green-400">{t('checkout.full_balance_payment')}</p>
-            <p className="text-[12px] text-green-600/70 dark:text-green-500/70 mt-1">Your 0Buck balance covers the full amount</p>
+            <p className="text-[12px] text-green-600/70 dark:text-green-500/70 mt-1">{t('checkout.full_balance_cover_desc')}</p>
           </div>
         )}
 
@@ -689,7 +691,7 @@ export const CheckoutDrawer: React.FC = () => {
               <div className="text-right">
                 <p className="font-mono font-bold text-[16px] text-[var(--wa-teal)]">{currencySymbol}{formatPrice(effectiveFinalDue)}</p>
                 <p className="text-[10px] text-gray-400 flex items-center gap-1 justify-end mt-0.5">
-                  <Info className="w-3 h-3" /> quote-aligned amount
+                  <Info className="w-3 h-3" /> {t('checkout.quote_aligned_amount')}
                 </p>
               </div>
             </div>
