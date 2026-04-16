@@ -10,6 +10,7 @@ import { DesktopLayout } from './components/VCC/Desktop/DesktopLayout';
 import { aiApi } from './services/api';
 
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { AdminLayout } from './components/Admin/Layout/AdminLayout';
 
 function useIsDesktop() {
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 1024);
@@ -344,20 +345,12 @@ function MainApp() {
   );
 }
 
-// A placeholder for the Admin section
-const AdminPlaceholder = () => (
-  <div className="p-8">
-    <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-    <p>Coming soon...</p>
-  </div>
-);
-
 export default function App() {
   return (
     <Routes>
       <Route path="/" element={<MainApp />} />
       <Route path="/diagram" element={<ArchitectureDiagram />} />
-      <Route path="/admin/*" element={<AdminPlaceholder />} />
+      <Route path="/admin/*" element={<AdminLayout />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
