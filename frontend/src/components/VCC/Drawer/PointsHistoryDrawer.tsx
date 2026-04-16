@@ -1,24 +1,65 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowDownToLine, Coins, Gift, TrendingUp, Users, CalendarDays, Filter, MessageSquare, ShoppingBag, Zap, Bot, TicketCheck } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import api from '../../../services/api';
 
-type PointTxCategory = 'community' | 'shopping' | 'fan_shopping' | 'referral' | 'exchange' | 'ai_reward' | 'signin';
+type PointTxCategory = 'community' | 'shopping' | 'fan_shopping' | 'referral' | 'exchange' | 'ai_reward' | 'signin' | 'unknown';
 
 export const PointsHistoryDrawer: React.FC = () => {
-  const { popDrawer, t } = useAppContext();
+  const { popDrawer, t, user, showToast } = useAppContext();
   const [filter, setFilter] = useState<'all' | 'earn' | 'spend'>('all');
+  const [history, setHistory] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [balance, setBalance] = useState<number>(0);
 
-  // Mock points history covering 7 core types
-  const history = [
-    { id: 'PT-001', type: 'earn', category: 'ai_reward' as PointTxCategory, title: t('points.cat_ai_reward'), desc: t('points.desc_ai_reward').replace('{count}', '100'), amount: '+150', date: '2023-10-25 14:30', status: t('common.completed') },
-    { id: 'PT-002', type: 'earn', category: 'signin' as PointTxCategory, title: t('points.cat_signin'), desc: t('points.desc_signin').replace('{day}', '7'), amount: '+50', date: '2023-10-25 09:30', status: t('common.completed') },
-    { id: 'PT-003', type: 'earn', category: 'community' as PointTxCategory, title: t('points.cat_community'), desc: t('points.desc_community'), amount: '+30', date: '2023-10-24 20:15', status: t('common.completed') },
-    { id: 'PT-004', type: 'earn', category: 'shopping' as PointTxCategory, title: t('points.cat_shopping'), desc: t('points.desc_shopping').replace('{orderId}', 'ORD-001'), amount: '+500', date: '2023-10-24 14:15', status: t('common.completed') },
-    { id: 'PT-005', type: 'spend', category: 'exchange' as PointTxCategory, title: t('points.cat_exchange'), desc: t('points.desc_exchange_card'), amount: '-1000', date: '2023-10-22 10:45', status: t('common.completed') },
-    { id: 'PT-006', type: 'earn', category: 'fan_shopping' as PointTxCategory, title: t('points.cat_fan_shopping'), desc: t('points.desc_fan_order').replace('{name}', t('contacts.alex_m')), amount: '+120', date: '2023-10-21 15:30', status: t('common.completed') },
-    { id: 'PT-007', type: 'earn', category: 'referral' as PointTxCategory, title: t('points.cat_referral'), desc: t('points.desc_referral'), amount: '+200', date: '2023-10-21 11:20', status: t('common.completed') },
-    { id: 'PT-008', type: 'spend', category: 'exchange' as PointTxCategory, title: t('points.cat_exchange'), desc: t('points.desc_exchange_shipping'), amount: '-500', date: '2023-10-20 09:10', status: t('common.completed') },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!user?.id) return;
+      try {
+        const [txRes, statusRes] = await Promise.all([
+          api.getPointsTransactions(user.id),
+          api.getStatus(user.id)
+        ]);
+
+        if (statusRes.data?.wallet?.points !== undefined) {
+          setBalance(statusRes.data.wallet.points);
+        }
+
+        if (txRes.data?.status === 'success') {
+          const formatted = txRes.data.transactions.map((tx: any) => {
+            const amountNum = parseFloat(tx.amount);
+            let category: PointTxCategory = 'unknown';
+            
+            if (tx.source.includes('shopping')) category = 'shopping';
+            else if (tx.source.includes('referral')) category = 'referral';
+            else if (tx.source.includes('exchange')) category = 'exchange';
+            else if (tx.source.includes('ai') || tx.source.includes('gpt')) category = 'ai_reward';
+            else if (tx.source.includes('signin') || tx.source.includes('checkin')) category = 'signin';
+            else if (tx.source.includes('fan')) category = 'fan_shopping';
+            else if (tx.source.includes('community')) category = 'community';
+            
+            return {
+              id: tx.id,
+              type: amountNum >= 0 ? 'earn' : 'spend',
+              category,
+              title: t(`points.cat_${category}`) || tx.source.replace(/_/g, ' ').toUpperCase(),
+              desc: tx.description || tx.source,
+              amount: amountNum > 0 ? `+${amountNum}` : `${amountNum}`,
+              date: new Date(tx.created_at).toLocaleString(),
+              status: t('common.completed')
+            };
+          });
+          setHistory(formatted);
+        }
+      } catch (err) {
+        console.error(err);
+        showToast(t('common.error'), 'error');
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [user?.id, t, showToast]);
 
   const filteredHistory = history.filter(item => filter === 'all' || item.type === filter);
 
@@ -59,7 +100,7 @@ export const PointsHistoryDrawer: React.FC = () => {
         
         <h2 className="text-[12px] font-black text-gray-400 uppercase tracking-widest mb-2 relative z-10">{t('points.balance_title')}</h2>
         <div className="flex items-baseline gap-2 relative z-10">
-          <span className="text-[40px] font-black text-gray-900 dark:text-white tracking-tighter leading-none">3,450</span>
+          <span className="text-[40px] font-black text-gray-900 dark:text-white tracking-tighter leading-none">{balance.toLocaleString()}</span>
           <span className="text-[12px] font-bold text-amber-500 uppercase tracking-widest bg-amber-500/10 px-2 py-1 rounded-lg">PTS</span>
         </div>
 
@@ -95,29 +136,35 @@ export const PointsHistoryDrawer: React.FC = () => {
           </button>
         </div>
 
-        {filteredHistory.map((tx) => (
-          <div key={tx.id} className="bg-white dark:bg-[#1C1C1E] p-4 rounded-[24px] shadow-sm border border-gray-100 dark:border-white/5 flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${getCategoryBg(tx.category)}`}>
-              {getCategoryIcon(tx.category)}
-            </div>
-            
-            <div className="flex-1 min-w-0">
-              <div className="text-[14px] font-black text-gray-900 dark:text-white truncate">{tx.title}</div>
-              <div className="text-[11px] text-gray-400 font-bold truncate mt-0.5">{tx.desc}</div>
-              <div className="flex items-center gap-1 mt-1.5 text-[10px] text-gray-400 uppercase font-black tracking-widest">
-                <CalendarDays className="w-3 h-3" />
-                {tx.date}
+        {loading ? (
+          <div className="text-center py-10 text-gray-500 font-bold">{t('common.loading')}</div>
+        ) : filteredHistory.length === 0 ? (
+          <div className="text-center py-10 text-gray-500 font-bold">No transactions found.</div>
+        ) : (
+          filteredHistory.map((tx) => (
+            <div key={tx.id} className="bg-white dark:bg-[#1C1C1E] p-4 rounded-[24px] shadow-sm border border-gray-100 dark:border-white/5 flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${getCategoryBg(tx.category)}`}>
+                {getCategoryIcon(tx.category)}
+              </div>
+              
+              <div className="flex-1 min-w-0">
+                <div className="text-[14px] font-black text-gray-900 dark:text-white truncate">{tx.title}</div>
+                <div className="text-[11px] text-gray-400 font-bold truncate mt-0.5">{tx.desc}</div>
+                <div className="flex items-center gap-1 mt-1.5 text-[10px] text-gray-400 uppercase font-black tracking-widest">
+                  <CalendarDays className="w-3 h-3" />
+                  {tx.date}
+                </div>
+              </div>
+              
+              <div className="text-right shrink-0">
+                <div className={`text-[16px] font-black ${tx.type === 'earn' ? 'text-emerald-500' : 'text-gray-900 dark:text-white'}`}>{tx.amount}</div>
+                <div className="text-[9px] text-gray-400 font-bold uppercase mt-1 px-2 py-0.5 rounded-full inline-block bg-gray-100 dark:bg-white/5">
+                  PTS
+                </div>
               </div>
             </div>
-            
-            <div className="text-right shrink-0">
-              <div className={`text-[16px] font-black ${tx.type === 'earn' ? 'text-emerald-500' : 'text-gray-900 dark:text-white'}`}>{tx.amount}</div>
-              <div className="text-[9px] text-gray-400 font-bold uppercase mt-1 px-2 py-0.5 rounded-full inline-block bg-gray-100 dark:bg-white/5">
-                PTS
-              </div>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

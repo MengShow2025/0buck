@@ -52,6 +52,7 @@ export const rewardApi = {
   getStatus: (userId: number) => api.get(`/rewards/status/${userId}`),
   checkin: (userId: number, planId: string) => api.post('/rewards/checkin', { user_id: userId, plan_id: planId }),
   getTransactions: (userId: number) => api.get(`/rewards/transactions/${userId}`),
+  getPointsTransactions: (userId: number) => api.get(`/rewards/points/transactions/${userId}`),
   getPointsRules: () => api.get('/rewards/points/rules'),
   getPointsExchangeCatalog: () => api.get('/rewards/points/exchange-catalog'),
   awardActivityPoints: (userId: number, event: string) => api.post('/rewards/points/activity', { user_id: userId, event }),

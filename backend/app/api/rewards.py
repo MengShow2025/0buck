@@ -934,6 +934,20 @@ def group_free_refund_retry_queue(
     return {"status": "ok", "count": len(items), "next_cursor": next_cursor, "items": items}
 
 
+@router.get("/points/transactions/{user_id}")
+def get_points_transactions_route(
+    user_id: int,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user)
+):
+    if current_user.customer_id != user_id and current_user.user_type not in ["kol", "admin"]:
+        raise HTTPException(status_code=403, detail="Forbidden: Access denied")
+        
+    rewards = RewardsService(db, current_user_id=current_user.customer_id)
+    txs = rewards.get_points_transactions(user_id, limit=limit)
+    return {"status": "success", "transactions": txs}
+
 @router.get("/transactions/{user_id}")
 def get_transactions(
     user_id: int, 
