@@ -363,3 +363,23 @@
   - 预检失败显示“当前商品暂不可下单”并禁用。
 - 已完成：统一错误文案映射函数，保证预检与提交失败文案一致，减少用户困惑。
 - 已验证：前端 `npm run build` 通过（exit code 0）。
+
+## 本轮进展（第 52 批：金额显示以后端报价为准）
+- 已完成：Checkout 金额区优先使用后端 `quote.summary`（`subtotal/coupon_discount/balance_used/final_due`）驱动显示，减少前后端金额口径偏差。
+- 已完成：以下关键展示位已切换到后端报价值：
+  - 顶部总价；
+  - CTA 下单金额；
+  - 商品行价；
+  - 优惠抵扣；
+  - 余额抵扣；
+  - Step2/3 回顾总价；
+  - 支付成功页展示金额。
+- 已验证：前端 `npm run build` 通过（exit code 0）。
+
+## 本轮进展（第 53 批：优惠券逻辑去 mock）
+- 已完成：Checkout 优惠券数据源切换到后端接口：
+  - `GET /rewards/payment/discounts` 用于初始加载；
+  - `POST /rewards/payment/discounts/evaluate` 用于实时重算。
+- 已完成：优惠重算结果改为使用后端返回的 `selected.breakdown/total_discount/valid_codes`，并自动剔除无效选择码。
+- 已完成：优惠券列表状态（可用/不可用）由后端 `items` 驱动，避免前端 mock 规则与后端不一致。
+- 已验证：前端 `npm run build` 通过（exit code 0）。

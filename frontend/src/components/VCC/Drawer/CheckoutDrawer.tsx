@@ -90,10 +90,15 @@ export const CheckoutDrawer: React.FC = () => {
     const loadInitialData = async () => {
       setIsLoadingDiscounts(true);
       try {
-        const discounts = await mockApi.getAvailableDiscounts(product.price);
-        setAvailableDiscounts(discounts);
+        const resp = await orderApi.getDiscounts(product.price);
+        const items = (resp?.data?.items || []) as ShopifyDiscountCode[];
+        setAvailableDiscounts(items);
+        const selected = resp?.data?.selected || {};
+        setDiscountBreakdown((selected?.breakdown || []) as { code: string; discount: number }[]);
+        setTotalDiscountAmount(Number(selected?.total_discount || 0));
       } catch (error) {
         console.error('Failed to load checkout data:', error);
+        setAvailableDiscounts([]);
       } finally {
         setIsLoadingDiscounts(false);
       }
@@ -108,21 +113,28 @@ export const CheckoutDrawer: React.FC = () => {
 
   useEffect(() => {
     const recalcDiscounts = async () => {
-      if (appliedDiscounts.length === 0) {
-        setDiscountBreakdown([]);
-        setTotalDiscountAmount(0);
-        return;
-      }
       try {
-        const result = await mockApi.applyDiscounts(subtotal, taxAmount, appliedDiscounts);
-        setDiscountBreakdown(result.breakdown);
-        setTotalDiscountAmount(result.totalDiscount);
+        const resp = await orderApi.evaluateDiscounts(subtotal, appliedDiscounts);
+        const data = resp?.data || {};
+        const selected = data?.selected || {};
+        const validCodes = (selected?.valid_codes || []) as string[];
+        const breakdown = (selected?.breakdown || []) as { code: string; discount: number }[];
+        const total = Number(selected?.total_discount || 0);
+        const items = (data?.items || []) as ShopifyDiscountCode[];
+        setAvailableDiscounts(items);
+        setDiscountBreakdown(breakdown);
+        setTotalDiscountAmount(total);
+        if (validCodes.length !== appliedDiscounts.length || validCodes.some((c, i) => c !== appliedDiscounts[i])) {
+          setAppliedDiscounts(validCodes);
+        }
       } catch (error) {
         console.error('Failed to recalc discounts:', error);
+        setDiscountBreakdown([]);
+        setTotalDiscountAmount(0);
       }
     };
     recalcDiscounts();
-  }, [appliedDiscounts, subtotal, taxAmount]);
+  }, [appliedDiscounts, subtotal]);
 
   useEffect(() => {
     if (useBalance) {
