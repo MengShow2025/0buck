@@ -508,3 +508,9 @@
 - 已完成：测试了未知平台名（fallback 到默认平台）的处理边界。
 - 已完成：测试了 LLM 超时或出错时的 Celery `@retry` 机制重试抛出。
 - 已验证：`PYTHONPATH=backend python3 -m pytest backend/tests/test_im_tasks.py` 全部通过（3 passed）。这补齐了 IM 多平台网关在排队消费场景下的测试防线，状态提级为“高完成”。
+
+## 本轮进展（第 76 批：积分兑换边缘场景测试）
+- 已完成：针对积分兑换核心方法 `redeem_points_exchange_item`，在 `backend/tests/test_rewards_points.py` 中增加了对余额扣减、Shopify Voucher 生成逻辑的自动化单测。
+- 已完成：测试了“账户余额不足”情况下的前置拦截和 `ValueError` 异常抛出。
+- 已完成：测试了成功生成 Voucher 并正确回调下游服务的链路。
+- 已验证：`PYTHONPATH=backend python3 -m pytest backend/tests/test_rewards_points.py` 全部通过（2 passed）。积分兑换后端核心扣减逻辑安全性得到单测保障，在矩阵中将其提级为“高完成”。
