@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from fastapi.responses import StreamingResponse, Response, JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import inspect, text
 from datetime import datetime
 import json
 import asyncio
@@ -10,7 +11,7 @@ from app.core.config import settings
 from app.db.session import get_db, engine
 # v4.6.8: MUST import all models BEFORE calling metadata.create_all
 from app.models.product import Base
-from app.models.ledger import UserExt, Wallet, WalletTransaction, CheckinPlan, CheckinLog, AdminAuditLog, ReferralRelationship, GroupBuyCampaign, SystemConfig, UserStreamIdentity, ProcessedWebhookEvent, AISession, Order, AvailableCoupon, CouponIssuanceAudit, SourcingOrder, PriceWish, SquareActivity, Comment
+from app.models.ledger import UserExt, Wallet, WalletTransaction, CheckinPlan, CheckinLog, AdminAuditLog, ReferralRelationship, GroupBuyCampaign, SystemConfig, UserStreamIdentity, ProcessedWebhookEvent, AISession, Order, AvailableCoupon, CouponIssuanceAudit, SourcingOrder, PriceWish, SquareActivity, Comment, PromoShareLink, OrderAttribution
 from app.models.butler import UserMemoryFact, UserButlerProfile, PersonaTemplate, AIUsageStats, AIContribution, ShadowIDMapping, UserMemorySemantic, UserIMBinding, BindingCode
 from app.models.rewards import PointTransaction, RenewalCard, AIUsageQuota, Points
 
@@ -175,6 +176,47 @@ async def sync_customer_to_shopify(
 
 @app.on_event("startup")
 async def startup_event():
+    # Backward-compatible schema guard for environments where migrations lag behind code.
+    try:
+        inspector = inspect(engine)
+        user_cols = {c["name"] for c in inspector.get_columns("users_ext")}
+        if "backup_email" not in user_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users_ext ADD COLUMN backup_email VARCHAR"))
+            logger.warning("  [DB] Added missing users_ext.backup_email column for compatibility.")
+        try:
+            product_cols = {c["name"] for c in inspector.get_columns("products")}
+            if "source_platform" not in product_cols:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE products ADD COLUMN source_platform VARCHAR"))
+                logger.warning("  [DB] Added missing products.source_platform column for compatibility.")
+            if "source_url" not in product_cols:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE products ADD COLUMN source_url VARCHAR"))
+                logger.warning("  [DB] Added missing products.source_url column for compatibility.")
+            if "backup_source_url" not in product_cols:
+                with engine.begin() as conn:
+                    conn.execute(text("ALTER TABLE products ADD COLUMN backup_source_url VARCHAR"))
+                logger.warning("  [DB] Added missing products.backup_source_url column for compatibility.")
+        except Exception:
+            pass
+        PromoShareLink.__table__.create(bind=engine, checkfirst=True)
+        OrderAttribution.__table__.create(bind=engine, checkfirst=True)
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE promo_share_links ALTER COLUMN share_token TYPE VARCHAR(255)"))
+            logger.warning("  [DB] Ensured promo_share_links.share_token is VARCHAR(255).")
+        except Exception:
+            pass
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE order_attributions ALTER COLUMN share_token TYPE VARCHAR(255)"))
+            logger.warning("  [DB] Ensured order_attributions.share_token is VARCHAR(255).")
+        except Exception:
+            pass
+    except Exception as e:
+        logger.error(f"  [DB] users_ext compatibility check failed: {e}")
+
     if not settings.STREAM_API_KEY or not settings.STREAM_API_SECRET:
         logger.warning("  [VCC] Skip platform channel bootstrap: Stream API keys missing.")
         return

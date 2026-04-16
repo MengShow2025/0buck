@@ -292,3 +292,18 @@
   - `Share`：`POST /api/v1/im/promo/cards/generate` 返回 `401`（未登录鉴权生效）；`/from-link` 返回 `400 invalid_promo_link`（参数校验生效）。
   - `Checkout`：`/api/v1/rewards/payment/quote` 与 `/payment/discounts` 在未登录态均返回 `401`（鉴权生效）。
 - 说明：`Lounge/Share/Checkout` 的完整业务成功流需登录态 Token；当前已确认“路由可达 + 鉴权/校验行为正确”。
+
+## 本轮进展（第 42 批）
+- 已完成：后端启动稳定性回归压测（冷启动 6 次，逐次轮询 `/healthz` 就绪时间）。
+- 已验证：6/6 次均在 `1s` 内返回 `200 {"status":"ok"}`，未复现“启动后健康接口不响应”阻塞问题。
+- 结论：本地启动偶发阻塞在当前代码状态下已暂时解除；后续重点转为“登录态业务链路”回归（Lounge/Share/Checkout 成功流）。
+
+## 本轮进展（第 43 批：登录态成功流攻坚）
+- 已完成：登录链路修复并验证通过：补齐 `users_ext.backup_email` 缺失列后，`POST /api/v1/auth/login` 从 `503` 恢复到 `200`，成功拿到 Bearer Token。
+- 已完成：分享成功流修复并验证通过：
+  - 补齐缺失表 `promo_share_links`、`order_attributions`；
+  - 扩容 `share_token` 列长到 `VARCHAR(255)` 以兼容签名 token 长度；
+  - 登录态 `POST /api/v1/im/promo/cards/generate` 返回 `200`，`universal_link` 正常生成；
+  - 登录态 `POST /api/v1/im/promo/cards/from-link` 返回 `200`，可反解模板成功。
+- 进行中：Checkout 登录态成功流仍受历史库结构漂移阻断（`products` 表缺失多列，已补 `source_platform/source_url/backup_source_url`，仍有 `melting_reason` 等字段缺失引发 `quote` 500）。
+- 当前结论：AI/Share 登录态已打通；Checkout 成功流需继续完成 `products` 相关缺失列兼容或执行完整迁移后再验证。

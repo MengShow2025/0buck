@@ -24,6 +24,9 @@ class UserExt(Base):
     two_factor_secret = Column(String(32), nullable=True)
     is_two_factor_enabled = Column(Boolean, default=False)
     
+    # v5.5: Backup Recovery Email (Alternative to Phone)
+    backup_email = Column(String(255), nullable=True, index=True)
+    
     # v3.8.0: Payment Security
     hashed_payment_password = Column(String, nullable=True)
     payment_pass_failed_attempts = Column(Integer, default=0)
@@ -44,6 +47,12 @@ class Wallet(Base):
     user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), primary_key=True)
     balance_available = Column(Numeric(12, 2), default=0.0)
     balance_locked = Column(Numeric(12, 2), default=0.0)
+    
+    # v4.0: Points/PTS Tracking (Compute Engine)
+    pts_balance = Column(Integer, default=0)
+    pts_total_earned = Column(Integer, default=0)
+    pts_last_updated = Column(DateTime, default=func.now())
+    
     currency = Column(String(10), default="USD")
 
 class WalletTransaction(Base):
@@ -52,10 +61,83 @@ class WalletTransaction(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), index=True)
     amount = Column(Numeric(12, 2))
-    type = Column(String) # 'checkin', 'referral', 'group_buy', 'withdrawal', 'refund'
-    status = Column(String, default="pending") # 'pending', 'completed', 'failed'
+    
+    # v4.0: Expanded Types for Double-Entry alignment
+    # 'checkin', 'referral', 'fan_bonus', 'group_buy', 'withdrawal', 'withdrawal_freeze', 'refund', 'c2w_refund'
+    type = Column(String) 
+    
+    status = Column(String, default="pending") # 'pending', 'completed', 'failed', 'cancelled'
     order_id = Column(BigInteger, nullable=True)
+    reference_id = Column(String(100), nullable=True) # External ref (Shopify/PayPal txn)
     description = Column(String)
+    
+    # v4.0: Accounting metadata
+    metadata_json = Column(JSON, nullable=True) # { "debit_account": "user_wallet", "credit_account": "platform_pool" }
+    
+    created_at = Column(DateTime, default=func.now())
+
+class WithdrawalRequest(Base):
+    """
+    v4.6.8: Payout lifecycle for 'Cash Out' operations.
+    Supports PayPal, Bank Transfer, and USDT (Crypto).
+    """
+    __tablename__ = "withdrawal_requests"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), index=True)
+    amount = Column(Numeric(12, 2), nullable=False)
+    fee = Column(Numeric(12, 2), default=0.0)
+    
+    # Destination Details
+    method = Column(String(20), nullable=False) # 'PayPal', 'Bank', 'USDT'
+    destination_address = Column(String(255), nullable=False) # Email, IBAN, Wallet Address
+    destination_metadata = Column(JSON, nullable=True) # { "bank_name": "...", "account_holder": "..." }
+    
+    # Status Flow
+    # 'pending', 'processing', 'paid', 'rejected', 'failed', 'cancelled'
+    status = Column(String(20), default="pending", index=True)
+    
+    # Provider Info
+    provider_ref = Column(String(100), nullable=True) # e.g. PayPal Payout Batch ID
+    error_log = Column(JSON, nullable=True)
+    
+    # Audit Trail
+    processed_at = Column(DateTime, nullable=True)
+    processed_by = Column(BigInteger, nullable=True) # Admin ID
+    rejection_reason = Column(String, nullable=True)
+    
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+class UserPayoutAccount(Base):
+    """
+    v4.6.8: Saved payout accounts for users.
+    """
+    __tablename__ = "user_payout_accounts"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), index=True)
+    
+    method = Column(String(20), nullable=False) # 'PayPal', 'Bank', 'USDT'
+    account_address = Column(String(255), nullable=False) # Email, IBAN, Wallet Address
+    metadata_json = Column(JSON, nullable=True) # { "bank_name": "...", "account_holder": "..." }
+    
+    is_default = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+class PTSHistory(Base):
+    """
+    v4.0: High-fidelity tracking for Points (PTS).
+    Used for AI Dehydration & User DNA profiling.
+    """
+    __tablename__ = "pts_history"
+    
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), index=True)
+    delta = Column(Integer, nullable=False) # e.g. +10, -500
+    source = Column(String) # 'sign_in', 'byok_reward', 'review', 'rescue_card', 'level_up'
+    balance_snapshot = Column(Integer)
     created_at = Column(DateTime, default=func.now())
 
 class CheckinPlan(Base):
@@ -183,6 +265,10 @@ class Order(Base):
     # Lifecycle Status
     status = Column(String, default="paid") # 'paid', 'shipped', 'completed', 'refunded', 'cancelled'
     review_status = Column(Boolean, default=False)
+    
+    # v4.0: Referral Tracking (Direct Referral Reward)
+    referrer_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=True, index=True)
+    referral_reward_status = Column(String, default="pending") # 'pending', 'settled', 'cancelled'
 
     # Automated Refund (Group Free)
     refund_status = Column(String, default="none") # 'none', 'pending', 'refunded', 'refund_retry_needed', 'failed'
@@ -234,7 +320,7 @@ class CouponIssuanceAudit(Base):
     context_snapshot = Column(JSON, nullable=True) # Last 3 messages + cart state
     
     # Fingerprint
-    model_id = Column(String(50), default="gemini-2.0-flash")
+    model_id = Column(String(50), default="gemini-2.5-flash")
     fingerprint = Column(String(100), unique=True) # Combined hash of user/code/time
     
     issued_at = Column(DateTime, default=func.now())
@@ -278,6 +364,51 @@ class SquareActivity(Base):
     content = Column(String)
     metadata_json = Column(JSON, default={}) # Associated IDs, names, etc.
     likes = Column(Integer, default=0)
+    created_at = Column(DateTime, default=func.now())
+
+
+class PromoShareLink(Base):
+    """
+    Share-link issuance record for bot promo cards.
+    Immutable attribution payload is bound to share_token.
+    """
+    __tablename__ = "promo_share_links"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    share_token = Column(String(255), unique=True, index=True, nullable=False)
+    sharer_user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), index=True, nullable=False)
+
+    share_category = Column(String(30), nullable=False)  # group_buy | distribution | fan_source
+    card_type = Column(String(20), nullable=False)       # product | merchant | invite
+    target_type = Column(String(20), nullable=False)     # product | merchant | none
+    target_id = Column(String(64), nullable=True)
+
+    platform = Column(String(20), nullable=True)         # feishu/telegram/whatsapp/discord
+    entry_type = Column(String(50), nullable=True)       # user-selected source lane
+    policy_version = Column(String(20), default="v1")
+    source_code = Column(String(40), nullable=True)      # optional existing referral/share code bridge
+    status = Column(String(20), default="active")        # active | expired | revoked
+    expires_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+
+class OrderAttribution(Base):
+    """
+    One immutable attribution snapshot per order.
+    """
+    __tablename__ = "order_attributions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_id = Column(BigInteger, ForeignKey("orders.shopify_order_id"), unique=True, index=True, nullable=False)
+    share_token = Column(String(255), index=True, nullable=False)
+    sharer_user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), index=True, nullable=False)
+
+    share_category = Column(String(30), nullable=False)
+    card_type = Column(String(20), nullable=False)
+    target_type = Column(String(20), nullable=False)
+    target_id = Column(String(64), nullable=True)
+    entry_type = Column(String(50), nullable=True)
+    policy_version = Column(String(20), default="v1")
     created_at = Column(DateTime, default=func.now())
 
 class Comment(Base):
