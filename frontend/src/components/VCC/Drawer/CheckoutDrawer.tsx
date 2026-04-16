@@ -468,7 +468,7 @@ export const CheckoutDrawer: React.FC = () => {
                 <div className="text-right shrink-0">
                   <p className="font-mono font-bold text-[17px] text-[var(--wa-teal)]">{currencySymbol}{formatPrice(effectiveSubtotal)}</p>
                   <span className="text-[10px] font-semibold text-green-600 bg-green-50 dark:bg-green-900/20 px-1.5 py-0.5 rounded-full">
-                    Save {currencySymbol}{formatPrice(product.originalPrice - product.price)}
+                    {t('checkout.save_prefix')} {currencySymbol}{formatPrice(product.originalPrice - product.price)}
                   </span>
                 </div>
               </div>
@@ -514,7 +514,7 @@ export const CheckoutDrawer: React.FC = () => {
                 <div className="border-t border-gray-100 dark:border-white/5 px-4 pb-4 pt-3 space-y-2.5 animate-in slide-in-from-top-2 duration-200">
                   <div className="flex justify-between items-center mb-1">
                     <p className="text-[10px] text-gray-400 font-medium uppercase tracking-widest">
-                      Tap to toggle · <span className="text-[var(--wa-teal)]">{t('checkout.can_stack')}</span>
+                      {t('checkout.tap_to_toggle')} · <span className="text-[var(--wa-teal)]">{t('checkout.can_stack')}</span>
                     </p>
                     {appliedDiscounts.length > 0 && (
                       <button onClick={handleRemoveAllDiscounts} className="text-[10px] text-red-500 font-semibold">
@@ -543,7 +543,7 @@ export const CheckoutDrawer: React.FC = () => {
                         <div>
                           <p className="text-[13px] font-bold text-gray-900 dark:text-white">{discount.code}</p>
                           <p className="text-[11px] text-gray-400 mt-0.5">{discount.description}</p>
-                          {isDisabled && <p className="text-[10px] text-red-400 font-medium mt-1">Min. spend ${discount.minimumAmount?.toFixed(2)}</p>}
+                          {isDisabled && <p className="text-[10px] text-red-400 font-medium mt-1">{t('checkout.min_spend')} ${discount.minimumAmount?.toFixed(2)}</p>}
                         </div>
                         <div className="flex items-center gap-2.5 shrink-0">
                           <span className="font-mono font-bold text-[14px] text-orange-500">
@@ -599,7 +599,7 @@ export const CheckoutDrawer: React.FC = () => {
                 {isPrime && (
                   <div className="flex justify-between text-[10px] text-indigo-500">
                     <span className="font-medium">{t('checkout.prime_benefit')}</span>
-                    <span className="font-bold">-{currencySymbol}{formatPrice(effectiveBalanceUsed - actualBalanceCost)} free</span>
+                    <span className="font-bold">-{currencySymbol}{formatPrice(effectiveBalanceUsed - actualBalanceCost)} {t('checkout.free_suffix')}</span>
                   </div>
                 )}
               </div>
@@ -620,7 +620,7 @@ export const CheckoutDrawer: React.FC = () => {
               <div>
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1">{t('checkout.delivery_address')}</p>
                 <p className="text-[16px] font-semibold text-gray-900 dark:text-gray-100 mb-0.5">
-                  Long <span className="text-[13px] font-normal text-gray-400">+1 123-456-7890</span>
+                  {t('checkout.long')} <span className="text-[13px] font-normal text-gray-400">+1 123-456-7890</span>
                 </p>
                 <p className="text-[13px] text-gray-500 line-clamp-1">
                   123 Artisan Ave, New York, NY 10001
