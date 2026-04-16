@@ -342,7 +342,7 @@ class SupplyChainService:
             raw_data["backup_source_url"] = backup_source_url
 
         pricing_result = self.calculate_price(raw_data["price"], comp_price_usd or 0, category_type)
-        
+
         # v8.5: Full Pixel & Narrative Refinery (Desire Engine)
         from app.utils.proxy_manager import get_proxy_for_country
         from app.services.refinery_gateway import refinery_gateway
