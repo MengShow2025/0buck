@@ -320,3 +320,15 @@
 - 已完成：点击灰色图标弹出绑定面板，包含“连接链接 + 二维码 + 一键复制链接”。
 - 已完成：点击彩色图标弹出“确认解绑”并执行解绑。
 - 已完成：移除 `SecurityDrawer` 中临时新增的 IM 入口，避免入口重复与层级错位。
+
+## 本轮进展（第 46 批：i18n 回归稳定）
+- 已完成：语言能力收敛回当前已完整维护的双语（`zh/en`），移除设置页中未完全支持语种入口，避免“半支持语言”触发回归。
+- 已完成：`AppContext` 语言初始化改为“本地持久化优先 + 系统语言兜底”，并统一通过 `normalizeLanguage` 规范化。
+- 已完成：移除 `rtl` 动态切换路径（当前阶段仅双语，统一 `ltr`），避免布局被意外切换。
+- 已验证：前端 `npm run build` 通过（exit code 0）。
+
+## 本轮进展（第 47 批：登录态噪音与结算错误语义修复）
+- 已完成：修复未登录态 `IM bindings` 401 噪音（不再请求并清空状态；图标点击改为引导登录），消除控制台 `Failed to load IM bindings ... 401`。
+- 已完成：`payment/quote` 对“可浏览但不可结算”的商品 ID（如 Discovery 返回候选商品）返回明确业务错误 `product_not_ready_for_checkout:{id}`，替代误导性的 `product_not_found`。
+- 已验证：`/healthz` 返回 `200`；登录态 `POST /rewards/payment/quote` 对 `product_id=85` 返回 `400 product_not_ready_for_checkout:85`（符合预期语义）。
+- 已验证：前端 `npm run build` 通过（exit code 0）。

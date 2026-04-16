@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from typing import Any, Dict, List, Optional
 from decimal import Decimal
 from datetime import datetime, timedelta
@@ -15,7 +16,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.session import get_db
 from app.models.ledger import CheckinPlan, GroupBuyCampaign, Order, AvailableCoupon, ProcessedWebhookEvent
-from app.models.product import Product
+from app.models.product import Product, CandidateProduct
 from app.services.rewards import RewardsService
 from app.services.shopify_refunds import ShopifyRefundError, refund_order_full
 from app.services.checkout_idempotency import (
@@ -398,6 +399,19 @@ def _prepare_checkout_context(
             .first()
         )
         if not product:
+            candidate = (
+                db.query(CandidateProduct.id)
+                .filter(CandidateProduct.id == product_id)
+                .first()
+            )
+            if candidate:
+                raise HTTPException(status_code=400, detail=f"product_not_ready_for_checkout:{product_id}")
+            cj_row = db.execute(
+                text("SELECT id FROM cj_raw_products WHERE id = :pid LIMIT 1"),
+                {"pid": product_id},
+            ).first()
+            if cj_row:
+                raise HTTPException(status_code=400, detail=f"product_not_ready_for_checkout:{product_id}")
             raise HTTPException(status_code=400, detail=f"product_not_found:{product_id}")
         if not product.shopify_variant_id:
             raise HTTPException(status_code=400, detail=f"product_variant_missing:{product_id}")

@@ -83,6 +83,7 @@ export const SettingsDrawer: React.FC = () => {
     qrValue: string;
   }>({ open: false, platform: null, link: '', command: '', qrValue: '' });
   const [unlinkPlatform, setUnlinkPlatform] = useState<'feishu' | 'telegram' | 'whatsapp' | 'discord' | null>(null);
+  const isLoggedIn = !!user?.customer_id;
 
   const PLATFORM_META: Record<'feishu' | 'telegram' | 'whatsapp' | 'discord', { label: string; icon: React.ReactNode; linked: string; unlinked: string }> = {
     feishu: {
@@ -112,6 +113,10 @@ export const SettingsDrawer: React.FC = () => {
   };
 
   const loadBindings = async () => {
+    if (!isLoggedIn) {
+      setImBindings({});
+      return;
+    }
     try {
       const resp = await imApi.getBindings();
       const list = (resp.data?.bindings || []) as Array<{ platform: string; linked: boolean; platform_uid: string }>;
@@ -120,16 +125,25 @@ export const SettingsDrawer: React.FC = () => {
         map[item.platform] = { linked: !!item.linked, platform_uid: item.platform_uid || '' };
       });
       setImBindings(map);
-    } catch (e) {
+    } catch (e: any) {
+      if (e?.response?.status === 401) {
+        // Unauthenticated users should not trigger noisy console errors.
+        setImBindings({});
+        return;
+      }
       console.error('Failed to load IM bindings', e);
     }
   };
 
   useEffect(() => {
     loadBindings();
-  }, []);
+  }, [isLoggedIn]);
 
   const openBindPanel = async (platform: 'feishu' | 'telegram' | 'whatsapp' | 'discord') => {
+    if (!isLoggedIn) {
+      pushDrawer('auth');
+      return;
+    }
     const linked = !!imBindings[platform]?.linked;
     if (linked) {
       setUnlinkPlatform(platform);
