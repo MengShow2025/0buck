@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import { ShoppingCart, Star, TrendingUp, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import { getCheckoutBlockReasonText } from '../utils/checkoutBlockReason';
 
 interface Product {
   id: string;
@@ -38,13 +39,6 @@ export const ProductGridCard: React.FC<{ data: any }> = ({ data }) => {
     checkoutReady: p?.checkoutReady ?? p?.checkout_ready ?? true,
     checkoutBlockReason: p?.checkoutBlockReason ?? p?.checkout_block_reason,
   }));
-
-  const blockedReasonText = (reason?: string) => {
-    if (reason === 'inactive') return t('checkout.block_reason.inactive');
-    if (reason === 'missing_price') return t('checkout.block_reason.missing_price');
-    if (reason === 'not_published') return t('checkout.block_reason.not_published');
-    return t('checkout.blocked_unavailable');
-  };
 
   if (products.length === 0) return null;
 
@@ -93,7 +87,7 @@ export const ProductGridCard: React.FC<{ data: any }> = ({ data }) => {
                 pushDrawer('product_detail');
               }}
               className={`relative shrink-0 snap-start rounded-[22px] overflow-hidden transition-all duration-200 w-[160px] h-[240px] ${product.checkoutReady === false ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer active:scale-[0.96]'}`}
-              title={product.checkoutReady === false ? blockedReasonText(product.checkoutBlockReason) : undefined}
+              title={product.checkoutReady === false ? getCheckoutBlockReasonText(t, product.checkoutBlockReason) : undefined}
               style={{ boxShadow: '0 4px 20px rgba(0,0,0,0.12)' }}
             >
               {/* Full-bleed image */}
@@ -105,7 +99,7 @@ export const ProductGridCard: React.FC<{ data: any }> = ({ data }) => {
 
               {product.checkoutReady === false && (
                 <div className="absolute left-2.5 top-2.5 z-20 bg-black/55 text-white text-[9px] font-bold px-2 py-0.5 rounded-full border border-white/15">
-                  {blockedReasonText(product.checkoutBlockReason)}
+                  {getCheckoutBlockReasonText(t, product.checkoutBlockReason)}
                 </div>
               )}
 

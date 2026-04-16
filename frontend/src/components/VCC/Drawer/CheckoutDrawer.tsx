@@ -4,6 +4,7 @@ import { useAppContext } from '../AppContext';
 import { orderApi, productApi } from '../../../services/api';
 import { ShopifyCheckoutModal } from './ShopifyCheckoutModal';
 import { PaymentSuccessScreen } from './PaymentSuccessScreen';
+import { getCheckoutBlockReasonText, getCheckoutBlockedMoreItemsText } from '../utils/checkoutBlockReason';
 
 type CheckoutDiscountItem = {
   id: string;
@@ -218,13 +219,6 @@ export const CheckoutDrawer: React.FC = () => {
     return fallbackMessage || t('checkout.error.validation_failed');
   };
 
-  const mapBlockReason = (reason?: string | null) => {
-    if (reason === 'inactive') return t('checkout.block_reason.inactive');
-    if (reason === 'missing_price') return t('checkout.block_reason.missing_price');
-    if (reason === 'not_published') return t('checkout.block_reason.not_published');
-    return t('checkout.blocked_unavailable');
-  };
-
   const resolveBlockInfo = (quoteData: any, fallbackProductId: number) => {
     const ids = (quoteData?.not_ready_product_ids || []) as number[];
     const reasons = (quoteData?.not_ready_reasons || {}) as Record<string, string>;
@@ -234,11 +228,11 @@ export const CheckoutDrawer: React.FC = () => {
       reasons[String(primaryId)] ||
       null;
     const baseMessage = primaryReason
-      ? mapBlockReason(primaryReason)
+      ? getCheckoutBlockReasonText(t, primaryReason)
       : mapCheckoutError(`product_not_ready_for_checkout:${primaryId}`);
     const extraCount = Math.max(0, ids.length - 1);
     const extraSuffix = extraCount > 0
-      ? ` ${t('checkout.block_reason.more_items').replace('{count}', String(extraCount))}`
+      ? ` ${getCheckoutBlockedMoreItemsText(t, extraCount)}`
       : '';
     return {
       primaryReason,
@@ -422,7 +416,7 @@ export const CheckoutDrawer: React.FC = () => {
     if (step === 1) return t('checkout.cta_continue_address');
     if (step === 2) return t('checkout.cta_continue_payment');
     if (isPreflightChecking) return t('checkout.preflight_checking');
-    if (isCheckoutBlocked) return mapBlockReason(checkoutBlockReason);
+    if (isCheckoutBlocked) return getCheckoutBlockReasonText(t, checkoutBlockReason);
     if (isFullBalancePayment) return t('checkout.full_balance_payment');
     return `${t('checkout.place_order')} · ${currencySymbol}${formatPrice(effectiveFinalDue)}`;
   };

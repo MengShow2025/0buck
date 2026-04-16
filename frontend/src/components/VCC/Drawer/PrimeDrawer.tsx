@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Package, Search, Scale, CheckCircle2, Share2, Crown, Zap, ShieldCheck, Coins, ArrowRight, Star } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 import { productApi } from '../../../services/api';
+import { getCheckoutBlockReasonText } from '../utils/checkoutBlockReason';
 
 const MOCK_PRODUCTS = [
   {
@@ -109,13 +110,6 @@ export const PrimeDrawer: React.FC = () => {
     });
   };
 
-  const blockedReasonText = (reason?: string) => {
-    if (reason === 'inactive') return t('checkout.block_reason.inactive');
-    if (reason === 'missing_price') return t('checkout.block_reason.missing_price');
-    if (reason === 'not_published') return t('checkout.block_reason.not_published');
-    return t('checkout.blocked_unavailable');
-  };
-
   const handleShare = (e: React.MouseEvent, productId: string) => {
     e.stopPropagation();
     console.log(`Sharing product: ${productId} via Direct Referral link`);
@@ -177,7 +171,7 @@ export const PrimeDrawer: React.FC = () => {
                 pushDrawer('product_detail');
               }}
               className={`break-inside-avoid bg-white dark:bg-[#1C1C1E] rounded-[24px] overflow-hidden shadow-[0_10px_30px_-10px_rgba(0,0,0,0.1)] border border-gray-100 dark:border-white/5 flex flex-col transition-all group ${product.checkoutReady === false ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}
-              title={product.checkoutReady === false ? blockedReasonText(product.checkoutBlockReason) : undefined}
+              title={product.checkoutReady === false ? getCheckoutBlockReasonText(t, product.checkoutBlockReason) : undefined}
             >
               {/* Image (Optimized to 1:1) */}
               <div className="relative bg-gray-100 dark:bg-gray-800 overflow-hidden aspect-square">
@@ -191,7 +185,7 @@ export const PrimeDrawer: React.FC = () => {
 
                 {product.checkoutReady === false && (
                   <div className="absolute left-2 top-2 z-10 bg-black/55 text-white text-[9px] font-bold px-2 py-1 rounded-full border border-white/15">
-                    {blockedReasonText(product.checkoutBlockReason)}
+                    {getCheckoutBlockReasonText(t, product.checkoutBlockReason)}
                   </div>
                 )}
                 

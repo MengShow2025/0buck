@@ -456,3 +456,16 @@
 - 已完成：`CheckoutDrawer` 新增 `checkoutBlockReason` 状态；预检与提交前 quote 返回 `checkout_ready=false` 时优先按 `checkout_block_reason` 展示细分文案。
 - 已完成：`CheckoutDrawer` 错误映射补齐 `product_inactive` 与 `product_variant_missing`，并将 CTA 阻断文案改为原因驱动显示。
 - 已验证：后端 `python3 -m py_compile backend/app/api/rewards.py` 通过；前端 `npm run build` 通过；`GetDiagnostics` 无新增错误。
+
+
+## 本轮进展（第 66 批：多阻断原因优先级与摘要）
+- 已完成：`CheckoutDrawer` 新增 `resolveBlockInfo()`，支持按 `not_ready_product_ids` 顺序从 `not_ready_reasons` 解析首个阻断原因。
+- 已完成：当存在多个不可下单项时，阻断提示追加“另有 N 件商品不可下单 / +N more item(s) blocked”摘要，避免单原因误导。
+- 已完成：补齐 i18n 键 `checkout.block_reason.more_items`（en/zh）。
+- 已验证：前端 `npm run build` 通过，`GetDiagnostics` 无新增错误。
+
+## 本轮进展（第 67 批：block reason 映射工具收敛）
+- 已完成：新增共享工具 `frontend/src/components/VCC/utils/checkoutBlockReason.ts`，统一封装阻断原因文案与“更多项”摘要文案。
+- 已完成：`PrimeDrawer`、`ProductGridCard`、`ProductDetailDrawer`、`DesktopSocialView`、`CheckoutDrawer` 全部改为复用共享工具，移除重复映射代码。
+- 已完成：保持原有文案键不变，仅收敛实现，降低后续口径漂移与回归风险。
+- 已验证：前端 `npm run build` 通过，`GetDiagnostics` 无新增错误。
