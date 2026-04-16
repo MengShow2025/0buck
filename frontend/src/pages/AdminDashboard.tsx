@@ -311,7 +311,7 @@ const AdminDashboard: React.FC = () => {
             </h1>
             <p className="text-gray-400 font-bold mt-2 flex items-center gap-2">
               <Activity size={16} className="text-green-500" />
-              v5.3 Audit Protocol Active • {auditQueue.length} Candidates Pending
+              v8.5.8 Truth Engine Active • {auditQueue.length} Candidates Pending
             </p>
           </div>
           <div className="flex gap-3">
@@ -333,7 +333,7 @@ const AdminDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* v5.3: Summary Statistics Grid */}
+        {/* v8.5.8: Summary Statistics Grid */}
         <section className="mb-10">
           <h2 className="text-xl font-black text-gray-800 mb-6 flex items-center gap-3">
             <Activity size={20} className="text-blue-600" />
