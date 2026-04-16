@@ -345,7 +345,7 @@ class SupplyChainService:
         
         # v8.5: Full Pixel & Narrative Refinery (Desire Engine)
         from app.utils.proxy_manager import get_proxy_for_country
-from app.services.refinery_gateway import refinery_gateway
+        from app.services.refinery_gateway import refinery_gateway
         refinery_input = {
             "id": source_product_id,
             "title_en": raw_data.get("title"),
