@@ -1,9 +1,20 @@
 type Translate = (key: string) => string;
 
+export const CHECKOUT_BLOCK_REASONS = ['inactive', 'missing_price', 'not_published', 'unknown'] as const;
+export type CheckoutBlockReason = typeof CHECKOUT_BLOCK_REASONS[number];
+
+export function normalizeCheckoutBlockReason(reason?: string | null): CheckoutBlockReason | null {
+  if (!reason) return null;
+  if ((CHECKOUT_BLOCK_REASONS as readonly string[]).includes(reason)) return reason as CheckoutBlockReason;
+  return null;
+}
+
 export function getCheckoutBlockReasonText(t: Translate, reason?: string | null): string {
-  if (reason === 'inactive') return t('checkout.block_reason.inactive');
-  if (reason === 'missing_price') return t('checkout.block_reason.missing_price');
-  if (reason === 'not_published') return t('checkout.block_reason.not_published');
+  const normalized = normalizeCheckoutBlockReason(reason);
+  if (normalized === 'inactive') return t('checkout.block_reason.inactive');
+  if (normalized === 'missing_price') return t('checkout.block_reason.missing_price');
+  if (normalized === 'not_published') return t('checkout.block_reason.not_published');
+  if (normalized === 'unknown') return t('checkout.blocked_unavailable');
   return t('checkout.blocked_unavailable');
 }
 

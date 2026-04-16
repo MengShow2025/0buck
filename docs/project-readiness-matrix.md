@@ -469,3 +469,16 @@
 - 已完成：`PrimeDrawer`、`ProductGridCard`、`ProductDetailDrawer`、`DesktopSocialView`、`CheckoutDrawer` 全部改为复用共享工具，移除重复映射代码。
 - 已完成：保持原有文案键不变，仅收敛实现，降低后续口径漂移与回归风险。
 - 已验证：前端 `npm run build` 通过，`GetDiagnostics` 无新增错误。
+
+
+## 本轮进展（第 68 批：错误码到 block reason 的统一转换）
+- 已完成：在 `checkoutBlockReason` 共享工具中新增 `getCheckoutBlockReasonFromDetail()` 与 `getCheckoutBlockMessageFromDetail()`。
+- 已完成：`CheckoutDrawer.mapCheckoutError()` 改为优先调用共享转换，统一处理 `product_inactive`、`invalid_product_price`、`product_variant_missing`、`product_not_ready_for_checkout`。
+- 已完成：实现层不再散落维护多份 `product_*` 错误码映射，保障 detail/discovery/quote 与 checkout 文案口径一致。
+- 已验证：前端 `npm run build` 通过，`GetDiagnostics` 无新增错误。
+
+## 本轮进展（第 69 批：checkout_block_reason 枚举常量化）
+- 已完成：后端新增 `app/core/checkout_block_reason.py`，集中定义 `inactive/missing_price/not_published/unknown` 常量集合。
+- 已完成：`rewards.py`、`products.py`、`personalized_matrix_service.py` 全部改为引用枚举常量，不再散落硬编码字符串。
+- 已完成：前端 `checkoutBlockReason` 工具新增 `CHECKOUT_BLOCK_REASONS` 与 `normalizeCheckoutBlockReason()`，消费端按白名单枚举解析。
+- 已验证：后端 `py_compile`（4 文件）通过；前端 `npm run build` 通过；`GetDiagnostics` 无新增错误。

@@ -24,6 +24,10 @@ from app.services.checkout_idempotency import (
     normalize_checkout_submit_token,
 )
 from app.core.config import settings
+from app.core.checkout_block_reason import (
+    CHECKOUT_BLOCK_REASON_INACTIVE,
+    CHECKOUT_BLOCK_REASON_NOT_PUBLISHED,
+)
 
 
 router = APIRouter()
@@ -161,7 +165,7 @@ def evaluate_coupon_selection(
         eligible = is_active and not_expired and subtotal >= min_req
         reason = ""
         if not is_active:
-            reason = "inactive"
+            reason = CHECKOUT_BLOCK_REASON_INACTIVE
         elif not not_expired:
             reason = "expired"
         elif subtotal < min_req:
@@ -422,7 +426,7 @@ def _prepare_checkout_context(
                     subtotal += sale_price * quantity
                     sanitized_items.append({"product_id": product_id, "quantity": quantity})
                     not_ready_product_ids.append(product_id)
-                    not_ready_reasons[product_id] = "not_published"
+                    not_ready_reasons[product_id] = CHECKOUT_BLOCK_REASON_NOT_PUBLISHED
                     continue
                 raise HTTPException(status_code=400, detail=f"product_not_ready_for_checkout:{product_id}")
             try:

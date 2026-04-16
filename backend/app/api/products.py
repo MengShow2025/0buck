@@ -10,6 +10,11 @@ from app.models.product import CandidateProduct
 from app.services.cj_normalize import extract_cj_images, first_image, extract_cj_dimensions, extract_cj_weights, format_dimensions_cm, format_weight_g
 from app.api.deps import get_current_user
 from app.models.ledger import UserExt
+from app.core.checkout_block_reason import (
+    CHECKOUT_BLOCK_REASON_INACTIVE,
+    CHECKOUT_BLOCK_REASON_MISSING_PRICE,
+    CHECKOUT_BLOCK_REASON_NOT_PUBLISHED,
+)
 
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -55,7 +60,9 @@ async def get_product_detail(product_id: int, db: Session = Depends(get_db)):
             title = product.title_en or product.title_zh or "Unknown Product"
             price = float(product.sale_price or 0.0)
             checkout_ready = bool(product.is_active and (product.sale_price or 0) > 0)
-            checkout_block_reason = None if checkout_ready else ("inactive" if not product.is_active else "missing_price")
+            checkout_block_reason = None if checkout_ready else (
+                CHECKOUT_BLOCK_REASON_INACTIVE if not product.is_active else CHECKOUT_BLOCK_REASON_MISSING_PRICE
+            )
 
             return {
                 "id": product.id,
@@ -93,7 +100,7 @@ async def get_product_detail(product_id: int, db: Session = Depends(get_db)):
                 "id": candidate.id,
                 "title": title,
                 "checkout_ready": False,
-                "checkout_block_reason": "not_published",
+                "checkout_block_reason": CHECKOUT_BLOCK_REASON_NOT_PUBLISHED,
                 "price": price,
                 "original_price": original_price,
                 "image": image_url,
@@ -181,7 +188,7 @@ async def get_product_detail(product_id: int, db: Session = Depends(get_db)):
             "id": int(row.get("id")),
             "title": title,
             "checkout_ready": False,
-            "checkout_block_reason": "not_published",
+            "checkout_block_reason": CHECKOUT_BLOCK_REASON_NOT_PUBLISHED,
             "price": price,
             "original_price": price,
             "image": image_url,

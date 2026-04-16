@@ -8,6 +8,12 @@ from app.core.config import settings
 from app.core.genai_client import generate_text
 from app.models.butler import UserMemoryFact, UserButlerProfile, PersonaTemplate
 from app.models import Product
+from app.core.checkout_block_reason import (
+    CHECKOUT_BLOCK_REASON_INACTIVE,
+    CHECKOUT_BLOCK_REASON_MISSING_PRICE,
+    CHECKOUT_BLOCK_REASON_NOT_PUBLISHED,
+    CHECKOUT_BLOCK_REASON_UNKNOWN,
+)
 from app.models.product import CandidateProduct
 from app.services.vector_search import vector_search_service
 from app.services.butler_service import ButlerService
@@ -258,7 +264,7 @@ class PersonalizedMatrixService:
                 checkout_ready = is_active and sale_price > 0
                 reason = None
                 if not checkout_ready:
-                    reason = "inactive" if not is_active else "missing_price"
+                    reason = CHECKOUT_BLOCK_REASON_INACTIVE if not is_active else CHECKOUT_BLOCK_REASON_MISSING_PRICE
                 status_map[pid] = {"ready": checkout_ready, "reason": reason}
         except Exception as e:
             logger.warning(f"Checkout readiness annotation failed: {e}")
@@ -272,10 +278,10 @@ class PersonalizedMatrixService:
                     p["checkout_block_reason"] = status["reason"]
                 else:
                     p["checkout_ready"] = False
-                    p["checkout_block_reason"] = "not_published"
+                    p["checkout_block_reason"] = CHECKOUT_BLOCK_REASON_NOT_PUBLISHED
             except Exception:
                 p["checkout_ready"] = False
-                p["checkout_block_reason"] = "unknown"
+                p["checkout_block_reason"] = CHECKOUT_BLOCK_REASON_UNKNOWN
         return products
 
     def _get_user_persona_id(self, user_id: int) -> str:
