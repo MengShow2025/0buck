@@ -167,4 +167,15 @@ export const imApi = {
   buildTemplatesFromLink: (link: string) => api.post('/im/promo/cards/from-link', { link }),
 };
 
+export const adminApi = {
+  getPersonaTemplates: () => api.get('/admin/ai/persona-templates'),
+  updatePersonaTemplate: (id: string, data: any) => api.post('/admin/ai/persona-templates', { id, ...data }),
+  getUsageStats: () => api.get('/admin/ai/usage-stats'),
+  getCandidates: () => api.get('/admin/sourcing/candidates'),
+  approveCandidate: (id: string) => api.post(`/admin/sourcing/candidates/${id}/approve`),
+  rejectCandidate: (id: string) => api.post(`/admin/sourcing/candidates/${id}/reject`),
+  getKpis: () => api.get('/admin/dashboard/kpis'),
+  getBalanceSheet: () => api.get('/admin/finance/balance-sheet'),
+};
+
 export default api;

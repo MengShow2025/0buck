@@ -1,6 +1,9 @@
 import React from 'react';
 import { Routes, Route, NavLink } from 'react-router-dom';
 import { LayoutDashboard, Package, ShoppingCart, Wallet, Bot } from 'lucide-react';
+import { AIPersonaPage } from '../Pages/AIPersonaPage';
+import { ProductsPage } from '../Pages/ProductsPage';
+import { FinancePage } from '../Pages/FinancePage';
 
 const AdminSidebar = () => {
   const links = [
@@ -48,10 +51,10 @@ export const AdminLayout: React.FC = () => {
         <main className="flex-1 overflow-auto p-8">
           <Routes>
             <Route path="/" element={<h2 className="text-2xl font-black text-gray-900">Overview</h2>} />
-            <Route path="/products" element={<h2 className="text-2xl font-black text-gray-900">Products Management</h2>} />
+            <Route path="/products" element={<ProductsPage />} />
             <Route path="/orders" element={<h2 className="text-2xl font-black text-gray-900">Order Fulfillment</h2>} />
-            <Route path="/finance" element={<h2 className="text-2xl font-black text-gray-900">Finance & Rewards</h2>} />
-            <Route path="/ai" element={<h2 className="text-2xl font-black text-gray-900">AI Butler Config</h2>} />
+            <Route path="/finance" element={<FinancePage />} />
+            <Route path="/ai" element={<AIPersonaPage />} />
           </Routes>
         </main>
       </div>
