@@ -145,6 +145,8 @@ export const addressApi = {
 
 export const imApi = {
   getFeishuOauthStart: () => api.get('/im/feishu/oauth/start'),
+  createBindToken: (platform: 'feishu' | 'whatsapp' | 'telegram' | 'discord', ttlSeconds = 600) =>
+    api.post(`/im/bind-token?platform=${platform}&ttl_seconds=${ttlSeconds}`),
   getBindings: () => api.get('/im/bindings'),
   unlink: (platform: string) => api.delete(`/im/bindings/${platform}`),
   generatePromoCard: (data: {
