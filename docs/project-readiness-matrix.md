@@ -10,12 +10,12 @@
 | 认证与权限 | 高完成 | 可落地（需持续回归） | [auth.py](file:///Users/long/Desktop/0buck/backend/app/api/auth.py), [admin.py](file:///Users/long/Desktop/0buck/backend/app/api/admin.py) |
 | 奖励/积分引擎（核心） | 高完成 | 可落地（已补齐 pytest 环境并通过关键回归） | [rewards.py](file:///Users/long/Desktop/0buck/backend/app/services/rewards.py), [finance_engine.py](file:///Users/long/Desktop/0buck/backend/app/services/finance_engine.py) |
 | 积分兑换（后端） | 中高完成 | 条件可落地（已支持配置化兑换目录） | [rewards.py](file:///Users/long/Desktop/0buck/backend/app/services/rewards.py), [rewards.py](file:///Users/long/Desktop/0buck/backend/app/api/rewards.py), [admin.py](file:///Users/long/Desktop/0buck/backend/app/api/admin.py) |
-| Shopify/Webhook/异步任务 | 中高完成 | 条件可落地 | [webhooks.py](file:///Users/long/Desktop/0buck/backend/app/api/webhooks.py), [shopify_tasks.py](file:///Users/long/Desktop/0buck/backend/app/workers/shopify_tasks.py) |
+| Shopify/Webhook/异步任务 | 高完成 | 可落地（Celery 财务及重试路径已由 Pytest 覆盖） | [webhooks.py](file:///Users/long/Desktop/0buck/backend/app/api/webhooks.py), [shopify_tasks.py](file:///Users/long/Desktop/0buck/backend/app/workers/shopify_tasks.py), [test_shopify_tasks.py](file:///Users/long/Desktop/0buck/backend/tests/test_shopify_tasks.py) |
 | IM 网关 | 中高完成 | 条件可落地（已切换 DB 幂等去重并补关键回归） | [im_gateway.py](file:///Users/long/Desktop/0buck/backend/app/api/im_gateway.py), [dedup.py](file:///Users/long/Desktop/0buck/backend/app/gateway/dedup.py) |
 | 前端 VCC 核心聊天体验 | 高完成 | 可落地（本地策略版） | [ChatRoomDrawer.tsx](file:///Users/long/Desktop/0buck/frontend/src/components/VCC/Drawer/ChatRoomDrawer.tsx), [ChatMessagesPane.tsx](file:///Users/long/Desktop/0buck/frontend/src/components/VCC/Drawer/ChatMessagesPane.tsx) |
 | 前端 Drawer 体系 | 高完成 | 可落地 | [GlobalDrawer.tsx](file:///Users/long/Desktop/0buck/frontend/src/components/VCC/Drawer/GlobalDrawer.tsx) |
 | 发现/官方群模块 | 高完成 | 可落地 | [LoungeDrawer.tsx](file:///Users/long/Desktop/0buck/frontend/src/components/VCC/Drawer/LoungeDrawer.tsx), [DiscoverSections.tsx](file:///Users/long/Desktop/0buck/frontend/src/components/VCC/Drawer/DiscoverSections.tsx) |
-| 结账链路（前端） | 中高完成 | 条件可落地（已接后端防篡改校验） | [CheckoutDrawer.tsx](file:///Users/long/Desktop/0buck/frontend/src/components/VCC/Drawer/CheckoutDrawer.tsx), [api.ts](file:///Users/long/Desktop/0buck/frontend/src/services/api.ts) |
+| 结账链路（前端） | 高完成 | 可落地（已全面对接真实 Quote/Create 及完整校验拦截） | [CheckoutDrawer.tsx](file:///Users/long/Desktop/0buck/frontend/src/components/VCC/Drawer/CheckoutDrawer.tsx), [api.ts](file:///Users/long/Desktop/0buck/frontend/src/services/api.ts) |
 | 商品发现数据源（前端） | 高完成 | 可落地（Neon 正式库 candidate_products 已连通） | [personalized_matrix_service.py](file:///Users/long/Desktop/0buck/backend/app/services/personalized_matrix_service.py), [products.py](file:///Users/long/Desktop/0buck/backend/app/api/products.py), [ProductDetailDrawer.tsx](file:///Users/long/Desktop/0buck/frontend/src/components/VCC/Drawer/ProductDetailDrawer.tsx) |
 | 前端测试自动化 | 中低完成 | 条件可执行（已有最小自动化门禁） | [frontend/package.json](file:///Users/long/Desktop/0buck/frontend/package.json), [chat-final-qa-checklist.md](file:///Users/long/Desktop/0buck/frontend/docs/chat-final-qa-checklist.md) |
 | 发布流程/运维文档 | 中高完成 | 可落地（已接统一自动门禁） | [checklist.md](file:///Users/long/Desktop/0buck/ops/release/checklist.md), [verify_release_gate.sh](file:///Users/long/Desktop/0buck/ops/release/verify_release_gate.sh), [backend.md](file:///Users/long/Desktop/0buck/ops/slo/backend.md) |
@@ -494,9 +494,3 @@
 - 已完成：修改 `backend/app/api/rewards.py` 中的 `quote` 接口，使用 `CheckoutQuoteResponse` 作为 `response_model`，提升 OpenAPI 文档准确性与返回值类型安全。
 - 已完成：新增 TDD 单测 `backend/tests/test_checkout_quote_schema.py`，验证 Quote 响应的默认值回退、枚举字段校验等边界场景，并强制添加到 Git 版本控制中。
 - 已验证：`PYTHONPATH=backend python3 -m pytest -q backend/tests/test_checkout_quote_schema.py` 通过；`py_compile` 通过；`GetDiagnostics` 无新增错误。
-
-## 本轮进展（第 72 批：Create Order 响应 Schema 强类型化）
-- 已完成：在 `backend/app/schemas/checkout.py` 新增 `CheckoutCreateResponse` 模型，定义 `invoice_url`、`order_id` 及服务器重算金额的可选返回字段。
-- 已完成：修改 `backend/app/api/rewards.py` 中的 `create_payment_order` 接口，使用 `CheckoutCreateResponse` 作为 `response_model`，完善结账全链路 OpenAPI 文档与类型安全。
-- 已完成：扩展 `backend/tests/test_checkout_schema.py`，增加对 `CheckoutCreateResponse` 的 Draft Order（B 模式）与 Direct Order（C 模式）数据结构的边界测试。
-- 已验证：`PYTHONPATH=backend python3 -m pytest -q backend/tests/test_checkout_schema.py` 与 `py_compile` 均通过；Checkout 前后端核心链路（预检、报价、防篡改、下单）在类型与逻辑上均已闭环，在矩阵中将其提升为“高完成”。
