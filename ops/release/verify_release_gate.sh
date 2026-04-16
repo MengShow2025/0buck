@@ -23,7 +23,18 @@ echo "[gate] run backend pytest key suite"
   "${ROOT_DIR}/backend/tests/test_coupon_stacking_rules.py" \
   "${ROOT_DIR}/backend/tests/test_checkout_idempotency.py" \
   "${ROOT_DIR}/backend/tests/test_db_url_normalization.py" \
+  "${ROOT_DIR}/backend/tests/test_shopify_tasks.py" \
+  "${ROOT_DIR}/backend/tests/test_im_tasks.py" \
+  "${ROOT_DIR}/backend/tests/test_rewards_points.py" \
+  "${ROOT_DIR}/backend/tests/test_checkout_schema.py" \
+  "${ROOT_DIR}/backend/tests/test_checkout_block_reason_schema.py" \
   -q
+
+echo "[gate] run frontend vitest suite"
+(
+  cd "${ROOT_DIR}/frontend"
+  npm run test -- --run
+)
 
 echo "[gate] build frontend"
 (
