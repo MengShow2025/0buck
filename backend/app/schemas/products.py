@@ -1,17 +1,32 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional
+from decimal import Decimal
 
-class ProductItem(BaseModel):
-    id: Any
+class ProductBase(BaseModel):
     title: str
-    price: float
-    image: Optional[str] = None
-    original_price: Optional[float] = None
-    category_type: Optional[str] = None # 'TRAFFIC', 'PROFIT'
-    strategy_tag: Optional[str] = None
+    price: Decimal
+    original_price: Decimal
+    image: str
+    supplier: str
+    category: str
+
+class ProductResponse(ProductBase):
+    id: int
+    checkout_ready: bool = False
+    is_c2w: bool = False
+    c2w_target: Optional[int] = None
+    c2w_current: Optional[int] = None
+    attributes: Dict[str, Any]
+    structural_data: Dict[str, Any]
+
+class ProductDetailResponse(ProductResponse):
+    optimized_content: Dict[str, Any] # { "pain_points": [], "magic_moments": [] }
+    mirror_assets: List[str]
+    warehouse_anchor: Optional[str] = "CN"
+    inventory: Optional[int] = 0
 
 class DiscoveryResponse(BaseModel):
-    products: List[ProductItem]
+    products: List[ProductResponse]
     butler_greeting: str
     highlight_index: int = 0
     persona_id: str = "default"

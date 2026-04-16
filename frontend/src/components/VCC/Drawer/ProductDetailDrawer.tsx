@@ -99,6 +99,7 @@ export const ProductDetailDrawer: React.FC = () => {
 
     return {
       id: String(detail.id ?? selectedProductId ?? '1'),
+      checkoutReady: Boolean(detail.checkout_ready ?? true),
       type: 'normal',
       title: String(detail.title ?? '-'),
       dimensions: String(detail.structural_data?.dimensions ?? '-'),
@@ -114,6 +115,8 @@ export const ProductDetailDrawer: React.FC = () => {
       location: '-',
       joined: '-',
       images: safeImages,
+      warehouse_anchor: String(detail.warehouse_anchor ?? 'CN'),
+      inventory: Number(detail.inventory ?? 0),
       variations: safeImages.map((img: string, idx: number) => ({
         name: variationNames[idx] ?? `Option ${idx + 1}`,
         price: String(Number.isFinite(priceNum) ? priceNum : 0),
@@ -444,6 +447,44 @@ export const ProductDetailDrawer: React.FC = () => {
         </div>
       </div>
 
+      {/* 2.5 Fulfillment Route (v8.0 Truth Protocol) */}
+      <div className="mt-2 bg-white dark:bg-[#1C1C1E] p-5">
+        <div className="border border-gray-100 dark:border-white/10 rounded-2xl overflow-hidden">
+          <div className="bg-gray-50 dark:bg-white/5 px-4 py-2 border-b border-gray-100 dark:border-white/10 flex items-center justify-between">
+            <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Fulfillment Route</span>
+            <div className="flex items-center gap-1.5">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-[10px] text-green-600 font-black uppercase">Verified Inventory</span>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 divide-x divide-gray-100 dark:divide-white/10">
+            <div className="p-4">
+              <span className="block text-[10px] text-gray-400 font-bold uppercase mb-1">Origin</span>
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-orange-500" />
+                <span className="text-[14px] font-black text-gray-900 dark:text-white uppercase">{product.warehouse_anchor}</span>
+              </div>
+            </div>
+            <div className="p-4">
+              <span className="block text-[10px] text-gray-400 font-bold uppercase mb-1">Speed</span>
+              <div className="flex items-center gap-2">
+                <Timer className="w-4 h-4 text-orange-500" />
+                <span className="text-[14px] font-black text-gray-900 dark:text-white">{product.shipping.time}</span>
+              </div>
+            </div>
+          </div>
+          <div className="bg-orange-500/5 dark:bg-orange-500/10 px-4 py-3 flex items-start gap-3">
+            <ShieldCheck className="w-4 h-4 text-orange-600 shrink-0 mt-0.5" />
+            <div className="space-y-0.5">
+              <span className="block text-[11px] font-black text-orange-600 uppercase tracking-tight">Truth Protocol v8.0</span>
+              <p className="text-[10px] text-gray-500 dark:text-gray-400 leading-relaxed font-medium">
+                Verified local inventory. Ships directly from source to minimize carbon & cost. No ghost stock.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* 3. Shipping & Quantity */}
       <div className="mt-2 bg-white dark:bg-[#1C1C1E] divide-y divide-gray-50 dark:divide-white/5">
         <div className="px-5 py-4 flex items-center justify-between">
@@ -683,12 +724,16 @@ export const ProductDetailDrawer: React.FC = () => {
           {product.type === 'normal' ? t('product.add_to_cart') : t('product.add_to_wishlist')}
         </button>
         <button
-          onClick={() => setActiveDrawer('checkout')}
-          className="flex-1 h-16 rounded-[32px] text-white font-semibold text-[16px] active:scale-95 transition-all border border-white/20 flex items-center justify-center gap-2"
+          onClick={() => product.checkoutReady && setActiveDrawer('checkout')}
+          disabled={!product.checkoutReady}
+          className={`flex-1 h-16 rounded-[32px] text-white font-semibold text-[16px] transition-all border border-white/20 flex items-center justify-center gap-2 ${product.checkoutReady ? 'active:scale-95' : 'opacity-60 cursor-not-allowed'}`}
           style={{ background: 'linear-gradient(135deg, #FF7A3D 0%, #E8450A 100%)', boxShadow: '0 15px 30px -10px rgba(232,69,10,0.50)' }}
+          title={product.checkoutReady ? undefined : t('checkout.blocked_unavailable')}
         >
           <Zap className="w-5 h-5 fill-current" />
-          {product.type === 'presale' ? t('product.participate_presale') : product.type === 'crowdfunding' ? t('product.support_crowdfunding') : t('product.buy_now')}
+          {product.checkoutReady
+            ? (product.type === 'presale' ? t('product.participate_presale') : product.type === 'crowdfunding' ? t('product.support_crowdfunding') : t('product.buy_now'))
+            : t('checkout.blocked_unavailable')}
         </button>
       </div>
     </div>

@@ -58,6 +58,7 @@ async def get_product_detail(product_id: int, db: Session = Depends(get_db)):
             return {
                 "id": product.id,
                 "title": title,
+                "checkout_ready": bool(product.is_active and (product.sale_price or 0) > 0),
                 "price": price,
                 "original_price": float(product.original_price or product.sale_price or 0.0),
                 "image": image_url,
@@ -88,6 +89,7 @@ async def get_product_detail(product_id: int, db: Session = Depends(get_db)):
             return {
                 "id": candidate.id,
                 "title": title,
+                "checkout_ready": False,
                 "price": price,
                 "original_price": original_price,
                 "image": image_url,
@@ -174,6 +176,7 @@ async def get_product_detail(product_id: int, db: Session = Depends(get_db)):
         return {
             "id": int(row.get("id")),
             "title": title,
+            "checkout_ready": False,
             "price": price,
             "original_price": price,
             "image": image_url,

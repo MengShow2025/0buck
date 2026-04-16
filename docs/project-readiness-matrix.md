@@ -420,3 +420,15 @@
 - 已定位并修复：`product_id=35` 触发 `quote 500` 的根因是查询 `cj_raw_products` 表在部分库不存在导致未捕获异常。
 - 已完成：`rewards.py` 与 `products.py` 对 `cj_raw_products` 缺表场景增加 `SQLAlchemyError` 兜底，避免抛出 500，降级为业务可解释错误（`product_not_found`/`404`）。
 - 已验证：`python3 -m py_compile backend/app/api/rewards.py backend/app/api/products.py` 通过，`GetDiagnostics` 无新增错误。
+
+## 本轮进展（第 60 批：Quote 可报不可下单的前移门禁）
+- 已完成：后端 `payment/quote` 增加可下单状态回传字段（`checkout_ready`、`not_ready_product_ids`），用于区分“可估价”与“可创建订单”。
+- 已完成：前端 `CheckoutDrawer` 在预检与最终提交前统一读取上述字段；当 `checkout_ready=false` 时立即阻断提交并展示业务提示，不再走到 `create-order` 才失败。
+- 已验证：后端 `python3 -m py_compile backend/app/api/rewards.py` 通过；前端 `npm run build` 通过；`GetDiagnostics` 无新增错误。
+
+## 本轮进展（第 61 批：发现流/详情页可下单打标）
+- 已完成：`products` schema 增加 `checkout_ready` 字段（默认 `false`），为发现流与详情页统一提供可下单标识。
+- 已完成：`PersonalizedMatrixService` 对 discovery 结果按 `products` 表真实可结算条件（`is_active=true` 且 `sale_price>0`）回填 `checkout_ready`。
+- 已完成：`/products/{id}` 详情接口在 Product/Candidate/CJ 三路返回中补充 `checkout_ready`（仅正式可结算 Product 为 `true`）。
+- 已完成：前端 `ProductDetailDrawer` 的购买按钮按 `checkoutReady` 前置门禁，不可下单商品直接禁用并提示“当前商品暂不可下单”。
+- 已验证：后端 `py_compile` 与前端 `npm run build` 通过，`GetDiagnostics` 无新增错误。
