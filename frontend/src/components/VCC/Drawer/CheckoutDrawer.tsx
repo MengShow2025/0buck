@@ -4,7 +4,11 @@ import { useAppContext } from '../AppContext';
 import { orderApi, productApi } from '../../../services/api';
 import { ShopifyCheckoutModal } from './ShopifyCheckoutModal';
 import { PaymentSuccessScreen } from './PaymentSuccessScreen';
-import { getCheckoutBlockReasonText, getCheckoutBlockedMoreItemsText } from '../utils/checkoutBlockReason';
+import {
+  getCheckoutBlockReasonText,
+  getCheckoutBlockedMoreItemsText,
+  getCheckoutBlockMessageFromDetail,
+} from '../utils/checkoutBlockReason';
 
 type CheckoutDiscountItem = {
   id: string;
@@ -207,10 +211,8 @@ export const CheckoutDrawer: React.FC = () => {
     (crypto.randomUUID().replace(/-/g, '') + '00000000000000000000000000000000').slice(0, 32);
 
   const mapCheckoutError = (detail: string, fallbackMessage?: string) => {
-    if (detail.startsWith('product_inactive')) return t('checkout.block_reason.inactive');
-    if (detail.startsWith('product_not_ready_for_checkout')) return t('checkout.error.product_not_ready');
-    if (detail.startsWith('product_variant_missing')) return t('checkout.block_reason.not_published');
-    if (detail.startsWith('invalid_product_price')) return t('checkout.error.invalid_product_price');
+    const mappedBlock = getCheckoutBlockMessageFromDetail(t, detail);
+    if (mappedBlock) return mappedBlock;
     if (detail.startsWith('product_not_found')) return t('checkout.error.product_not_found');
     if (detail.startsWith('quote_')) return t('checkout.error.quote_invalid');
     if (detail.startsWith('duplicate_checkout_submission')) return t('checkout.error.duplicate_submission');
