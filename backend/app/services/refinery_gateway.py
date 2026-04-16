@@ -179,7 +179,7 @@ class CopywritingService:
             chip_audit=raw_data.get("chip_audit", "Verified Standard"),
             physical_weight=raw_data.get("physical_weight", "N/A"),
             count_audit=raw_data.get("count_audit", "N/A"),
-            0buck_id=raw_data.get("id", "0B-PENDING"),
+            obuck_id=raw_data.get("id", "0B-PENDING"),
             merchant_credentials=merchant_creds,
             warehouse_location=raw_data.get('warehouse_anchor', 'US Global Hub')
         )

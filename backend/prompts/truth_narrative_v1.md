@@ -56,7 +56,7 @@ A bulleted list of 100% verified physical parameters.
 - **Components**: {count_audit}
 
 #### 4. 0Buck Truth Audit Log
-"Asset Lineage: Verified (0Buck-ID: {0buck_id})"
+"Asset Lineage: Verified (0Buck-ID: {obuck_id})"
 "Visual Fingerprint: MD5 Locked"
 "Status: 0Buck Verified Artisan"
 
