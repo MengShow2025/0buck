@@ -54,11 +54,14 @@ async def get_product_detail(product_id: int, db: Session = Depends(get_db)):
 
             title = product.title_en or product.title_zh or "Unknown Product"
             price = float(product.sale_price or 0.0)
+            checkout_ready = bool(product.is_active and (product.sale_price or 0) > 0)
+            checkout_block_reason = None if checkout_ready else ("inactive" if not product.is_active else "missing_price")
 
             return {
                 "id": product.id,
                 "title": title,
-                "checkout_ready": bool(product.is_active and (product.sale_price or 0) > 0),
+                "checkout_ready": checkout_ready,
+                "checkout_block_reason": checkout_block_reason,
                 "price": price,
                 "original_price": float(product.original_price or product.sale_price or 0.0),
                 "image": image_url,
@@ -90,6 +93,7 @@ async def get_product_detail(product_id: int, db: Session = Depends(get_db)):
                 "id": candidate.id,
                 "title": title,
                 "checkout_ready": False,
+                "checkout_block_reason": "not_published",
                 "price": price,
                 "original_price": original_price,
                 "image": image_url,
@@ -177,6 +181,7 @@ async def get_product_detail(product_id: int, db: Session = Depends(get_db)):
             "id": int(row.get("id")),
             "title": title,
             "checkout_ready": False,
+            "checkout_block_reason": "not_published",
             "price": price,
             "original_price": price,
             "image": image_url,

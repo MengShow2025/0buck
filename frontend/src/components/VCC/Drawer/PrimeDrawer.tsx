@@ -82,6 +82,7 @@ export const PrimeDrawer: React.FC = () => {
           return {
             ...p,
             checkoutReady: p?.checkout_ready !== false,
+            checkoutBlockReason: p?.checkout_block_reason,
             price: Number.isFinite(price) ? price : 0,
             originalPrice: Number.isFinite(originalPrice) ? originalPrice : (Number.isFinite(price) ? price : 0),
             dimensions: p?.dimensions ?? p?.structural_data?.dimensions ?? '-',
@@ -106,6 +107,13 @@ export const PrimeDrawer: React.FC = () => {
       minimumFractionDigits: currency === 'JPY' ? 0 : 2,
       maximumFractionDigits: currency === 'JPY' ? 0 : 2
     });
+  };
+
+  const blockedReasonText = (reason?: string) => {
+    if (reason === 'inactive') return t('checkout.block_reason.inactive');
+    if (reason === 'missing_price') return t('checkout.block_reason.missing_price');
+    if (reason === 'not_published') return t('checkout.block_reason.not_published');
+    return t('checkout.blocked_unavailable');
   };
 
   const handleShare = (e: React.MouseEvent, productId: string) => {
@@ -169,7 +177,7 @@ export const PrimeDrawer: React.FC = () => {
                 pushDrawer('product_detail');
               }}
               className={`break-inside-avoid bg-white dark:bg-[#1C1C1E] rounded-[24px] overflow-hidden shadow-[0_10px_30px_-10px_rgba(0,0,0,0.1)] border border-gray-100 dark:border-white/5 flex flex-col transition-all group ${product.checkoutReady === false ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer active:scale-95'}`}
-              title={product.checkoutReady === false ? t('checkout.blocked_unavailable') : undefined}
+              title={product.checkoutReady === false ? blockedReasonText(product.checkoutBlockReason) : undefined}
             >
               {/* Image (Optimized to 1:1) */}
               <div className="relative bg-gray-100 dark:bg-gray-800 overflow-hidden aspect-square">
@@ -183,7 +191,7 @@ export const PrimeDrawer: React.FC = () => {
 
                 {product.checkoutReady === false && (
                   <div className="absolute left-2 top-2 z-10 bg-black/55 text-white text-[9px] font-bold px-2 py-1 rounded-full border border-white/15">
-                    {t('checkout.blocked_unavailable')}
+                    {blockedReasonText(product.checkoutBlockReason)}
                   </div>
                 )}
                 

@@ -100,6 +100,7 @@ export const ProductDetailDrawer: React.FC = () => {
     return {
       id: String(detail.id ?? selectedProductId ?? '1'),
       checkoutReady: Boolean(detail.checkout_ready ?? true),
+      checkoutBlockReason: String(detail.checkout_block_reason ?? ''),
       type: 'normal',
       title: String(detail.title ?? '-'),
       dimensions: String(detail.structural_data?.dimensions ?? '-'),
@@ -138,6 +139,12 @@ export const ProductDetailDrawer: React.FC = () => {
   }, [detail, selectedProductId, t]);
 
   const isCampaign = product.type === 'presale' || product.type === 'crowdfunding';
+  const blockedReasonText = (reason?: string) => {
+    if (reason === 'inactive') return t('checkout.block_reason.inactive');
+    if (reason === 'missing_price') return t('checkout.block_reason.missing_price');
+    if (reason === 'not_published') return t('checkout.block_reason.not_published');
+    return t('checkout.blocked_unavailable');
+  };
   const themeBg = isCampaign ? 'bg-orange-600' : 'bg-[#E8450A]';
   const themeBorder = isCampaign ? 'border-orange-600' : 'border-[#E8450A]';
   const themeText = isCampaign ? 'text-orange-600' : 'text-[#E8450A]';
@@ -728,12 +735,12 @@ export const ProductDetailDrawer: React.FC = () => {
           disabled={!product.checkoutReady}
           className={`flex-1 h-16 rounded-[32px] text-white font-semibold text-[16px] transition-all border border-white/20 flex items-center justify-center gap-2 ${product.checkoutReady ? 'active:scale-95' : 'opacity-60 cursor-not-allowed'}`}
           style={{ background: 'linear-gradient(135deg, #FF7A3D 0%, #E8450A 100%)', boxShadow: '0 15px 30px -10px rgba(232,69,10,0.50)' }}
-          title={product.checkoutReady ? undefined : t('checkout.blocked_unavailable')}
+          title={product.checkoutReady ? undefined : blockedReasonText(product.checkoutBlockReason)}
         >
           <Zap className="w-5 h-5 fill-current" />
           {product.checkoutReady
             ? (product.type === 'presale' ? t('product.participate_presale') : product.type === 'crowdfunding' ? t('product.support_crowdfunding') : t('product.buy_now'))
-            : t('checkout.blocked_unavailable')}
+            : blockedReasonText(product.checkoutBlockReason)}
         </button>
       </div>
     </div>

@@ -13,6 +13,7 @@ class ProductBase(BaseModel):
 class ProductResponse(ProductBase):
     id: int
     checkout_ready: bool = False
+    checkout_block_reason: Optional[str] = None
     is_c2w: bool = False
     c2w_target: Optional[int] = None
     c2w_current: Optional[int] = None

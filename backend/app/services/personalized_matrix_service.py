@@ -244,22 +244,38 @@ class PersonalizedMatrixService:
         if not ids:
             return products
 
-        ready_ids = set()
+        status_map: Dict[int, Dict[str, Any]] = {}
         try:
             rows = (
-                self.db.query(Product.id)
-                .filter(Product.id.in_(ids), Product.is_active == True, Product.sale_price > 0)
+                self.db.query(Product.id, Product.is_active, Product.sale_price)
+                .filter(Product.id.in_(ids))
                 .all()
             )
-            ready_ids = {int(r[0]) for r in rows}
+            for r in rows:
+                pid = int(r[0])
+                is_active = bool(r[1])
+                sale_price = float(r[2] or 0)
+                checkout_ready = is_active and sale_price > 0
+                reason = None
+                if not checkout_ready:
+                    reason = "inactive" if not is_active else "missing_price"
+                status_map[pid] = {"ready": checkout_ready, "reason": reason}
         except Exception as e:
             logger.warning(f"Checkout readiness annotation failed: {e}")
 
         for p in products:
             try:
-                p["checkout_ready"] = int(p.get("id")) in ready_ids
+                pid = int(p.get("id"))
+                status = status_map.get(pid)
+                if status:
+                    p["checkout_ready"] = bool(status["ready"])
+                    p["checkout_block_reason"] = status["reason"]
+                else:
+                    p["checkout_ready"] = False
+                    p["checkout_block_reason"] = "not_published"
             except Exception:
                 p["checkout_ready"] = False
+                p["checkout_block_reason"] = "unknown"
         return products
 
     def _get_user_persona_id(self, user_id: int) -> str:
