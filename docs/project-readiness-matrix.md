@@ -501,3 +501,10 @@
 - 已完成：编写了工具函数单元测试 `checkoutBlockReason.test.ts`，验证了不同不可下单原因到 i18n 翻译键的正确映射逻辑。
 - 已完成：编写了 React 组件测试 `BongoCat.test.tsx`，验证了组件在无头浏览器环境下的正确渲染。
 - 已验证：`npm run test` 在前端项目成功执行（4 passed），构建了前端 TDD/自动化回归的基础设施。
+
+## 本轮进展（第 75 批：IM Gateway 任务可靠性测试）
+- 已完成：针对 IM 网关异步消费队列，新增了 `backend/tests/test_im_tasks.py` 单测。
+- 已完成：测试了 `im_brain_process_task` 的常规平台分发（Telegram 等），验证了底层 `asyncio.run` 与 `generic_brain_process` 的参数传递正确性。
+- 已完成：测试了未知平台名（fallback 到默认平台）的处理边界。
+- 已完成：测试了 LLM 超时或出错时的 Celery `@retry` 机制重试抛出。
+- 已验证：`PYTHONPATH=backend python3 -m pytest backend/tests/test_im_tasks.py` 全部通过（3 passed）。这补齐了 IM 多平台网关在排队消费场景下的测试防线，状态提级为“高完成”。
