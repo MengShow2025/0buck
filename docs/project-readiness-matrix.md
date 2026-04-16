@@ -482,3 +482,9 @@
 - 已完成：`rewards.py`、`products.py`、`personalized_matrix_service.py` 全部改为引用枚举常量，不再散落硬编码字符串。
 - 已完成：前端 `checkoutBlockReason` 工具新增 `CHECKOUT_BLOCK_REASONS` 与 `normalizeCheckoutBlockReason()`，消费端按白名单枚举解析。
 - 已验证：后端 `py_compile`（4 文件）通过；前端 `npm run build` 通过；`GetDiagnostics` 无新增错误。
+
+## 本轮进展（第 70 批：Schema 枚举约束 + 回归单测）
+- 已完成：后端新增 `CheckoutBlockReason` 枚举类型，并在 `ProductResponse.checkout_block_reason` 上启用 schema 级枚举约束（OpenAPI/校验同步生效）。
+- 已完成：新增单测 `backend/tests/test_checkout_block_reason_schema.py`，覆盖“非法 reason 拒绝 + 合法 reason 通过”。
+- 已验证：`PYTHONPATH=backend python3 -m pytest -q backend/tests/test_checkout_block_reason_schema.py` 通过（2 passed）。
+- 已验证：`python3 -m py_compile backend/app/core/checkout_block_reason.py backend/app/schemas/products.py` 通过，`GetDiagnostics` 无新增错误。
