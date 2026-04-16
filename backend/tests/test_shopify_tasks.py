@@ -89,3 +89,17 @@ def test_process_paid_order_success(
     mock_rewards_instance.init_checkin_plan.assert_called_once_with(
         999, 12345, Decimal('50.00'), 'UTC'
     )
+
+def test_process_paid_order_retry_on_db_error(mock_db_session, sample_payload):
+    mock_db_session.commit.side_effect = Exception("DB Connection Lost")
+    
+    # We can patch the retry method on the celery task object
+    with patch('app.workers.shopify_tasks.process_paid_order.retry') as mock_retry:
+        mock_retry.side_effect = Exception("RetryTriggered")
+        
+        with pytest.raises(Exception, match="RetryTriggered"):
+            # Calling the task directly. Celery handles injecting 'self' for bound tasks 
+            # when called directly in recent versions, but if not, it will throw TypeError.
+            process_paid_order(sample_payload)
+            
+        mock_db_session.rollback.assert_called()
