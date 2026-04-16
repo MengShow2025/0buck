@@ -386,6 +386,7 @@ def _prepare_checkout_context(
 
     sanitized_items: List[Dict[str, Any]] = []
     not_ready_product_ids: List[int] = []
+    not_ready_reasons: Dict[int, str] = {}
     subtotal = Decimal("0")
     for item in raw_items:
         try:
@@ -401,6 +402,13 @@ def _prepare_checkout_context(
             .first()
         )
         if not product:
+            product_any = (
+                db.query(Product.id, Product.is_active)
+                .filter(Product.id == product_id)
+                .first()
+            )
+            if product_any and not bool(product_any.is_active):
+                raise HTTPException(status_code=400, detail=f"product_inactive:{product_id}")
             candidate = (
                 db.query(CandidateProduct.id, CandidateProduct.estimated_sale_price, CandidateProduct.comp_price_usd)
                 .filter(CandidateProduct.id == product_id)
@@ -414,6 +422,7 @@ def _prepare_checkout_context(
                     subtotal += sale_price * quantity
                     sanitized_items.append({"product_id": product_id, "quantity": quantity})
                     not_ready_product_ids.append(product_id)
+                    not_ready_reasons[product_id] = "not_published"
                     continue
                 raise HTTPException(status_code=400, detail=f"product_not_ready_for_checkout:{product_id}")
             try:
@@ -477,6 +486,7 @@ def _prepare_checkout_context(
         "sanitized_items": sanitized_items,
         "checkout_ready": len(not_ready_product_ids) == 0,
         "not_ready_product_ids": not_ready_product_ids,
+        "not_ready_reasons": not_ready_reasons,
         "item_fingerprint": _checkout_items_fingerprint(sanitized_items),
         "subtotal": subtotal,
         "balance_used": balance_used,
@@ -1281,6 +1291,8 @@ def create_checkout_quote(
         "expires_in_seconds": 300,
         "checkout_ready": bool(ctx["checkout_ready"]),
         "not_ready_product_ids": ctx["not_ready_product_ids"],
+        "not_ready_reasons": ctx["not_ready_reasons"],
+        "checkout_block_reason": (ctx["not_ready_reasons"].get(ctx["not_ready_product_ids"][0]) if ctx["not_ready_product_ids"] else None),
         "summary": {
             "subtotal": float(ctx["subtotal"]),
             "coupon_discount": float(ctx["coupon_discount"]),

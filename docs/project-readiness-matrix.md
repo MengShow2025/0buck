@@ -444,3 +444,15 @@
 - 已完成：`DesktopSocialView` 的 Live C2W 商品入口接入同一门禁策略，不可下单时禁点并显示 `checkout.blocked_unavailable` 提示。
 - 已完成：新文案复用现有 i18n key，避免引入新的硬编码文案。
 - 已验证：前端 `npm run build` 通过，`GetDiagnostics` 无新增错误。
+
+## 本轮进展（第 64 批：不可下单原因细分透传）
+- 已完成：后端 discovery/detail 增加 `checkout_block_reason` 字段，按规则细分为 `inactive`、`missing_price`、`not_published`。
+- 已完成：前端 `PrimeDrawer`、`ProductGridCard`、`ProductDetailDrawer`、`DesktopSocialView` 接入原因文案映射，不再统一显示泛化“暂不可下单”。
+- 已完成：补齐 i18n 键（`checkout.block_reason.inactive|missing_price|not_published`）中英文文案。
+- 已验证：后端 `py_compile` 通过；前端 `npm run build` 通过；`GetDiagnostics` 无新增错误。
+
+## 本轮进展（第 65 批：Checkout 预检口径与 block_reason 对齐）
+- 已完成：后端 `payment/quote` 返回 `checkout_block_reason`（并带 `not_ready_reasons`），在候选商品估价场景可直接给出阻断原因。
+- 已完成：`CheckoutDrawer` 新增 `checkoutBlockReason` 状态；预检与提交前 quote 返回 `checkout_ready=false` 时优先按 `checkout_block_reason` 展示细分文案。
+- 已完成：`CheckoutDrawer` 错误映射补齐 `product_inactive` 与 `product_variant_missing`，并将 CTA 阻断文案改为原因驱动显示。
+- 已验证：后端 `python3 -m py_compile backend/app/api/rewards.py` 通过；前端 `npm run build` 通过；`GetDiagnostics` 无新增错误。

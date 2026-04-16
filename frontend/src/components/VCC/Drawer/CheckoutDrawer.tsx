@@ -93,6 +93,7 @@ export const CheckoutDrawer: React.FC = () => {
   const [balanceDeduction, setBalanceDeduction] = useState(0);
   const [actualBalanceCost, setActualBalanceCost] = useState(0);
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutBlockReason, setCheckoutBlockReason] = useState<string | null>(null);
   const [isPreflightChecking, setIsPreflightChecking] = useState(false);
   const [isCheckoutBlocked, setIsCheckoutBlocked] = useState(false);
   const [quoteSummary, setQuoteSummary] = useState<{
@@ -205,7 +206,9 @@ export const CheckoutDrawer: React.FC = () => {
     (crypto.randomUUID().replace(/-/g, '') + '00000000000000000000000000000000').slice(0, 32);
 
   const mapCheckoutError = (detail: string, fallbackMessage?: string) => {
+    if (detail.startsWith('product_inactive')) return t('checkout.block_reason.inactive');
     if (detail.startsWith('product_not_ready_for_checkout')) return t('checkout.error.product_not_ready');
+    if (detail.startsWith('product_variant_missing')) return t('checkout.block_reason.not_published');
     if (detail.startsWith('invalid_product_price')) return t('checkout.error.invalid_product_price');
     if (detail.startsWith('product_not_found')) return t('checkout.error.product_not_found');
     if (detail.startsWith('quote_')) return t('checkout.error.quote_invalid');
@@ -213,6 +216,13 @@ export const CheckoutDrawer: React.FC = () => {
     if (detail.startsWith('insufficient_balance_for_full_payment')) return t('checkout.error.insufficient_balance');
     if (detail.startsWith('not_authenticated') || detail.startsWith('unauthorized')) return t('checkout.error.auth_required');
     return fallbackMessage || t('checkout.error.validation_failed');
+  };
+
+  const mapBlockReason = (reason?: string | null) => {
+    if (reason === 'inactive') return t('checkout.block_reason.inactive');
+    if (reason === 'missing_price') return t('checkout.block_reason.missing_price');
+    if (reason === 'not_published') return t('checkout.block_reason.not_published');
+    return t('checkout.blocked_unavailable');
   };
 
   useEffect(() => {
@@ -231,6 +241,7 @@ export const CheckoutDrawer: React.FC = () => {
         if (!active) return;
         const checkoutReady = quoteResp?.data?.checkout_ready !== false;
         const notReadyIds = (quoteResp?.data?.not_ready_product_ids || []) as number[];
+        const quoteBlockReason = (quoteResp?.data?.checkout_block_reason || null) as string | null;
         const summary = quoteResp?.data?.summary;
         if (summary) {
           setQuoteSummary({
@@ -245,15 +256,18 @@ export const CheckoutDrawer: React.FC = () => {
         if (!checkoutReady) {
           const blockedId = notReadyIds[0] ?? checkoutProductId;
           setIsCheckoutBlocked(true);
-          setCheckoutError(mapCheckoutError(`product_not_ready_for_checkout:${blockedId}`));
+          setCheckoutBlockReason(quoteBlockReason);
+          setCheckoutError(quoteBlockReason ? mapBlockReason(quoteBlockReason) : mapCheckoutError(`product_not_ready_for_checkout:${blockedId}`));
         } else {
           setIsCheckoutBlocked(false);
+          setCheckoutBlockReason(null);
           setCheckoutError(null);
         }
       } catch (error: any) {
         if (!active) return;
         const detail = String(error?.response?.data?.detail || '');
         setIsCheckoutBlocked(true);
+        setCheckoutBlockReason(null);
         setQuoteSummary(null);
         setCheckoutError(mapCheckoutError(detail));
       } finally {
@@ -316,8 +330,10 @@ export const CheckoutDrawer: React.FC = () => {
       }
       if (quoteResp?.data?.checkout_ready === false) {
         const notReadyIds = (quoteResp?.data?.not_ready_product_ids || []) as number[];
+        const quoteBlockReason = (quoteResp?.data?.checkout_block_reason || null) as string | null;
         const blockedId = notReadyIds[0] ?? checkoutProductId;
-        setCheckoutError(mapCheckoutError(`product_not_ready_for_checkout:${blockedId}`));
+        setCheckoutBlockReason(quoteBlockReason);
+        setCheckoutError(quoteBlockReason ? mapBlockReason(quoteBlockReason) : mapCheckoutError(`product_not_ready_for_checkout:${blockedId}`));
         setIsCheckoutBlocked(true);
         return;
       }
@@ -363,6 +379,7 @@ export const CheckoutDrawer: React.FC = () => {
         : message.includes('create_order_missing_redirect')
         ? t('checkout.error.create_order_missing_redirect')
         : undefined;
+      setCheckoutBlockReason(null);
       setCheckoutError(mapCheckoutError(detail, fallback));
       console.error('Checkout failed:', error);
     } finally {
@@ -388,7 +405,7 @@ export const CheckoutDrawer: React.FC = () => {
     if (step === 1) return t('checkout.cta_continue_address');
     if (step === 2) return t('checkout.cta_continue_payment');
     if (isPreflightChecking) return t('checkout.preflight_checking');
-    if (isCheckoutBlocked) return t('checkout.blocked_unavailable');
+    if (isCheckoutBlocked) return mapBlockReason(checkoutBlockReason);
     if (isFullBalancePayment) return t('checkout.full_balance_payment');
     return `${t('checkout.place_order')} · ${currencySymbol}${formatPrice(effectiveFinalDue)}`;
   };
