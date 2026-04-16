@@ -272,7 +272,7 @@ class SupplyChainService:
                            category_name: str = None, primary_image: str = None, variant_images: List[str] = None, detail_images_html: str = None,
                            sell_price: float = None, variant_sell_price: float = None, dimensions_display: str = None, weight_display: str = None,
                            freight_fee: float = None, shipping_days: str = None, warehouse_anchor: str = None,
-                           variant_sku: str = None, variant_key: str = None):
+                           variant_sku: str = None, variant_key: str = None, brand_tax_percent: str = None):
         """
         v8.5: Alibaba-First Strategic Sync.
         Prioritizes Alibaba ICBU (App Key: 507580) as the primary Truth source.
