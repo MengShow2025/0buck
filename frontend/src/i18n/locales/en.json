@@ -187,6 +187,7 @@
   "checkout.block_reason.inactive": "Item is currently offline",
   "checkout.block_reason.missing_price": "Item price is pending completion",
   "checkout.block_reason.not_published": "Item is not published for checkout yet",
+  "checkout.block_reason.more_items": "+{count} more item(s) blocked",
   "checkout.tap_to_toggle": "Tap to toggle",
   "checkout.tax": "Estimated Tax",
   "checkout.tax_gateway_settlement": "At gateway settlement",

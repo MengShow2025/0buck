@@ -225,6 +225,27 @@ export const CheckoutDrawer: React.FC = () => {
     return t('checkout.blocked_unavailable');
   };
 
+  const resolveBlockInfo = (quoteData: any, fallbackProductId: number) => {
+    const ids = (quoteData?.not_ready_product_ids || []) as number[];
+    const reasons = (quoteData?.not_ready_reasons || {}) as Record<string, string>;
+    const primaryId = ids[0] ?? fallbackProductId;
+    const primaryReason =
+      (quoteData?.checkout_block_reason || null) as string | null ||
+      reasons[String(primaryId)] ||
+      null;
+    const baseMessage = primaryReason
+      ? mapBlockReason(primaryReason)
+      : mapCheckoutError(`product_not_ready_for_checkout:${primaryId}`);
+    const extraCount = Math.max(0, ids.length - 1);
+    const extraSuffix = extraCount > 0
+      ? ` ${t('checkout.block_reason.more_items').replace('{count}', String(extraCount))}`
+      : '';
+    return {
+      primaryReason,
+      message: `${baseMessage}${extraSuffix}`,
+    };
+  };
+
   useEffect(() => {
     let active = true;
     const preflight = async () => {
@@ -240,8 +261,6 @@ export const CheckoutDrawer: React.FC = () => {
         const quoteResp = await orderApi.createQuote(payload);
         if (!active) return;
         const checkoutReady = quoteResp?.data?.checkout_ready !== false;
-        const notReadyIds = (quoteResp?.data?.not_ready_product_ids || []) as number[];
-        const quoteBlockReason = (quoteResp?.data?.checkout_block_reason || null) as string | null;
         const summary = quoteResp?.data?.summary;
         if (summary) {
           setQuoteSummary({
@@ -254,10 +273,10 @@ export const CheckoutDrawer: React.FC = () => {
           setQuoteSummary(null);
         }
         if (!checkoutReady) {
-          const blockedId = notReadyIds[0] ?? checkoutProductId;
+          const blockInfo = resolveBlockInfo(quoteResp?.data, checkoutProductId);
           setIsCheckoutBlocked(true);
-          setCheckoutBlockReason(quoteBlockReason);
-          setCheckoutError(quoteBlockReason ? mapBlockReason(quoteBlockReason) : mapCheckoutError(`product_not_ready_for_checkout:${blockedId}`));
+          setCheckoutBlockReason(blockInfo.primaryReason);
+          setCheckoutError(blockInfo.message);
         } else {
           setIsCheckoutBlocked(false);
           setCheckoutBlockReason(null);
@@ -329,11 +348,9 @@ export const CheckoutDrawer: React.FC = () => {
         });
       }
       if (quoteResp?.data?.checkout_ready === false) {
-        const notReadyIds = (quoteResp?.data?.not_ready_product_ids || []) as number[];
-        const quoteBlockReason = (quoteResp?.data?.checkout_block_reason || null) as string | null;
-        const blockedId = notReadyIds[0] ?? checkoutProductId;
-        setCheckoutBlockReason(quoteBlockReason);
-        setCheckoutError(quoteBlockReason ? mapBlockReason(quoteBlockReason) : mapCheckoutError(`product_not_ready_for_checkout:${blockedId}`));
+        const blockInfo = resolveBlockInfo(quoteResp?.data, checkoutProductId);
+        setCheckoutBlockReason(blockInfo.primaryReason);
+        setCheckoutError(blockInfo.message);
         setIsCheckoutBlocked(true);
         return;
       }

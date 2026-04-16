@@ -187,6 +187,7 @@
   "checkout.block_reason.inactive": "商品当前已下架",
   "checkout.block_reason.missing_price": "商品价格待补全",
   "checkout.block_reason.not_published": "商品尚未发布到可下单状态",
+  "checkout.block_reason.more_items": "另有 {count} 件商品不可下单",
   "checkout.tap_to_toggle": "点击切换",
   "checkout.tax": "预计税费",
   "checkout.tax_gateway_settlement": "以网关结算为准",
