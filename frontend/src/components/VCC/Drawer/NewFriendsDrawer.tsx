@@ -1,23 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronLeft, UserCheck } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 
 export const NewFriendsDrawer: React.FC = () => {
   const { popDrawer, t } = useAppContext();
 
-  const [newFriends, setNewFriends] = useState([
-    { id: 'nf1', name: t('contacts.lorna') || 'Lorna', message: `${t('common.me')} ${t('contacts.lorna')}`, status: 'pending', avatar: 'https://ui-avatars.com/api/?name=Lorna&background=random' },
-    { id: 'nf2', name: t('contacts.jessie') || 'Jessie', message: `Hi, I am Jessie from BEA`, status: 'expired', avatar: 'https://ui-avatars.com/api/?name=Jessie&background=random' },
-    { id: 'nf3', name: t('contacts.gtja_support') || 'GTJA Support', message: t('magicpocketmenu.24_7_ai_human'), status: 'added', avatar: 'https://ui-avatars.com/api/?name=GTJA&background=random' },
-    { id: 'nf4', name: t('contacts.premium_wine_17277618867') || 'Premium Wine', message: t('notification.sitewide_100_back_extra_points'), status: 'expired', avatar: 'https://ui-avatars.com/api/?name=JJCC&background=random' },
-  ]);
+  const [newFriends, setNewFriends] = useState(() => {
+    const saved = localStorage.getItem('vcc_new_friend_requests');
+    if (saved) return JSON.parse(saved);
+    return [
+      { id: 'nf1', name: t('contacts.lorna') || 'Lorna', message: `${t('common.me')} ${t('contacts.lorna')}`, status: 'pending', avatar: 'https://ui-avatars.com/api/?name=Lorna&background=random' },
+      { id: 'nf2', name: t('contacts.jessie') || 'Jessie', message: `Hi, I am Jessie from BEA`, status: 'expired', avatar: 'https://ui-avatars.com/api/?name=Jessie&background=random' },
+      { id: 'nf3', name: t('contacts.gtja_support') || 'GTJA Support', message: t('magicpocketmenu.24_7_ai_human'), status: 'added', avatar: 'https://ui-avatars.com/api/?name=GTJA&background=random' },
+      { id: 'nf4', name: t('contacts.premium_wine_17277618867') || 'Premium Wine', message: t('notification.sitewide_100_back_extra_points'), status: 'expired', avatar: 'https://ui-avatars.com/api/?name=JJCC&background=random' },
+    ];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('vcc_new_friend_requests', JSON.stringify(newFriends));
+  }, [newFriends]);
 
   const handleAccept = (id: string) => {
-    setNewFriends(prev => prev.map(f => f.id === id ? { ...f, status: 'added' } : f));
+    setNewFriends((prev: any[]) => prev.map((f: any) => f.id === id ? { ...f, status: 'added' } : f));
   };
 
   const handleIgnore = (id: string) => {
-    setNewFriends(prev => prev.map(f => f.id === id ? { ...f, status: 'expired' } : f));
+    setNewFriends((prev: any[]) => prev.map((f: any) => f.id === id ? { ...f, status: 'expired' } : f));
   };
 
   return (

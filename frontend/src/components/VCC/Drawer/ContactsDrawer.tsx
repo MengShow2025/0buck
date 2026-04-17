@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, UserPlus, Users, MessageSquare, ChevronRight, ChevronDown, Star, MoreHorizontal, UserCheck, Clock, UserX } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 
@@ -6,12 +6,35 @@ export const ContactsDrawer: React.FC = () => {
   const { pushDrawer, setActiveChat, t } = useAppContext();
   const [isNewFriendsExpanded, setIsNewFriendsExpanded] = useState(true);
 
+  // Load blocked friends
+  const [blockedFriends, setBlockedFriends] = useState<any[]>(() => {
+    const saved = localStorage.getItem('vcc_blocked_friends');
+    if (saved) return JSON.parse(saved);
+    return [];
+  });
+
+  // Reload when returned from BlacklistDrawer
+  useEffect(() => {
+    const handleStorage = () => {
+      const saved = localStorage.getItem('vcc_blocked_friends');
+      if (saved) setBlockedFriends(JSON.parse(saved));
+      else setBlockedFriends([]);
+    };
+    window.addEventListener('storage', handleStorage);
+    // Also periodically check to update the view when coming back without storage event
+    const interval = setInterval(handleStorage, 1000);
+    return () => {
+      window.removeEventListener('storage', handleStorage);
+      clearInterval(interval);
+    };
+  }, []);
+
   const CONTACT_CATEGORIES = [
     { id: 'new_friends', name: t('contact.new_friends') || 'New Friends', count: 4, icon: <UserPlus className="w-5 h-5 text-green-500" />, drawer: 'new_friends' },
     { id: 'groups', name: t('contact.groups'), count: 1, icon: <Users className="w-5 h-5 text-indigo-500" /> },
     { id: 'discover', name: t('contact.discover'), count: '99+', icon: <Search className="w-5 h-5 text-blue-500" />, drawer: 'all_fan_feeds' },
     { id: 'my_feeds', name: t('contact.my_feeds'), count: 8, icon: <Clock className="w-5 h-5 text-orange-500" />, drawer: 'my_feeds' },
-    { id: 'blacklist', name: t('contact.blacklist') || 'Blacklist', count: 0, icon: <UserX className="w-5 h-5 text-red-500" />, drawer: 'blacklist' },
+    { id: 'blacklist', name: t('contact.blacklist') || 'Blacklist', count: blockedFriends.length, icon: <UserX className="w-5 h-5 text-red-500" />, drawer: 'blacklist' },
   ];
 
   const CONTACTS = [
@@ -21,6 +44,8 @@ export const ContactsDrawer: React.FC = () => {
     { id: 'c4', name: t('contacts.alex_design'), initial: 'A', avatar: 'https://ui-avatars.com/api/?name=Alex&background=random' },
     { id: 'c5', name: t('contacts.vortex_fan'), initial: 'V', avatar: 'https://ui-avatars.com/api/?name=VF&background=random' },
   ];
+
+  const VISIBLE_CONTACTS = CONTACTS.filter(c => !blockedFriends.some(b => b.id === c.id));
 
   return (
     <div className="flex flex-col h-full bg-[#F2F2F7] dark:bg-[#000000] overflow-y-auto pb-24">
@@ -68,10 +93,10 @@ export const ContactsDrawer: React.FC = () => {
           </div>
           
           <div className="bg-white/70 dark:bg-white/5 backdrop-blur-xl rounded-[32px] overflow-hidden border border-white/40 dark:border-white/10 shadow-sm">
-            {CONTACTS.map((contact, idx) => (
+            {VISIBLE_CONTACTS.map((contact, idx) => (
               <div 
                 key={contact.id} 
-                className={`flex items-center justify-between gap-4 px-4 py-3 cursor-pointer active:bg-gray-50 dark:active:bg-white/5 transition-colors group ${idx !== CONTACTS.length - 1 ? 'border-b border-gray-100/50 dark:border-white/5' : ''}`}
+                className={`flex items-center justify-between gap-4 px-4 py-3 cursor-pointer active:bg-gray-50 dark:active:bg-white/5 transition-colors group ${idx !== VISIBLE_CONTACTS.length - 1 ? 'border-b border-gray-100/50 dark:border-white/5' : ''}`}
                 onClick={() => {
                   setActiveChat({ id: contact.id, name: contact.name, type: 'private', avatar: contact.avatar });
                   pushDrawer('chat_room');
@@ -87,8 +112,9 @@ export const ContactsDrawer: React.FC = () => {
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
-                    // Implement block logic here later, perhaps save to vcc_blocked_friends
-                    console.log('Block contact', contact.id);
+                    const newBlocked = [...blockedFriends, { id: contact.id, name: contact.name, avatar: contact.avatar }];
+                    setBlockedFriends(newBlocked);
+                    localStorage.setItem('vcc_blocked_friends', JSON.stringify(newBlocked));
                   }}
                   className="px-3 py-1.5 bg-gray-100 dark:bg-white/10 text-gray-500 dark:text-gray-400 text-[12px] font-bold rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
                 >
@@ -96,6 +122,11 @@ export const ContactsDrawer: React.FC = () => {
                 </button>
               </div>
             ))}
+            {VISIBLE_CONTACTS.length === 0 && (
+              <div className="p-6 text-center text-[13px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest">
+                {t('contact.no_friends') || 'No Friends Left'}
+              </div>
+            )}
           </div>
         </div>
       </div>

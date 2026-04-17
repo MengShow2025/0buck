@@ -1,15 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 
 export const BlacklistDrawer: React.FC = () => {
   const { popDrawer, t } = useAppContext();
-  const [blockedUsers, setBlockedUsers] = useState([
-    { id: 'b1', name: 'Spam User', avatar: 'https://ui-avatars.com/api/?name=Spam&background=random' }
-  ]);
+  
+  const [blockedUsers, setBlockedUsers] = useState(() => {
+    const saved = localStorage.getItem('vcc_blocked_friends');
+    if (saved) return JSON.parse(saved);
+    return [];
+  });
+
+  useEffect(() => {
+    localStorage.setItem('vcc_blocked_friends', JSON.stringify(blockedUsers));
+  }, [blockedUsers]);
 
   const handleUnblock = (id: string) => {
-    setBlockedUsers(prev => prev.filter(u => u.id !== id));
+    setBlockedUsers((prev: any[]) => prev.filter((u: any) => u.id !== id));
   };
 
   return (

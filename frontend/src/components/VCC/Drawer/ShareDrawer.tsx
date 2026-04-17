@@ -28,18 +28,18 @@ export const ShareDrawer: React.FC = () => {
   }, [user]);
 
   const platformTips: Record<string, string> = {
-    feishu: 'Send to Feishu contacts or groups for workplace collaboration.',
-    whatsapp: 'Send to WhatsApp chats/groups for overseas community sharing.',
-    telegram: 'Send to Telegram groups/channels for content distribution.',
-    discord: 'Send to Discord communities for niche viral growth.',
-    copy: 'Copy generated referral link and paste to any platform with tracking.',
+    feishu: t('share.tip_feishu') || 'Share to Feishu for seamless workplace collaboration.',
+    whatsapp: t('share.tip_whatsapp') || 'Share to WhatsApp for direct community reach.',
+    telegram: t('share.tip_telegram') || 'Share to Telegram groups and channels.',
+    discord: t('share.tip_discord') || 'Share to Discord communities for viral growth.',
+    copy: t('share.tip_copy') || 'Copy the raw link and paste it anywhere you like.',
   };
 
   const cardTypeTips: Record<string, string> = {
-    invite: 'Exclusive invite card for registration and fan binding.',
-    product: 'Product card for item referral and cashback reward.',
-    merchant: 'Merchant card for merchant referral and reward rules.',
-    group_buy: 'Group-buy card for team purchase with completion reward.',
+    invite: t('share.tip_invite') || 'Exclusive invite card: When users register through this, they permanently become your fans.',
+    product: t('share.tip_product') || 'Product card: Share a specific item. You earn commissions when they purchase it.',
+    merchant: t('share.tip_merchant') || 'Merchant card: Share a store. You earn ongoing rewards for their operations.',
+    group_buy: t('share.tip_group_buy') || 'Group-buy card: Invite friends to join your group-buy to secure the 100% Back reward.',
   };
 
   const shareOptions = useMemo(
