@@ -7,13 +7,15 @@ type Language = 'en' | 'zh';
 type Currency = 'AUTO' | string; // Use string to support all world currencies dynamically
 export type DrawerType = 'none' | 'lounge' | 'square' | 'prime' | 'wallet' | 'fans' | 'product_detail' | 'checkout' | 'orders' | 'address' | 'service' | 'me' | 'cart' | 'all_group_buy' | 'all_fan_feeds' | 'all_topics' | 'chat_room' | 'notification' | 'contacts' | 'my_feeds' | 'user_profile' 
   | 'share_menu' 
-  | 'key_attributes' 
-  | 'product_reviews' 
+  | 'key_attributes'
+  | 'product_reviews'
   | 'supplier_analysis'
   | 'coupons'
   | 'auth'
-  | 'settings'
   | 'wishlist_detail'
+  | 'new_friends'
+  | 'blacklist'
+  | 'settings'
   | 'group_buy_detail'
   | 'order_detail'
   | 'order_tracking'
@@ -34,7 +36,10 @@ export type DrawerType = 'none' | 'lounge' | 'square' | 'prime' | 'wallet' | 'fa
   | 'google_2fa'
   | 'email_bind_new'
   | 'BackupEmail'
-  | 'dual_verification';
+  | 'dual_verification'
+  | 'wallet_history'
+  | 'ai_persona'
+  | 'scan';
 
 export interface UserProfile {
   customer_id: number;

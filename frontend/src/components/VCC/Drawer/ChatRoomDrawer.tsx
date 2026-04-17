@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronLeft, Send, Image as ImageIcon, Mic, Plus, Smile, User, Users as UsersIcon, Megaphone, ShoppingBag, ExternalLink, X, ChevronRight, ShoppingCart, CheckCircle2, Box, Scale } from 'lucide-react';
+import { ChevronLeft, Send, Image as ImageIcon, Mic, Plus, Smile, User, Users as UsersIcon, Megaphone, ShoppingBag, ExternalLink, X, ChevronRight, ShoppingCart, CheckCircle2, Box, Scale, MoreHorizontal, UserMinus, LogOut, ShieldOff } from 'lucide-react';
 import { useAppContext, ChatContext } from '../AppContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ProductGridCard } from '../BAPCards/ProductGridCard';
@@ -11,21 +11,23 @@ export const ChatRoomDrawer: React.FC = () => {
   const [inputValue, setInputValue] = useState('');
   const [showPinned, setShowPinned] = useState(true);
   const [showPocket, setShowPocket] = useState(false);
+  const [showGroupMenu, setShowGroupMenu] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Close pocket when clicking outside
+  // Close pocket/menu when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setShowPocket(false);
+        setShowGroupMenu(false);
       }
     };
-    if (showPocket) {
+    if (showPocket || showGroupMenu) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showPocket]);
+  }, [showPocket, showGroupMenu]);
 
   // Sync external aiInput to internal inputValue when drawer opens or aiInput changes
   useEffect(() => {
@@ -163,14 +165,69 @@ export const ChatRoomDrawer: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Side: Actions */}
-        <div className="flex-none w-10 flex items-center justify-end">
-          <button 
-            onClick={() => pushDrawer('contacts')}
-            className="p-2 -mr-2 hover:bg-white/10 rounded-full transition-colors"
-          >
-            <Plus className="w-6 h-6 opacity-90" />
-          </button>
+        {/* Right Side: Group Menu */}
+        <div className="flex-none w-10 flex justify-end relative">
+          {activeChat.type === 'group' && (
+            <>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowGroupMenu(!showGroupMenu);
+                }}
+                className="p-1.5 hover:bg-white/10 rounded-full transition-colors active:scale-95"
+              >
+                <MoreHorizontal className="w-5 h-5 text-white" />
+              </button>
+              
+              <AnimatePresence>
+                {showGroupMenu && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95, y: -10 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                    transition={{ duration: 0.15 }}
+                    className="absolute top-full right-0 mt-2 w-48 bg-white dark:bg-[#1C1C1E] rounded-2xl shadow-xl border border-gray-100 dark:border-white/10 overflow-hidden z-50 origin-top-right"
+                  >
+                    <div className="flex flex-col py-1">
+                      <button className="flex items-center gap-3 px-4 py-3 text-[14px] font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors">
+                        <UsersIcon className="w-4 h-4" />
+                        {t('chat.member_management') || 'Members'}
+                      </button>
+                      <div className="h-px bg-gray-100 dark:bg-white/5 my-1 mx-4" />
+                      <button 
+                        className="flex items-center gap-3 px-4 py-3 text-[14px] font-semibold text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-500/10 transition-colors"
+                        onClick={() => {
+                          const leftGroups = JSON.parse(localStorage.getItem('vcc_left_groups') || '[]');
+                          if (!leftGroups.includes(activeChat.id)) {
+                            leftGroups.push(activeChat.id);
+                            localStorage.setItem('vcc_left_groups', JSON.stringify(leftGroups));
+                          }
+                          setActiveDrawer('lounge');
+                        }}
+                      >
+                        <LogOut className="w-4 h-4" />
+                        {t('chat.leave_group') || 'Leave Group'}
+                      </button>
+                      <button 
+                        className="flex items-center gap-3 px-4 py-3 text-[14px] font-semibold text-red-600 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors"
+                        onClick={() => {
+                          const closedGroups = JSON.parse(localStorage.getItem('vcc_closed_groups') || '[]');
+                          if (!closedGroups.includes(activeChat.id)) {
+                            closedGroups.push(activeChat.id);
+                            localStorage.setItem('vcc_closed_groups', JSON.stringify(closedGroups));
+                          }
+                          setActiveDrawer('lounge');
+                        }}
+                      >
+                        <ShieldOff className="w-4 h-4" />
+                        {t('chat.close_group') || 'Close Group'}
+                      </button>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </>
+          )}
         </div>
       </div>
 

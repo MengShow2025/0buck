@@ -50,6 +50,8 @@ import { EmailBindNewDrawer } from './EmailBindNewDrawer';
 
 import { BackupEmailDrawer } from './BackupEmailDrawer';
 import { DualVerificationDrawer } from './DualVerificationDrawer';
+import { NewFriendsDrawer } from './NewFriendsDrawer';
+import { BlacklistDrawer } from './BlacklistDrawer';
 
 export const GlobalDrawer: React.FC = () => {
   const { activeDrawer, setActiveDrawer, activeChat, drawerHistory, popDrawer, pushDrawer, t, verificationType } = useAppContext();
@@ -104,6 +106,10 @@ export const GlobalDrawer: React.FC = () => {
         return <SupplierAnalysisDrawer />;
       case 'auth':
         return <AuthDrawer />;
+      case 'new_friends':
+        return <NewFriendsDrawer />;
+      case 'blacklist':
+        return <BlacklistDrawer />;
       case 'wishlist_detail':
         return <WishlistDetailDrawer />;
       case 'group_buy_detail':

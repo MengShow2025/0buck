@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Search, VolumeX, ShieldAlert, Sparkles, MessageCircle, Bot, UserPlus, Users, MessageSquare, Plus, PlusCircle, UserCheck, ChevronLeft } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 
@@ -7,6 +7,30 @@ export const LoungeDrawer: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'discover'>('chat');
+
+  const [leftGroups, setLeftGroups] = useState<string[]>([]);
+  const [closedGroups, setClosedGroups] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Load hidden groups
+    const loadHiddenGroups = () => {
+      setLeftGroups(JSON.parse(localStorage.getItem('vcc_left_groups') || '[]'));
+      setClosedGroups(JSON.parse(localStorage.getItem('vcc_closed_groups') || '[]'));
+    };
+    loadHiddenGroups();
+    
+    // Setup listener for storage changes to update list instantly if needed
+    window.addEventListener('storage', loadHiddenGroups);
+    return () => window.removeEventListener('storage', loadHiddenGroups);
+  }, []);
+
+  const handleRestoreGroups = () => {
+    localStorage.removeItem('vcc_left_groups');
+    localStorage.removeItem('vcc_closed_groups');
+    setLeftGroups([]);
+    setClosedGroups([]);
+  };
 
   const CHAT_LIST = [
     {
@@ -78,6 +102,8 @@ export const LoungeDrawer: React.FC = () => {
     }
   ];
 
+  const VISIBLE_CHAT_LIST = CHAT_LIST.filter(chat => !leftGroups.includes(chat.id) && !closedGroups.includes(chat.id));
+
   const SEARCH_RESULTS = [
     { id: 's1', name: t('lounge.tech_expert'), id_str: '0B-8827', type: 'user', isFriend: false, avatar: 'https://ui-avatars.com/api/?name=TE&background=random' },
     { id: 's2', name: t('lounge.alex_design'), id_str: '0B-1024', type: 'user', isFriend: true, avatar: 'https://ui-avatars.com/api/?name=Alex&background=random' },
@@ -103,9 +129,9 @@ export const LoungeDrawer: React.FC = () => {
   };
 
   const PLUS_MENU_OPTIONS = [
-    { id: 'group', name: t('lounge.start_group'), icon: <Users className="w-5 h-5" />, color: 'text-blue-500' },
-    { id: 'add', name: t('lounge.add_friend'), icon: <UserPlus className="w-5 h-5" />, color: 'text-green-500' },
-    { id: 'scan', name: t('lounge.scan'), icon: <PlusCircle className="w-5 h-5" />, color: 'text-purple-500' },
+    { id: 'add', name: t('lounge.add_friend') || 'Add Friend', icon: <UserPlus className="w-5 h-5" />, color: 'text-green-500' },
+    { id: 'group', name: t('lounge.start_group') || 'Start Group', icon: <Users className="w-5 h-5" />, color: 'text-blue-500' },
+    { id: 'scan', name: t('lounge.scan') || 'Scan', icon: <PlusCircle className="w-5 h-5" />, color: 'text-purple-500' },
   ];
 
   return (
@@ -120,24 +146,32 @@ export const LoungeDrawer: React.FC = () => {
             <ChevronLeft className="w-5 h-5" />
           </button>
 
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input 
-              type="text" 
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setIsSearching(e.target.value.length > 0);
-              }}
-              placeholder={t('lounge.search_placeholder')} 
-              className="w-full bg-white dark:bg-white/5 text-gray-800 dark:text-gray-200 text-[14px] font-medium rounded-2xl py-2.5 pl-9 pr-4 outline-none border border-gray-200 dark:border-white/10 placeholder:text-gray-400 shadow-sm focus:border-[var(--wa-teal)] transition-all"
-            />
+          {/* Top Tabs (Chat / Discover) */}
+          <div className="flex-1 flex justify-center gap-4 text-[16px] font-bold">
+            <button 
+              onClick={() => setActiveTab('chat')}
+              className={`relative pb-1 transition-colors ${activeTab === 'chat' ? 'text-gray-900 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+            >
+              {t('lounge.chat') || 'Chat'}
+              {activeTab === 'chat' && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-[3px] rounded-full bg-[var(--wa-teal)] dark:bg-orange-500" />
+              )}
+            </button>
+            <button 
+              onClick={() => setActiveTab('discover')}
+              className={`relative pb-1 transition-colors ${activeTab === 'discover' ? 'text-gray-900 dark:text-white' : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-300'}`}
+            >
+              {t('lounge.discover') || 'Discover'}
+              {activeTab === 'discover' && (
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-[3px] rounded-full bg-[var(--wa-teal)] dark:bg-orange-500" />
+              )}
+            </button>
           </div>
           
           <button 
             onClick={() => pushDrawer('contacts')}
             className="w-10 h-10 flex items-center justify-center bg-white dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm active:scale-90 transition-all text-gray-600 dark:text-gray-300"
-            title={t('lounge.friend_mgmt')}
+            title={t('lounge.friend_mgmt') || 'Contacts'}
           >
             <Users className="w-5 h-5" />
           </button>
@@ -187,100 +221,143 @@ export const LoungeDrawer: React.FC = () => {
         </div>
       </div>
 
+      {/* Search Bar */}
+      <div className="px-4 py-2 bg-white/80 dark:bg-[#1C1C1E]/80 backdrop-blur-xl z-10 border-b border-gray-100 dark:border-white/5">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input 
+            type="text" 
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setIsSearching(e.target.value.length > 0);
+            }}
+            placeholder={t('lounge.search_placeholder') || 'Search...'} 
+            className="w-full bg-gray-100 dark:bg-white/5 text-gray-800 dark:text-gray-200 text-[14px] font-medium rounded-2xl py-2 pl-9 pr-4 outline-none border border-transparent focus:border-[var(--wa-teal)] transition-all"
+          />
+        </div>
+      </div>
+
       {/* Main Content */}
       <div className="flex-1 overflow-y-auto pb-24">
-        {isSearching ? (
-          <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-            <div className="px-4 py-3 text-[12px] font-black text-gray-400 uppercase tracking-widest">{t('lounge.search_results')}</div>
-            {SEARCH_RESULTS.map((result) => (
-              <div 
-                key={result.id}
-                className="flex items-center px-4 py-3 border-b border-gray-50 dark:border-white/5 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors cursor-pointer"
-              >
-                <div className="w-11 h-11 rounded-xl bg-gray-100 dark:bg-white/10 overflow-hidden flex-shrink-0 mr-3 flex items-center justify-center">
-                  {result.avatar ? (
-                    <img src={result.avatar} className="w-full h-full object-cover" />
-                  ) : (
-                    <MessageSquare className="w-5 h-5 text-gray-400" />
+        {activeTab === 'chat' ? (
+          isSearching ? (
+            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+              <div className="px-4 py-3 text-[13px] font-bold text-gray-500 uppercase tracking-wider sticky top-0 bg-[#F2F2F7] dark:bg-[#000000] z-10">
+                {t('lounge.search_results')}
+              </div>
+              {SEARCH_RESULTS.map((result) => (
+                <div 
+                  key={result.id}
+                  onClick={() => handleChatClick(result)}
+                  className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#1C1C1E] active:bg-gray-50 dark:active:bg-white/5 transition-colors cursor-pointer border-b border-gray-50 dark:border-white/5"
+                >
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-gray-100 dark:bg-white/10 shrink-0">
+                    {result.avatar ? (
+                      <img src={result.avatar} alt={result.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-400">
+                        {result.type === 'topic' ? '#' : <Users className="w-6 h-6" />}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-0.5">
+                      <span className="font-semibold text-[16px] text-gray-900 dark:text-white truncate">
+                        {result.name}
+                      </span>
+                      {result.id_str && (
+                        <span className="text-[12px] text-gray-400 font-mono">{result.id_str}</span>
+                      )}
+                    </div>
+                    <div className="text-[14px] text-gray-500 dark:text-gray-400 truncate">
+                      {result.type === 'user' ? (
+                        result.isFriend ? <span className="text-green-500 text-[12px] font-medium">{t('lounge.already_friend')}</span> : t('lounge.not_friend')
+                      ) : (
+                        <span className="flex items-center gap-1">
+                          <Users className="w-3.5 h-3.5" />
+                          {result.memberCount} {t('lounge.members')}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  {result.type === 'user' && !result.isFriend && (
+                    <button 
+                      onClick={(e) => handleAddFriend(e, result)}
+                      className="px-3 py-1.5 bg-[var(--wa-teal)] text-white text-[13px] font-bold rounded-full active:scale-95 transition-transform"
+                    >
+                      {t('common.add')}
+                    </button>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-[15px] font-black text-gray-900 dark:text-white truncate">{result.name}</div>
-                  <div className="text-[11px] text-gray-400 font-bold">{result.type === 'user' ? `${t('square.id_prefix')}${result.id_str}` : `${result.memberCount}${t('common.members')}`}</div>
-                </div>
-                {result.type === 'user' && (
-                  result.isFriend ? (
-                    <div className="flex items-center gap-1 text-[11px] font-black text-[var(--wa-teal)] bg-[var(--wa-teal)]/10 px-2 py-1 rounded-lg">
-                      <UserCheck className="w-3.5 h-3.5" /> {t('common.is_friend')}
-                    </div>
-                  ) : (
-                    <button
-                      onClick={(e) => handleAddFriend(e, result)}
-                      className="flex items-center gap-1 text-[11px] font-semibold text-white px-3 py-1.5 rounded-lg shadow-md active:scale-95 transition-all"
-                      style={{ background: 'linear-gradient(135deg, #FF7A3D 0%, #E8450A 100%)' }}
-                    >
-                      <UserPlus className="w-3.5 h-3.5" /> {t('common.add')}
-                    </button>
-                  )
-                )}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="animate-in fade-in duration-500">
-            {CHAT_LIST.map((chat, index) => (
-              <div 
-                key={chat.id} 
-                onClick={() => handleChatClick(chat)}
-                className={`flex items-center px-4 py-3 cursor-pointer active:bg-gray-50 dark:active:bg-white/5 transition-colors ${
-                  index !== CHAT_LIST.length - 1 ? 'border-b border-gray-50 dark:border-white/5' : ''
-                }`}
-              >
-                {/* Avatar with Unread Badge */}
-                <div className="relative flex-shrink-0 mr-3">
-                  <div className={`w-12 h-12 rounded-[18px] overflow-hidden flex items-center justify-center ${chat.avatarBg || 'bg-gray-100 dark:bg-white/10'} shadow-sm border border-white/20`}>
+              ))}
+            </div>
+          ) : (
+            <div className="animate-in fade-in duration-300">
+              {VISIBLE_CHAT_LIST.map((chat, index) => (
+                <div 
+                  key={chat.id}
+                  onClick={() => handleChatClick(chat)}
+                  className="flex items-center gap-3 px-4 py-3 bg-white dark:bg-[#1C1C1E] active:bg-gray-50 dark:active:bg-white/5 transition-colors cursor-pointer relative group"
+                >
+                  <div className="w-12 h-12 rounded-full overflow-hidden shrink-0 relative">
                     {chat.avatar ? (
                       <img src={chat.avatar} alt={chat.name} className="w-full h-full object-cover" />
                     ) : (
-                      chat.icon
+                      <div className={`w-full h-full flex items-center justify-center ${chat.avatarBg}`}>
+                        {chat.icon}
+                      </div>
+                    )}
+                    {chat.isOfficial && (
+                      <div className="absolute -bottom-0.5 -right-0.5 bg-blue-500 rounded-full p-0.5 border-2 border-white dark:border-[#1C1C1E]">
+                        <UserCheck className="w-2.5 h-2.5 text-white" />
+                      </div>
                     )}
                   </div>
-                  {chat.unread > 0 && (
-                    <div className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black px-1.5 min-w-[18px] h-[18px] rounded-full flex items-center justify-center border-2 border-white dark:border-[#000000] shadow-md">
-                      {chat.unread > 99 ? '99+' : chat.unread}
-                    </div>
-                  )}
-                </div>
 
-                {/* Content */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-0.5">
-                    <div className="flex items-center gap-1.5 truncate">
-                      <h3 className="text-[15px] font-black text-gray-900 dark:text-gray-100 truncate tracking-tight">
+                  <div className="flex-1 min-w-0 py-1 border-b border-gray-100 dark:border-white/5 group-last:border-none">
+                    <div className="flex justify-between items-baseline mb-1">
+                      <span className="font-semibold text-[16px] text-gray-900 dark:text-white truncate pr-2">
                         {chat.name}
-                      </h3>
-                      {chat.isOfficial && (
-                        <div className="text-[9px] font-black text-white bg-blue-500 px-1.5 py-0.5 rounded-md flex-shrink-0 uppercase tracking-tighter">
-                          {t('lounge.official_label')}
-                        </div>
-                      )}
+                      </span>
+                      <span className={`text-[12px] shrink-0 ${chat.unread > 0 ? 'text-[var(--wa-teal)] dark:text-[var(--wa-teal)] font-medium' : 'text-gray-400'}`}>
+                        {chat.time}
+                      </span>
                     </div>
-                    <span className="text-[11px] text-gray-400 font-bold flex-shrink-0 ml-2">
-                      {chat.time}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center justify-between">
-                    <p className="text-[13px] text-gray-500 dark:text-gray-400 truncate pr-2 font-medium">
-                      {chat.lastMessage}
-                    </p>
-                    {chat.isMuted && (
-                      <VolumeX className="w-3.5 h-3.5 text-gray-300 dark:text-gray-600 flex-shrink-0" />
-                    )}
+                    
+                    <div className="flex justify-between items-center gap-2">
+                      <span className="text-[14px] text-gray-500 dark:text-gray-400 truncate">
+                        {chat.lastMessage}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        {chat.isMuted && <VolumeX className="w-3.5 h-3.5 text-gray-400" />}
+                        {chat.unread > 0 && (
+                          <div className={`h-5 min-w-[20px] px-1.5 rounded-full flex items-center justify-center text-[11px] font-bold text-white ${chat.isMuted ? 'bg-gray-400' : 'bg-red-500'}`}>
+                            {chat.unread > 99 ? '99+' : chat.unread}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ))}
+
+              {(leftGroups.length > 0 || closedGroups.length > 0) && (
+                <div className="flex justify-center mt-6 mb-10">
+                  <button 
+                    onClick={handleRestoreGroups}
+                    className="px-4 py-2 bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400 text-[13px] font-medium rounded-full active:scale-95 transition-transform"
+                  >
+                    {t('lounge.restore_hidden_groups') || 'Restore Hidden Groups'}
+                  </button>
+                </div>
+              )}
+            </div>
+          )
+        ) : (
+          <div className="p-4 flex flex-col items-center justify-center h-full text-gray-400">
+            <Sparkles className="w-12 h-12 mb-4 opacity-50" />
+            <p>Discover Content Coming Soon...</p>
           </div>
         )}
       </div>

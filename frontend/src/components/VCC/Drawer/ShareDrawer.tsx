@@ -1,11 +1,11 @@
-import React, { useMemo, useState } from 'react';
-import { CheckCircle2, ExternalLink, Link as LinkIcon, Loader2, Send, Share2 } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { CheckCircle2, ExternalLink, Link as LinkIcon, Loader2, Send, Share2, Info } from 'lucide-react';
 import { useAppContext } from '../AppContext';
-import { imApi } from '../../../services/api';
+import { imApi, rewardApi } from '../../../services/api';
 import { AxiosError } from 'axios';
 
 export const ShareDrawer: React.FC = () => {
-  const { popDrawer, t, selectedProductId } = useAppContext();
+  const { popDrawer, t, selectedProductId, user } = useAppContext();
   const [cardType, setCardType] = useState<'invite' | 'product' | 'merchant' | 'group_buy'>('invite');
   const [targetId, setTargetId] = useState('');
   const [pendingPlatform, setPendingPlatform] = useState<'feishu' | 'whatsapp' | 'telegram' | 'discord' | null>(null);
@@ -16,6 +16,16 @@ export const ShareDrawer: React.FC = () => {
   const [pastedLink, setPastedLink] = useState('');
   const [hoveredPlatform, setHoveredPlatform] = useState<string | null>(null);
   const [hoveredCardType, setHoveredCardType] = useState<string | null>(null);
+  const [rewardStats, setRewardStats] = useState<any>(null);
+
+  useEffect(() => {
+    const userId = (user as any)?.id || (user as any)?.user_id;
+    if (userId) {
+      rewardApi.getStatus(userId).then(res => {
+        setRewardStats(res.data);
+      }).catch(err => console.error("Failed to load reward status", err));
+    }
+  }, [user]);
 
   const platformTips: Record<string, string> = {
     feishu: 'Send to Feishu contacts or groups for workplace collaboration.',
@@ -131,7 +141,35 @@ export const ShareDrawer: React.FC = () => {
   return (
     <div className="flex h-full flex-col gap-3 overflow-y-auto bg-[#F2F2F7] p-4 pb-24 dark:bg-[#000000]">
       <div className="rounded-[28px] border border-white/40 bg-white/70 p-4 shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
-        <div className="mb-3 text-[18px] font-black text-gray-900 dark:text-white">{t('share.title') || 'Share'}</div>
+        <div className="mb-3 text-[18px] font-black text-gray-900 dark:text-white">{t('share.title') || 'Share & Earn'}</div>
+        
+        {rewardStats && (
+          <div className="mb-4 rounded-2xl bg-gradient-to-r from-orange-50 to-orange-100/50 dark:from-orange-900/20 dark:to-orange-800/10 p-3 border border-orange-200/50 dark:border-orange-500/20">
+            <div className="flex items-center gap-2 mb-2">
+              <Info className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+              <span className="text-[12px] font-bold text-orange-800 dark:text-orange-300">My Reward Rates</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px]">
+              <div className="flex flex-col">
+                <span className="text-gray-500 dark:text-gray-400">Tier</span>
+                <span className="font-semibold text-gray-800 dark:text-gray-200 capitalize">{rewardStats.user_tier || 'Standard'}</span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-gray-500 dark:text-gray-400">Identity</span>
+                <span className="font-semibold text-gray-800 dark:text-gray-200 capitalize">{rewardStats.user_type || 'User'}</span>
+              </div>
+              <div className="flex flex-col mt-1">
+                <span className="text-gray-500 dark:text-gray-400">Distribution</span>
+                <span className="font-semibold text-orange-600 dark:text-orange-400">{(rewardStats.dist_rate || rewardStats.referral_rate || 0) * 100}%</span>
+              </div>
+              <div className="flex flex-col mt-1">
+                <span className="text-gray-500 dark:text-gray-400">Fan Bonus</span>
+                <span className="font-semibold text-orange-600 dark:text-orange-400">{(rewardStats.fan_rate || 0) * 100}%</span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="mb-3">
           <div className="mb-1 text-[12px] font-bold text-gray-700 dark:text-gray-300">Card Type</div>
           <div className="flex flex-wrap gap-2">

@@ -30,22 +30,24 @@ export const VCCHeader = () => {
   };
 
   return (
-    <div className="flex items-center h-16 px-4 text-white shadow-md z-20 relative" style={{ background: 'linear-gradient(135deg, #FF7A3D 0%, #E8450A 100%)' }}>
+    <div className="flex items-center justify-between h-16 px-4 text-white shadow-md z-20 relative bg-[var(--wa-teal)] dark:bg-black border-b border-black/5 dark:border-white/5">
       {/* Left Action (Back & Notification) */}
       <div className="flex-none flex items-center gap-3 w-20">
-        <ChevronLeft className="w-6 h-6 cursor-pointer" />
+        <ChevronLeft className="w-6 h-6 cursor-pointer opacity-90 hover:opacity-100 transition-opacity" onClick={() => setActiveDrawer('none')} />
         <div className="relative cursor-pointer group" onClick={() => pushDrawer('notification')}>
           <Bell className="w-5 h-5 opacity-90 group-hover:opacity-100 transition-opacity" />
           {hasNewNotifications && (
-            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[var(--wa-teal)] shadow-sm animate-pulse" />
+            <span className="absolute -top-0.5 -right-0.5 w-2 h-2 bg-red-500 rounded-full border border-[var(--wa-teal)] dark:border-black shadow-sm animate-pulse" />
           )}
         </div>
       </div>
 
-      {/* Center Content (AI Name / Chat Target) */}
-      <div className="flex-1 flex flex-col items-center justify-center">
-        <h1 className="font-semibold text-[17px] leading-tight">{aiName}</h1>
-        <span className="text-[11px] opacity-90 font-medium">{t('verified_artisan')}</span>
+      {/* Center Content (0Buck Brand Logo) */}
+      <div className="flex-1 flex justify-center items-center">
+        <div className="ob-wordmark text-[24px]">
+          <span className="ob-zero mr-[0.02em]">0</span>
+          <span className="ob-buck text-white">Buck</span>
+        </div>
       </div>
       
       {/* Right Actions */}
