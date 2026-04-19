@@ -10,6 +10,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 import time
 import uuid
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -24,6 +25,7 @@ from app.services.checkout_idempotency import (
     normalize_checkout_submit_token,
 )
 from app.core.config import settings
+from app.core.request_context import request_id_var
 from app.core.checkout_block_reason import (
     CHECKOUT_BLOCK_REASON_INACTIVE,
     CHECKOUT_BLOCK_REASON_NOT_PUBLISHED,
@@ -32,6 +34,21 @@ from app.schemas.checkout import CheckoutQuoteResponse, CheckoutCreateResponse
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _format_internal_error_detail(message: Any) -> str:
+    if isinstance(message, list):
+        return "; ".join(str(x) for x in message)
+    if isinstance(message, dict):
+        return json.dumps(message, ensure_ascii=False)
+    return str(message)
+
+
+def _public_error_detail(message: Any, fallback: str = "internal_error") -> str:
+    if settings.EXPOSE_INTERNAL_ERROR_DETAIL and message is not None:
+        return _format_internal_error_detail(message)
+    return fallback
 
 
 class RewardsCheckinRequest(BaseModel):
@@ -577,11 +594,11 @@ def rewards_status(
             dist_rate = float(level.get("rate", 0.015))
             # Fan rates are fixed tiered for ordinary users
             fan_rates_map = {
-                'silver': float(sys_rates['fan_silver_rate']),
-                'gold': float(sys_rates['fan_gold_rate']),
-                'platinum': float(sys_rates['fan_platinum_rate'])
+                'silver': float(sys_rates.get('fan_silver_rate', 0.01)),
+                'gold': float(sys_rates.get('fan_gold_rate', 0.015)),
+                'platinum': float(sys_rates.get('fan_platinum_rate', 0.02))
             }
-            fan_rate = fan_rates_map.get(user_ext.user_tier, float(sys_rates['fan_silver_rate']))
+            fan_rate = fan_rates_map.get(user_ext.user_tier, float(sys_rates.get('fan_silver_rate', 0.01)))
     else:
         dist_rate = 0.015
         fan_rate = 0.01
@@ -746,6 +763,32 @@ def verify_group_free(
                     "error": {"status_code": e.status_code},
                 },
             }
+        except Exception as e:
+            trace_id = request_id_var.get()
+            logger.exception(
+                "group-free verify refund failed trace_id=%s order_id=%s",
+                trace_id,
+                payload.order_id,
+            )
+            order.refund_error = {"message": str(e)}
+            order.refund_status = "failed"
+            db.commit()
+            return {
+                "status": "refund_failed",
+                "eligible": True,
+                "order_id": payload.order_id,
+                "group_buy": {
+                    "share_code": gb.share_code,
+                    "required_count": gb.required_count,
+                    "current_count": gb.current_count,
+                    "status": gb.status,
+                },
+                "refund": {
+                    "status": order.refund_status,
+                    "refund_txn_id": order.refund_txn_id,
+                    "error": {"message": _public_error_detail(str(e), fallback="refund_internal_error")},
+                },
+            }
 
     db.commit()
     return {
@@ -863,6 +906,27 @@ def retry_group_free_refund(
                 "refund_txn_id": order.refund_txn_id,
                 "attempts": order.refund_attempts,
                 "error": {"status_code": e.status_code},
+            },
+        }
+    except Exception as e:
+        trace_id = request_id_var.get()
+        logger.exception(
+            "group-free retry failed trace_id=%s order_id=%s",
+            trace_id,
+            payload.order_id,
+        )
+        order.refund_error = {"message": str(e)}
+        order.refund_status = "failed"
+        db.commit()
+
+        return {
+            "status": "refund_failed",
+            "order_id": payload.order_id,
+            "refund": {
+                "status": order.refund_status,
+                "refund_txn_id": order.refund_txn_id,
+                "attempts": order.refund_attempts,
+                "error": {"message": _public_error_detail(str(e), fallback="refund_internal_error")},
             },
         }
 
@@ -1269,6 +1333,21 @@ def create_payment_order(
         res["coupon_discount"] = float(coupon_discount)
         res["validated_discount_codes"] = coupon_eval.get("selected", {}).get("valid_codes", [])
         res["server_final_due"] = float(guard["final_due"])
+        if res.get("status") != "success":
+            trace_id = request_id_var.get()
+            message = res.get("message")
+            logger.warning(
+                "create-order failed trace_id=%s user_id=%s message=%r",
+                trace_id,
+                customer_id,
+                message,
+            )
+            if not res.get("detail") and message is not None:
+                res["detail"] = _public_error_detail(
+                    message, fallback="checkout_create_order_failed"
+                )
+            if not res.get("trace_id"):
+                res["trace_id"] = trace_id
     return res
 
 
@@ -1310,7 +1389,7 @@ def create_checkout_quote(
         "expires_in_seconds": 300,
         "checkout_ready": bool(ctx["checkout_ready"]),
         "not_ready_product_ids": ctx["not_ready_product_ids"],
-        "not_ready_reasons": ctx["not_ready_reasons"],
+        "not_ready_reasons": {str(k): v for k, v in ctx["not_ready_reasons"].items()},
         "checkout_block_reason": (ctx["not_ready_reasons"].get(ctx["not_ready_product_ids"][0]) if ctx["not_ready_product_ids"] else None),
         "summary": {
             "subtotal": float(ctx["subtotal"]),

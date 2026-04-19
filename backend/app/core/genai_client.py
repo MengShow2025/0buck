@@ -10,6 +10,12 @@ from google.genai import types
 from app.core.config import settings
 
 
+def _openrouter_api_key() -> Optional[str]:
+    import os
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+    return os.getenv("OPENROUTER_API_KEY") or getattr(settings, "OPENROUTER_API_KEY", None)
+
 def _api_key() -> Optional[str]:
     import os
     from dotenv import load_dotenv
@@ -23,13 +29,15 @@ def _api_key() -> Optional[str]:
         return gemini_key
     return google_key
 
+class MockResponse:
+    def __init__(self, text: str):
+        self.text = text
 
 def _client() -> genai.Client:
     api_key = _api_key()
     if not api_key:
         raise RuntimeError("GEMINI_API_KEY/GOOGLE_API_KEY not configured")
     return genai.Client(api_key=api_key)
-
 
 async def generate_text(
     *,
@@ -38,7 +46,36 @@ async def generate_text(
     system_instruction: Optional[str] = None,
     temperature: Optional[float] = None,
     response_mime_type: Optional[str] = None,
-) -> types.GenerateContentResponse:
+) -> types.GenerateContentResponse | MockResponse:
+    openrouter_key = _openrouter_api_key()
+    if openrouter_key:
+        import httpx
+        target_model = "google/gemini-2.5-flash" if "flash" in model else "anthropic/claude-3.5-sonnet"
+        headers = {
+            "Authorization": f"Bearer {openrouter_key}",
+            "HTTP-Referer": getattr(settings, "BACKEND_URL", "http://localhost:8000"),
+            "Content-Type": "application/json"
+        }
+        messages = []
+        if system_instruction:
+            messages.append({"role": "system", "content": system_instruction})
+        messages.append({"role": "user", "content": contents})
+        
+        payload = {
+            "model": target_model,
+            "messages": messages,
+            "temperature": temperature if temperature is not None else 0.7
+        }
+        
+        if response_mime_type == "application/json":
+            payload["response_format"] = {"type": "json_object"}
+            
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            resp = await client.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            return MockResponse(data["choices"][0]["message"]["content"])
+            
     config = None
     if system_instruction is not None or temperature is not None or response_mime_type is not None:
         config = types.GenerateContentConfig(

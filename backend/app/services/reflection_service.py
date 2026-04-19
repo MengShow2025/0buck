@@ -61,7 +61,7 @@ class ReflectionService:
 
         try:
             # v5.7.10: Model Failover for Reflection
-            model_tier = ["gemini-2.5-flash", "gemini-2.5-pro"]
+            model_tier = ["google/gemini-2.5-flash", "anthropic/claude-3.5-sonnet"]
             response = None
             last_err = None
             for m_name in model_tier:

@@ -29,7 +29,7 @@ class PersonalizedMatrixService:
 
     def __init__(self, db: Session):
         self.db = db
-        self.model_enabled = bool(settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY)
+        self.model_enabled = bool(settings.OPENROUTER_API_KEY or settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY)
 
     async def get_personalized_discovery(self, user_id: int, user_country: str = "US", page: int = 1, limit: int = 10) -> Dict[str, Any]:
         """
@@ -214,6 +214,7 @@ class PersonalizedMatrixService:
                         }
                     )
             except Exception as e:
+                self.db.rollback()
                 logger.warning(f"CJ raw products fallback unavailable: {e}")
                 products = []
 
@@ -312,13 +313,17 @@ class PersonalizedMatrixService:
         return products
 
     def _get_user_persona_id(self, user_id: int) -> str:
+        fallback = "default"
         try:
             profile = self.db.query(UserButlerProfile).filter_by(user_id=user_id).first()
-            if not profile:
-                return "default"
-            return profile.active_persona_id or "default"
-        except Exception:
-            return "default"
+            raw_persona_id = getattr(profile, "active_persona_id", None) if profile else None
+            persona_id = (raw_persona_id or "").strip() or fallback
+            
+            exists = self.db.query(PersonaTemplate.id).filter_by(id=persona_id).first()
+            return persona_id if exists else fallback
+        except Exception as e:
+            logger.error(f"Error fetching user persona: {e}")
+            return fallback
 
     async def _generate_greeting(self, user_id: int, product: Dict[str, Any], facts: List[UserMemoryFact]) -> str:
         """

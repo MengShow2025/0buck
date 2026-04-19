@@ -80,9 +80,24 @@ async def orders_paid_webhook(request: Request):
     payload = await request.json()
     
     # Task 1: Offload to Redis Queue (Celery)
-    process_paid_order.delay(payload)
-    
-    return {"status": "success", "message": "Order paid processing queued"}
+    # Fallback to sync execution when broker/backend is unavailable
+    try:
+        process_paid_order.delay(payload)
+        return {"status": "success", "message": "Order paid processing queued"}
+    except Exception as e:
+        logger.exception("orders/paid enqueue failed, fallback to sync processing: %s", e)
+        try:
+            process_paid_order(payload)
+        except Exception as sync_error:
+            logger.exception("orders/paid sync fallback failed: %s", sync_error)
+            return {
+                "status": "accepted_with_error",
+                "message": "Webhook accepted but processing failed",
+            }
+        return {
+            "status": "success",
+            "message": "Order paid processed via sync fallback",
+        }
 
 @router.post("/shopify/orders/fulfilled")
 async def orders_fulfilled_webhook(

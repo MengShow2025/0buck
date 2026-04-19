@@ -128,7 +128,15 @@ def process_paid_order(self, payload: dict):
         return {"status": "success", "order_id": order_id}
 
     except Exception as e:
-        logger.error(f"Error in process_paid_order task: {str(e)}")
+        err = str(e)
+        # Local DB schema may be ahead/behind model fields in some environments.
+        # For known missing-column cases, skip retry to avoid webhook retry storms.
+        if "column orders.referrer_id does not exist" in err:
+            logger.error("process_paid_order skipped due to schema mismatch: %s", err)
+            db.rollback()
+            return {"status": "skipped_schema_mismatch", "order_id": order_id}
+
+        logger.error(f"Error in process_paid_order task: {err}")
         db.rollback()
         raise self.retry(exc=e, countdown=60 * (self.request.retries + 1))
     finally:

@@ -274,18 +274,23 @@ class SyncShopifyService:
                 
         return cdn_urls
 
-    def sync_to_shopify(self, product: Product, retries: int = 3):
+    def sync_to_shopify(self, product: Product, retries: int = 1):
         """
         Pushes the local Product data to Shopify.
         v3.2: Added exponential backoff for Shopify API Rate Limits (429).
         """
+        import socket
+        import shopify
+        import time
+        socket.setdefaulttimeout(5) # Set a global timeout to avoid hanging forever
         for attempt in range(retries):
             try:
                 # 1. Create or update the product
                 if product.shopify_product_id:
                     try:
                         sp = shopify.Product.find(product.shopify_product_id)
-                    except:
+                    except Exception as e:
+                        logger.warning(f"Failed to find shopify product, creating new. Error: {e}")
                         sp = shopify.Product()
                 else:
                     sp = shopify.Product()

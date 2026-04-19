@@ -56,7 +56,7 @@ class CopywritingService:
         self.api_key = api_key
         self.base_url = base_url
         self.template_path = "backend/prompts/truth_narrative_v1.md"
-        self.model = "claude-3-5-sonnet-20240620"
+        self.model = "anthropic/claude-3.5-sonnet"
         
     def _load_template(self) -> str:
         try:
@@ -114,14 +114,12 @@ class CopywritingService:
         """
         
         headers = {
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
         }
         
         payload = {
-            "model": "claude-3-haiku-20240307", # Use Haiku for speed/cost on small tasks
-            "max_tokens": 50,
+            "model": "google/gemini-2.5-flash", # Use Flash for speed/cost on small tasks
             "messages": [
                 {"role": "user", "content": prompt}
             ],
@@ -130,11 +128,11 @@ class CopywritingService:
         
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                api_url = f"{self.base_url.rstrip('/')}/v1/messages"
+                api_url = f"{self.base_url.rstrip('/')}/chat/completions"
                 resp = await client.post(api_url, json=payload, headers=headers)
                 resp.raise_for_status()
                 result = resp.json()
-                return result["content"][0]["text"].strip().strip('"')
+                return result["choices"][0]["message"]["content"].strip().strip('"')
         except Exception as e:
             logger.error(f"❌ Hook Generation Error: {e}")
             return "Industrial Grade Stability"
@@ -185,14 +183,13 @@ class CopywritingService:
         )
 
         headers = {
-            "x-api-key": self.api_key,
-            "anthropic-version": "2023-06-01",
-            "content-type": "application/json"
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json"
         }
         
-        # v8.5.3: Using DeepSeek-V3.2 via ACW Proxy (Stable on current channel)
+        # v8.5.4: Using Claude 3.7 Sonnet via OpenRouter
         payload = {
-            "model": "deepseek-v3.2",
+            "model": self.model,
             "messages": [
                 {"role": "user", "content": prompt}
             ],
@@ -202,9 +199,7 @@ class CopywritingService:
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 logger.info(f"✍️ Desire Engine: Generating deep narrative for {raw_data.get('id')}...")
-                api_url = f"{self.base_url.rstrip('/')}/v1/chat/completions"
-                # Use OpenAI style headers for deepseek on this proxy
-                headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+                api_url = f"{self.base_url.rstrip('/')}/chat/completions"
                 resp = await client.post(api_url, json=payload, headers=headers)
                 resp.raise_for_status()
                 result = resp.json()
@@ -246,8 +241,8 @@ class RefineryGateway:
     def __init__(self):
         self.flux = FluxInpaintService(api_key=settings.FAL_KEY)
         self.copywriter = CopywritingService(
-            api_key=settings.ANTHROPIC_API_KEY,
-            base_url=settings.ANTHROPIC_BASE_URL
+            api_key=settings.OPENROUTER_API_KEY,
+            base_url="https://openrouter.ai/api/v1"
         )
         self.vision_audit = vision_audit_service
 

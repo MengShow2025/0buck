@@ -4,6 +4,7 @@ import json
 from decimal import Decimal
 from typing import Dict, Any, Optional, List
 from app.core.config import settings
+from app.core.http_client import ResilientSyncClient
 from app.models.product import Product
 from app.models.ledger import Order as LocalOrder
 
@@ -36,8 +37,11 @@ class ShopifyDraftOrderService:
             customer.last_name = f"User_{user_id}"
         
         # Sync Tags (Critical for LTV Tracking in Shopify Admin)
-        tags = customer.tags.split(",") if customer.tags else []
-        tags = [t.strip() for t in tags]
+        raw_tags = getattr(customer, "tags", "") or ""
+        if isinstance(raw_tags, str):
+            tags = [t.strip() for t in raw_tags.split(",") if t.strip()]
+        else:
+            tags = []
         
         tags.append("0buck_verified")
         if referral_code:
@@ -64,7 +68,12 @@ class ShopifyDraftOrderService:
             # 1. Identity Mapping
             shopify_customer_id = customer_id # Default
             if email:
-                shopify_customer_id = self.get_or_create_shopify_customer(customer_id, email, referral_code)
+                try:
+                    shopify_customer_id = self.get_or_create_shopify_customer(customer_id, email, referral_code)
+                except Exception:
+                    # Degrade gracefully to guest-style checkout when Shopify customer sync is unstable.
+                    logger.exception("Shopify customer sync failed, fallback to guest checkout")
+                    shopify_customer_id = None
 
             draft_order = shopify.DraftOrder()
             line_items = []
@@ -87,36 +96,20 @@ class ShopifyDraftOrderService:
                     line_items.append({
                         "variant_id": int(product.shopify_variant_id),
                         "quantity": quantity,
-                        "price": str(price)
+                        "price": str(price),
+                        "title": product.title_en or product.title_zh or f"Product {product.id}",
                     })
                     total_price_usd += price * quantity
                     
                     # Hint: In a real v3.6, we'd query multiple suppliers here
                     sourcing_hints.append({
                         "product_id": product.id,
-                        "best_supplier": product.supplier_id_1688 or "primary",
-                        "cost_at_creation": str(product.source_cost_usd)
+                        "best_supplier": getattr(product, "supplier_id_1688", None) or "primary",
+                        "cost_at_creation": str(getattr(product, "source_cost_usd", "0"))
                     })
             finally:
                 db.close()
 
-            draft_order.line_items = line_items
-            draft_order.customer = {"id": shopify_customer_id}
-            draft_order.use_customer_default_address = True
-            
-            # 3. Apply Balance Deduction
-            # ... (balance logic remains same)
-            total_discount = max(Decimal("0.0"), balance_to_use) + max(Decimal("0.0"), extra_discount)
-            if total_discount > 0:
-                # Cap discount at total price
-                actual_discount = min(total_discount, total_price_usd)
-                draft_order.applied_discount = {
-                    "description": "0Buck Wallet + Coupon Discount",
-                    "value": str(actual_discount),
-                    "value_type": "fixed_amount",
-                    "title": "0Buck Discount"
-                }
-            
             # 3. Add Metadata for Audit & Rewards
             meta_attributes = [
                 {"key": "0buck_user_id", "value": str(customer_id)},
@@ -127,8 +120,41 @@ class ShopifyDraftOrderService:
             ]
             if referral_code:
                 meta_attributes.append({"key": "referral_code", "value": referral_code})
-            
-            draft_order.note_attributes = meta_attributes
+
+            total_discount = max(Decimal("0.0"), balance_to_use) + max(Decimal("0.0"), extra_discount)
+            rest_error_message = None
+
+            # Primary path: use resilient REST client to avoid urllib/LibreSSL instability.
+            rest_first = self._create_draft_order_via_rest(
+                shopify_customer_id=int(shopify_customer_id) if shopify_customer_id else None,
+                email=email,
+                line_items_payload=line_items,
+                total_price_usd=total_price_usd,
+                total_discount=total_discount,
+                meta_attributes=meta_attributes,
+            )
+            if rest_first.get("status") == "success":
+                return rest_first
+            rest_error_message = rest_first.get("message")
+
+            def _apply_common_fields(target_order: shopify.DraftOrder, payload_items: List[Dict[str, Any]]) -> None:
+                target_order.line_items = payload_items
+                if shopify_customer_id:
+                    target_order.customer = {"id": shopify_customer_id}
+                    target_order.use_customer_default_address = True
+                elif email:
+                    target_order.email = email
+                if total_discount > 0:
+                    actual_discount = min(total_discount, total_price_usd)
+                    target_order.applied_discount = {
+                        "description": "0Buck Wallet + Coupon Discount",
+                        "value": str(actual_discount),
+                        "value_type": "fixed_amount",
+                        "title": "0Buck Discount"
+                    }
+                target_order.note_attributes = meta_attributes
+
+            _apply_common_fields(draft_order, line_items)
             
             if draft_order.save():
                 return {
@@ -139,10 +165,51 @@ class ShopifyDraftOrderService:
                     "amount_due": float(draft_order.total_price) # Amount remaining for user to pay
                 }
             else:
-                return {"status": "error", "message": draft_order.errors.full_messages()}
+                errors = draft_order.errors.full_messages()
+                # Fallback: if variant is no longer available, retry as custom line items.
+                if any("no longer available" in str(msg).lower() for msg in errors):
+                    fallback_items = [
+                        {
+                            "title": item.get("title") or f"Product #{idx + 1}",
+                            "quantity": item["quantity"],
+                            "price": item["price"],
+                        }
+                        for idx, item in enumerate(line_items)
+                    ]
+                    fallback_order = shopify.DraftOrder()
+                    _apply_common_fields(fallback_order, fallback_items)
+                    if fallback_order.save():
+                        return {
+                            "status": "success",
+                            "draft_order_id": fallback_order.id,
+                            "invoice_url": fallback_order.invoice_url,
+                            "total_price": float(total_price_usd),
+                            "amount_due": float(fallback_order.total_price)
+                        }
+                    errors = fallback_order.errors.full_messages()
+                if rest_error_message is not None:
+                    return {"status": "error", "message": {"rest": rest_error_message, "sdk": errors}}
+                return {"status": "error", "message": errors}
 
         except Exception as e:
-            logger.error(f"Draft Order Creation Failed: {e}")
+            logger.exception("Draft Order Creation Failed")
+            try:
+                if "line_items" in locals() and "shopify_customer_id" in locals():
+                    total_discount = max(Decimal("0.0"), balance_to_use) + max(Decimal("0.0"), extra_discount)
+                    fallback_res = self._create_draft_order_via_rest(
+                        shopify_customer_id=int(shopify_customer_id) if shopify_customer_id else None,
+                        email=email,
+                        line_items_payload=line_items,
+                        total_price_usd=total_price_usd if "total_price_usd" in locals() else Decimal("0.0"),
+                        total_discount=total_discount,
+                        meta_attributes=meta_attributes if "meta_attributes" in locals() else [],
+                    )
+                    if fallback_res.get("status") == "success":
+                        return fallback_res
+            except Exception:
+                logger.exception("Draft Order REST fallback failed")
+            if "rest_error_message" in locals() and rest_error_message is not None:
+                return {"status": "error", "message": {"rest": rest_error_message, "sdk": str(e)}}
             return {"status": "error", "message": str(e)}
 
     def create_final_order_direct(
@@ -200,8 +267,111 @@ class ShopifyDraftOrderService:
                 return {"status": "error", "message": new_order.errors.full_messages()}
 
         except Exception as e:
-            logger.error(f"Full Balance Order Creation Failed: {e}")
+            logger.exception("Full Balance Order Creation Failed")
             return {"status": "error", "message": str(e)}
 
     def close(self):
         shopify.ShopifyResource.clear_session()
+
+    def _create_draft_order_via_rest(
+        self,
+        shopify_customer_id: Optional[int],
+        email: Optional[str],
+        line_items_payload: List[Dict[str, Any]],
+        total_price_usd: Decimal,
+        total_discount: Decimal,
+        meta_attributes: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Fallback path using Shopify Admin REST via resilient HTTP client."""
+        base = f"https://{self.shop_url}/admin/api/{self.api_version}"
+        headers = {
+            "X-Shopify-Access-Token": self.access_token,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        client = ResilientSyncClient(
+            name="shopify_admin",
+            retries=1,
+            timeout_seconds=30.0,
+            connect_timeout_seconds=5.0,
+        )
+
+        def _normalized_note_attributes() -> List[Dict[str, str]]:
+            return [
+                {"name": str(x.get("key") or x.get("name") or ""), "value": str(x.get("value") or "")}
+                for x in meta_attributes
+                if (x.get("key") or x.get("name"))
+            ]
+
+        def _build_payload(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+            payload: Dict[str, Any] = {
+                "draft_order": {
+                    "line_items": items,
+                    "note_attributes": _normalized_note_attributes(),
+                }
+            }
+            if shopify_customer_id:
+                payload["draft_order"]["customer"] = {"id": shopify_customer_id}
+                payload["draft_order"]["use_customer_default_address"] = True
+            elif email:
+                payload["draft_order"]["email"] = email
+            if total_discount > 0:
+                actual_discount = min(total_discount, total_price_usd)
+                payload["draft_order"]["applied_discount"] = {
+                    "description": "0Buck Wallet + Coupon Discount",
+                    "value": str(actual_discount),
+                    "value_type": "fixed_amount",
+                    "title": "0Buck Discount",
+                }
+            return payload
+
+        def _post_draft(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+            try:
+                resp = client.request(
+                    "POST",
+                    f"{base}/draft_orders.json",
+                    headers=headers,
+                    json=_build_payload(items),
+                    retry_on_status=(429,),
+                )
+            except Exception as e:
+                response = getattr(e, "response", None)
+                if response is not None:
+                    try:
+                        err_data = response.json() if response.content else {"raw": response.text}
+                    except Exception:
+                        err_data = {"raw": getattr(response, "text", str(e))}
+                    return {"status": "error", "message": err_data}
+                raise
+            data = resp.json() if resp.content else {}
+            if resp.status_code >= 400:
+                return {"status": "error", "message": data}
+            draft = data.get("draft_order") if isinstance(data, dict) else None
+            if not isinstance(draft, dict):
+                return {"status": "error", "message": data}
+            return {
+                "status": "success",
+                "draft_order_id": draft.get("id"),
+                "invoice_url": draft.get("invoice_url"),
+                "total_price": float(total_price_usd),
+                "amount_due": float(Decimal(str(draft.get("total_price") or 0))),
+            }
+
+        # Try with original items (variant-based) first.
+        first = _post_draft(line_items_payload)
+        if first.get("status") == "success":
+            return first
+
+        # If variants are unavailable, fallback to custom line items.
+        msg = str(first.get("message", "")).lower()
+        if "no longer available" not in msg:
+            return first
+        custom_items = [
+            {
+                "title": item.get("title") or f"Product #{idx + 1}",
+                "quantity": item.get("quantity", 1),
+                "price": item.get("price", "0"),
+            }
+            for idx, item in enumerate(line_items_payload)
+        ]
+        return _post_draft(custom_items)

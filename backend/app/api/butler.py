@@ -43,6 +43,7 @@ class ChatRequest(BaseModel):
 class MinimaxChatRequest(BaseModel):
     user_id: Any = None
     messages: Any = []
+    context: Any = None
     butler_name: Any = "0Buck Butler"
 
 
@@ -261,41 +262,41 @@ async def _infer_reply_language(user_text: str) -> Optional[str]:
 
 
 def _gemini_rest_generate_text(system_prompt: str, user_text: str) -> str:
-    api_key = os.getenv("GEMINI_API_KEY") or settings.GEMINI_API_KEY or os.getenv("GOOGLE_API_KEY") or settings.GOOGLE_API_KEY
+    import urllib.request
+    import json
+    api_key = os.getenv("OPENROUTER_API_KEY") or getattr(settings, "OPENROUTER_API_KEY", None) or os.getenv("GEMINI_API_KEY")
     if not api_key:
         return ""
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
     body = {
-        "system_instruction": {
-            "parts": [{"text": system_prompt}]
-        },
-        "contents": [
-            {
-                "parts": [{"text": user_text}]
-            }
+        "model": "google/gemini-2.5-flash",
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_text}
         ],
-        "generationConfig": {
-            "temperature": 0
-        }
+        "temperature": 0
     }
     req = urllib.request.Request(
         url,
         data=json.dumps(body).encode("utf-8"),
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         method="POST",
     )
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
             payload = json.loads(resp.read().decode("utf-8"))
-            candidates = payload.get("candidates") or []
-            if not candidates:
+            choices = payload.get("choices") or []
+            if not choices:
                 return ""
-            parts = (((candidates[0] or {}).get("content") or {}).get("parts")) or []
-            if not parts:
-                return ""
-            return str(parts[0].get("text", "")).strip()
-    except urllib.error.URLError as e:
-        logger.warning("Gemini REST request failed: %r", e)
+            content = choices[0].get("message", {}).get("content")
+            return str(content).strip() if content is not None else ""
+    except Exception as e:
+        logger.warning(f"OpenRouter REST request failed: {e}")
         return ""
 
 

@@ -256,8 +256,12 @@ def list_sourcing_candidates(
     db: Session = Depends(get_db)
 ):
     """v3.9.0: List products discovered by AI waiting for admin review with pagination"""
-    candidates = db.query(CandidateProduct).filter_by(status=status)\
-        .order_by(CandidateProduct.created_at.desc())\
+    query = db.query(CandidateProduct)
+    if status:
+        statuses = [s.strip() for s in status.split(',')]
+        query = query.filter(CandidateProduct.status.in_(statuses))
+    
+    candidates = query.order_by(CandidateProduct.created_at.desc())\
         .offset(skip).limit(limit).all()
     
     # v3.9.6: Ensure JSON parsing for frontend safety
@@ -422,7 +426,10 @@ async def approve_sourcing_candidate(candidate_id: int, db: Session = Depends(ge
             return {"status": "success", "message": "Candidate approved and synced to Shopify/Notion."}
         else:
             raise HTTPException(status_code=400, detail="Candidate not found or already processed.")
+    except HTTPException:
+        raise
     except Exception as e:
+        logger.error(f"Approval failed: {e}")
         raise HTTPException(status_code=500, detail=f"Approval failed: {str(e)}")
 
 @router.post("/sourcing/candidates/{candidate_id}/reject")

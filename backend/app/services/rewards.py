@@ -438,6 +438,11 @@ class RewardsService:
             plan = self.db.query(CheckinPlan).filter_by(id=plan_id, user_id=customer_id).with_for_update().first()
             if not plan:
                 return {"status": "error", "message": "Plan not found."}
+            if plan.status != "active_checkin":
+                return {
+                    "status": "error",
+                    "message": f"Plan is not active for check-in (status={plan.status}).",
+                }
             plans = [plan]
         else:
             # Get all active check-in plans for this user with row locking

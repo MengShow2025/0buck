@@ -97,7 +97,7 @@ class Product(Base):
     
     # v7.0 Circuit Breaker & Alerts
     is_melted = Column(Boolean, default=False, index=True)
-    melt_reason = Column(String, nullable=True)
+    melting_reason = Column(String, nullable=True)
     shipping_ratio = Column(Float, nullable=True)
     shipping_warning = Column(Boolean, default=False)
     

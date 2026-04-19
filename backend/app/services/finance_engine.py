@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, text
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Dict, Any, Optional
@@ -114,7 +114,19 @@ def earn_points(db: Session, user_id: int, source: PointSource, amount: int) -> 
         today = date.today()
         # Aggregate today's non-transactional point earnings
         # v3.4.7: Sum all non-transactional sources (SIGN_IN, AD, etc.)
-        non_transactional_sources = [s for s in PointSource if s not in {PointSource.PURCHASE, PointSource.REFERRAL}]
+        # Some environments have older DB enum values; intersect with actual DB enum labels.
+        try:
+            db_enum_values = set(
+                db.execute(text("SELECT unnest(enum_range(NULL::pointsource))::text")).scalars().all()
+            )
+        except Exception:
+            db_enum_values = {s.value for s in PointSource}
+
+        non_transactional_sources = [
+            s
+            for s in PointSource
+            if s not in {PointSource.PURCHASE, PointSource.REFERRAL} and s.value in db_enum_values
+        ]
         
         today_earned = db.query(func.sum(PointTransaction.amount)).filter(
             PointTransaction.user_id == user_id,

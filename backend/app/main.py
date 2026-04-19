@@ -81,6 +81,7 @@ app.add_middleware(
         "https://0buck.com",
         "https://shop.0buck.com",
         "http://localhost:5173",
+        "http://127.0.0.1:5173",
         "http://localhost:3000"
     ],
     allow_credentials=True,

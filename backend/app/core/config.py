@@ -37,6 +37,7 @@ class Settings(BaseSettings):
     SHOPIFY_STOREFRONT_TOKEN: str = os.getenv("SHOPIFY_STOREFRONT_TOKEN", "").strip()
     
     # AI
+    OPENROUTER_API_KEY: str = os.getenv("OPENROUTER_API_KEY", "")
     GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     MINIMAX_API_KEY: str = os.getenv("MINIMAX_API_KEY", "")
@@ -134,6 +135,7 @@ class Settings(BaseSettings):
 
     # Environment
     ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development") # "development" or "production"
+    EXPOSE_INTERNAL_ERROR_DETAIL: bool = os.getenv("EXPOSE_INTERNAL_ERROR_DETAIL", "false").lower() == "true"
     COOKIE_DOMAIN: Optional[str] = os.getenv("COOKIE_DOMAIN")
 
     APP_VERSION: str = os.getenv("APP_VERSION", "unknown")

@@ -10,25 +10,25 @@ logger = logging.getLogger(__name__)
 
 class VisionAuditService:
     def __init__(self):
-        # v7.5 Hybrid Engine: Support multiple models for fallback
-        self.gemini_key = settings.GEMINI_API_KEY or settings.GOOGLE_API_KEY
-        self.acw_key = settings.OPENAI_API_KEY or settings.ANTHROPIC_API_KEY
-        self.acw_base_url = "https://api.aicodewith.com/v1"
+        # v7.5 Hybrid Engine: Support OpenRouter for fallback and primary
+        self.openrouter_key = settings.OPENROUTER_API_KEY
+        self.acw_base_url = "https://openrouter.ai/api/v1"
         
-        # Initialize Gemini first
+        # Initialize Primary (Cheap/Capable Vision)
         try:
-            self.gemini_llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash",
-                google_api_key=self.gemini_key,
+            self.gemini_llm = ChatOpenAI(
+                model="google/gemini-2.5-flash",
+                api_key=self.openrouter_key,
+                base_url=self.acw_base_url,
                 temperature=0
             )
         except: self.gemini_llm = None
         
-        # Initialize ACW Fallback (using OpenAI compatible interface)
+        # Initialize High Quality Fallback (Claude)
         try:
             self.acw_llm = ChatOpenAI(
-                model="gpt-4o", # High quality vision fallback
-                api_key=self.acw_key,
+                model="anthropic/claude-3.5-sonnet", # High quality vision fallback
+                api_key=self.openrouter_key,
                 base_url=self.acw_base_url,
                 temperature=0
             )

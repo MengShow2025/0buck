@@ -94,23 +94,31 @@ def resolve_user_ai_key(stored_key: Optional[str]) -> Optional[str]:
 
 def get_dynamic_llm(user_id: int, db: SessionLocal, task_type: str = "chat"):
     """
-    v3.1 Dynamic LLM Initialization with Task-Based Routing.
-    Priority: User's BYOK Key > System Key.
-    Routing: 
-      - 'chat' / 'simple' -> gemini-2.5-flash
-      - 'reasoning' / 'finance' -> gemini-2.5-pro
+    v3.3 Dynamic LLM Initialization with OpenRouter Routing.
+    Priority: User's BYOK Key > System OpenRouter Key.
+    Routing (Economic & Free priority): 
+      - 'chat' / 'simple' -> google/gemini-2.0-flash-lite-preview-02-05:free
+      - 'reasoning' / 'finance' / 'complex' -> google/gemini-2.0-pro-exp-02-05:free
     """
     config_service = ConfigService(db)
     profile = db.query(UserButlerProfile).filter_by(user_id=user_id).first()
     
-    # Determine target model based on task type
-    target_model = "gemini-2.5-flash"
+    # Determine target model based on task type (OpenRouter models)
+    target_model = "google/gemini-2.5-flash" # Very cheap, capable
     if task_type in ["reasoning", "finance", "complex"]:
-        target_model = "gemini-2.5-pro"
+        target_model = "anthropic/claude-3.5-sonnet" # Top tier for complex tasks
         
     user_key = resolve_user_ai_key(profile.ai_api_key if profile else None)
     if user_key:
-        if user_key.startswith("sk-"):
+        if user_key.startswith("sk-or-"):
+            from langchain_openai import ChatOpenAI
+            return ChatOpenAI(
+                model=target_model,
+                api_key=user_key,
+                base_url="https://openrouter.ai/api/v1",
+                temperature=0
+            ), True
+        elif user_key.startswith("sk-"):
             from langchain_openai import ChatOpenAI
             return ChatOpenAI(
                 model="abab6.5s-chat",
@@ -119,28 +127,34 @@ def get_dynamic_llm(user_id: int, db: SessionLocal, task_type: str = "chat"):
                 temperature=0
             ), True
         return ChatGoogleGenerativeAI(
-            model=target_model,
+            model="gemini-2.5-flash",
             google_api_key=user_key,
             temperature=0
         ), True
     
-    # Use System Key (Subsidy)
-    # Prefer MINIMAX for Chinese mainland IP stability
-    system_key = config_service.get_api_key("MINIMAX_API_KEY")
+    # Use System Key (Subsidy) - Prefer OPENROUTER
+    system_key = config_service.get_api_key("OPENROUTER_API_KEY")
     if not system_key:
-        system_key = config_service.get_api_key("GEMINI_API_KEY") or config_service.get_api_key("GOOGLE_API_KEY")
+        system_key = config_service.get_api_key("MINIMAX_API_KEY") or config_service.get_api_key("GEMINI_API_KEY")
         
     if not system_key:
         from dotenv import load_dotenv
         load_dotenv(override=True)
-        system_key = os.getenv("MINIMAX_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+        system_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("MINIMAX_API_KEY") or os.getenv("GEMINI_API_KEY")
         
     if not system_key or len(system_key) < 10:
         logger.error("No valid system API_KEY found.")
-        # Attempt to gracefully return a dummy model if completely missing to prevent hard crash
         system_key = "dummy_key_to_prevent_crash"
     
-    if system_key.startswith("sk-"):
+    if system_key.startswith("sk-or-"):
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(
+            model=target_model,
+            api_key=system_key,
+            base_url="https://openrouter.ai/api/v1",
+            temperature=0
+        ), False
+    elif system_key.startswith("sk-"):
         from langchain_openai import ChatOpenAI
         return ChatOpenAI(
             model="abab6.5s-chat",
@@ -150,7 +164,7 @@ def get_dynamic_llm(user_id: int, db: SessionLocal, task_type: str = "chat"):
         ), False
 
     return ChatGoogleGenerativeAI(
-        model=target_model,
+        model="gemini-2.5-flash",
         google_api_key=system_key,
         temperature=0
     ), False
@@ -186,7 +200,7 @@ async def supervisor(state: AgentState):
         config_service = ConfigService(db)
         flags = FeatureFlagService(config_service)
 
-        model_tier = ["gemini-2.5-flash"]
+        model_tier = ["google/gemini-2.5-flash"]
         
         # Dynamic Routing based on intent/task complexity
         is_complex = False
@@ -196,9 +210,9 @@ async def supervisor(state: AgentState):
                 is_complex = True
                 
         if is_complex and flags.enabled("ff.ai.enable_pro_routing", subject=str(user_id), default=True):
-            model_tier = ["gemini-2.5-pro", "gemini-2.5-flash"] # Try Pro first for complex tasks
+            model_tier = ["anthropic/claude-3.5-sonnet", "google/gemini-2.5-flash"] # Try Pro first for complex tasks
         elif flags.enabled("ff.ai.enable_pro_fallback", subject=str(user_id), default=True):
-            model_tier.append("gemini-2.5-pro") # Flash first, fallback to Pro
+            model_tier.append("anthropic/claude-3.5-sonnet") # Flash first, fallback to Pro
             
         last_error = None
         profile = db.query(UserButlerProfile).filter_by(user_id=user_id).first()
@@ -210,11 +224,11 @@ async def supervisor(state: AgentState):
         if user_api_key:
             api_keys_to_try = [user_api_key]
         else:
-            raw_pool = config_service.get_api_key("MINIMAX_API_KEY") or config_service.get_api_key("GEMINI_API_KEYS") or config_service.get_api_key("GEMINI_API_KEY") or config_service.get_api_key("GOOGLE_API_KEY")
+            raw_pool = config_service.get_api_key("OPENROUTER_API_KEY") or config_service.get_api_key("MINIMAX_API_KEY") or config_service.get_api_key("GEMINI_API_KEYS") or config_service.get_api_key("GEMINI_API_KEY") or config_service.get_api_key("GOOGLE_API_KEY")
             if not raw_pool:
                 from dotenv import load_dotenv
                 load_dotenv()
-                raw_pool = os.getenv("MINIMAX_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+                raw_pool = os.getenv("OPENROUTER_API_KEY") or os.getenv("MINIMAX_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
                 
             if raw_pool:
                 # Support comma-separated keys for pooling
@@ -248,29 +262,31 @@ async def supervisor(state: AgentState):
                             if not api_key or len(api_key) < 10:
                                 from dotenv import load_dotenv
                                 load_dotenv(override=True) # Force load .env over shell
-                                api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+                                api_key = os.getenv("OPENROUTER_API_KEY") or os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
                                 
                             if not api_key:
                                 raise Exception("API Key not found in any environment variable or database.")
                                 
-                            # Handle MiniMax compatibility
-                            is_minimax = api_key.startswith("sk-") and "minimax" in (os.getenv("GEMINI_API_KEY", "")).lower() or api_key.startswith("sk-")
-                            
-                            if is_minimax:
-                                # Provide generic OpenAI client for minimax proxy compatibility
+                            if api_key.startswith("sk-or-"):
                                 from langchain_openai import ChatOpenAI
-                                # Check if base_url is set in env for minimax proxy
-                                minimax_base_url = os.getenv("OPENAI_API_BASE", "https://api.minimax.chat/v1")
-                                
                                 llm = ChatOpenAI(
-                                    model=model_name if "gemini" not in model_name else "abab6.5s-chat",
+                                    model=model_name,
+                                    api_key=api_key,
+                                    base_url="https://openrouter.ai/api/v1",
+                                    temperature=0
+                                )
+                            elif api_key.startswith("sk-"):
+                                from langchain_openai import ChatOpenAI
+                                minimax_base_url = os.getenv("OPENAI_API_BASE", "https://api.minimax.chat/v1")
+                                llm = ChatOpenAI(
+                                    model="abab6.5s-chat",
                                     api_key=api_key,
                                     base_url=minimax_base_url,
                                     temperature=0
                                 )
                             else:
                                 llm = ChatGoogleGenerativeAI(
-                                    model=model_name,
+                                    model="gemini-2.0-flash" if "flash" in model_name else "gemini-2.0-pro-exp-02-05",
                                     google_api_key=api_key,
                                     temperature=0
                                 )
@@ -500,7 +516,8 @@ async def run_agent(content: str, user_id: int, session_id: str = "default"):
                 "is_byok": is_byok
             }
         except Exception as e:
-            logger.error(f"❌ AI Agent Execution Error (Final Fallback): {str(e)}")
+            import traceback
+            logger.error(f"❌ AI Agent Execution Error (Final Fallback): {str(e)}\n{traceback.format_exc()}")
             # Bubble up specific errors like location restriction or quota
             error_str = str(e).lower()
             if "user location is not supported" in error_str or "failedprecondition" in error_str:
