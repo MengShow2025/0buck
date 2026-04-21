@@ -60,6 +60,8 @@ class Settings(BaseSettings):
     APPLE_CLIENT_SECRET: str = os.getenv("APPLE_CLIENT_SECRET", "")
     FACEBOOK_CLIENT_ID: str = os.getenv("FACEBOOK_CLIENT_ID", "")
     FACEBOOK_CLIENT_SECRET: str = os.getenv("FACEBOOK_CLIENT_SECRET", "")
+    GITHUB_CLIENT_ID: str = os.getenv("GITHUB_CLIENT_ID", "")
+    GITHUB_CLIENT_SECRET: str = os.getenv("GITHUB_CLIENT_SECRET", "")
     
     # Session Secret
     SECRET_KEY: str = os.getenv("SECRET_KEY", "").strip()

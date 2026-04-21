@@ -74,6 +74,18 @@ oauth.register(
     client_kwargs={'scope': 'name email'}
 )
 
+oauth.register(
+    name='github',
+    client_id=settings.GITHUB_CLIENT_ID,
+    client_secret=settings.GITHUB_CLIENT_SECRET,
+    access_token_url='https://github.com/login/oauth/access_token',
+    access_token_params=None,
+    authorize_url='https://github.com/login/oauth/authorize',
+    authorize_params=None,
+    api_base_url='https://api.github.com/',
+    client_kwargs={'scope': 'user:email'},
+)
+
 # v4.7.3: Alibaba Open Platform OAuth for Sourcing & Arbitrage
 oauth.register(
     name='alibaba',
@@ -125,6 +137,8 @@ def _provider_oauth_ready(provider: str) -> bool:
     p = str(provider or "").strip().lower()
     if p == "google":
         return bool(str(settings.GOOGLE_CLIENT_ID or "").strip() and str(settings.GOOGLE_CLIENT_SECRET or "").strip())
+    if p == "github":
+        return bool(str(settings.GITHUB_CLIENT_ID or "").strip() and str(settings.GITHUB_CLIENT_SECRET or "").strip())
     if p == "facebook":
         return bool(str(settings.FACEBOOK_CLIENT_ID or "").strip() and str(settings.FACEBOOK_CLIENT_SECRET or "").strip())
     if p == "apple":
@@ -926,6 +940,15 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
     user_info = None
     if provider == 'google':
         user_info = token.get('userinfo')
+    elif provider == 'github':
+        resp = await client.get('user', token=token)
+        user_info = resp.json()
+        if not user_info.get('email'):
+            emails_resp = await client.get('user/emails', token=token)
+            emails = emails_resp.json()
+            primary_email = next((e for e in emails if e.get('primary')), emails[0] if emails else None)
+            if primary_email:
+                user_info['email'] = primary_email.get('email')
     elif provider == 'facebook':
         resp = await client.get('me?fields=id,name,email', token=token)
         user_info = resp.json()
