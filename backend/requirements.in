@@ -11,6 +11,7 @@ httpx
 shopifyapi
 qdrant-client
 langchain
+langchain-openai
 langgraph
 langchain-google-genai
 google-genai
