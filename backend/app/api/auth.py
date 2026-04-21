@@ -164,6 +164,18 @@ def _build_oauth_redirect_uri(provider: str, request: Optional[Request]) -> str:
     return f"{backend}{api_base}/auth/callback/{provider}".rstrip("/")
 
 
+def _sanitize_redirect_path(path: str) -> str:
+    """Helper to deeply sanitize any wildcards or broken paths from frontend."""
+    if not path:
+        return "/"
+    p = str(path)
+    p = p.replace("/*/", "/").replace("/*", "/")
+    while p.startswith("//"):
+        p = p[1:]
+    if p in ["/", "", "null", "undefined"]:
+        return "/"
+    return p
+
 def _build_auth_error_redirect_url(frontend_url: str, error_code: str, message: str = "") -> str:
     base = str(frontend_url or "").rstrip("/") or "http://localhost:5173"
     params = {"auth_error": str(error_code or "oauth_error")}
@@ -897,10 +909,15 @@ async def login(provider: str, request: Request, redirect: Optional[str] = None)
     if not _provider_oauth_ready(provider):
         raise HTTPException(status_code=503, detail=f"{provider} OAuth is not configured")
     
+    # Always overwrite the old session redirect with the new one to prevent caching old bad states
     if redirect:
         safe_redirect = _sanitize_redirect_path(redirect)
         if safe_redirect:
             request.session['auth_redirect'] = safe_redirect
+    else:
+        # If no new redirect is provided, clear any old bad ones just in case
+        if 'auth_redirect' in request.session:
+            del request.session['auth_redirect']
     
     # v4.7.3: Handle Alibaba-specific redirect logic
     redirect_uri = _build_oauth_redirect_uri(provider, request)
