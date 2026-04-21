@@ -999,7 +999,16 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
     if saved_redirect:
         # Avoid malformed paths like "/*/"
         clean_redirect = saved_redirect.replace("/*/", "/")
-        final_redirect_url = f"{frontend_url}{clean_redirect}"
+        # Avoid double slashes at the start of path
+        if clean_redirect.startswith("//"):
+            clean_redirect = clean_redirect[1:]
+        
+        # If the path is empty or just a slash, we don't need to append it
+        if clean_redirect == "/" or not clean_redirect:
+            final_redirect_url = frontend_url
+        else:
+            final_redirect_url = f"{frontend_url}{clean_redirect}"
+            
         if '?' in final_redirect_url:
             final_redirect_url += "&auth_success=true"
         else:
