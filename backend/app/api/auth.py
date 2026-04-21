@@ -997,7 +997,9 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
     
     # Construct final redirect URL (v5.7.25)
     if saved_redirect:
-        final_redirect_url = f"{frontend_url}{saved_redirect}"
+        # Avoid malformed paths like "/*/"
+        clean_redirect = saved_redirect.replace("/*/", "/")
+        final_redirect_url = f"{frontend_url}{clean_redirect}"
         if '?' in final_redirect_url:
             final_redirect_url += "&auth_success=true"
         else:

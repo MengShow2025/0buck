@@ -107,9 +107,13 @@ export const AuthDrawer: React.FC = () => {
   };
 
   const handleSocialLogin = (provider: 'google' | 'apple' | 'facebook' | 'github') => {
-    const redirect = `${window.location.pathname}${window.location.search}`;
-    // Force absolute path for local dev because Vite proxy doesn't catch window.location.href
-    const absoluteOauthBase = import.meta.env.VITE_ENVIRONMENT === 'development' 
+    let redirect = `${window.location.pathname}${window.location.search}`;
+    // Fix wildcard path causing 404 in callback
+    if (redirect.includes('/*')) {
+      redirect = '/';
+    }
+    const isDev = import.meta.env.VITE_ENVIRONMENT === 'development' || import.meta.env.DEV;
+    const absoluteOauthBase = isDev
       ? `http://127.0.0.1:8000/api/v1` 
       : `${window.location.origin}/api/v1`;
     
