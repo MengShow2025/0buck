@@ -134,28 +134,18 @@ def _provider_oauth_ready(provider: str) -> bool:
     return False
 
 
-def _resolve_backend_url(request: Optional[Request]) -> Optional[str]:
+def _resolve_backend_url() -> str:
+    # 强制优先使用配置中的 BACKEND_URL，忽略请求中带过来的 Host，防止本地 proxy 造成 127.0.0.1 和 localhost 混乱
     direct = str(getattr(settings, "BACKEND_URL", "") or "").strip().rstrip("/")
     if direct:
         return direct
-    if request is None:
-        return None
-    forwarded_host = str(request.headers.get("x-forwarded-host", "") or "").split(",")[0].strip()
-    forwarded_proto = str(request.headers.get("x-forwarded-proto", "") or "").split(",")[0].strip()
-    if forwarded_host:
-        proto = forwarded_proto or request.url.scheme or "https"
-        return f"{proto}://{forwarded_host}"
-    return None
+    return "http://127.0.0.1:8000"
 
 
 def _build_oauth_redirect_uri(provider: str, request: Optional[Request]) -> str:
     api_base = str(getattr(settings, "API_V1_STR", "/api/v1") or "/api/v1").rstrip("/")
-    backend = _resolve_backend_url(request)
-    if backend:
-        return f"{backend}{api_base}/auth/callback/{provider}"
-    if request is not None:
-        return str(request.url_for('auth_callback', provider=provider))
-    return f"http://localhost:8000{api_base}/auth/callback/{provider}"
+    backend = _resolve_backend_url()
+    return f"{backend}{api_base}/auth/callback/{provider}"
 
 
 def _build_auth_error_redirect_url(frontend_url: str, error_code: str, message: str = "") -> str:
