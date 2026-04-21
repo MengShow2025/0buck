@@ -11,7 +11,7 @@ from app.core.config import settings
 from app.db.session import get_db, engine
 # v4.6.8: MUST import all models BEFORE calling metadata.create_all
 from app.models.product import Base
-from app.models.ledger import UserExt, Wallet, WalletTransaction, CheckinPlan, CheckinLog, AdminAuditLog, ReferralRelationship, GroupBuyCampaign, SystemConfig, UserStreamIdentity, ProcessedWebhookEvent, AISession, Order, AvailableCoupon, CouponIssuanceAudit, SourcingOrder, PriceWish, SquareActivity, Comment, PromoShareLink, OrderAttribution
+from app.models.ledger import UserExt, Wallet, WalletTransaction, CheckinPlan, CheckinLog, AdminAuditLog, ReferralRelationship, GroupBuyCampaign, SystemConfig, UserStreamIdentity, ProcessedWebhookEvent, AISession, Order, AvailableCoupon, CouponIssuanceAudit, SourcingOrder, PriceWish, SquareActivity, Comment, ActivityCommentReply, PromoShareLink, OrderAttribution, FriendRequest, Friendship, FriendBlock, ChatGroup, ChatGroupMember, ChatGroupAuditLog, ChatGroupMemberSetting, SquareActivityLike
 from app.models.butler import UserMemoryFact, UserButlerProfile, PersonaTemplate, AIUsageStats, AIContribution, ShadowIDMapping, UserMemorySemantic, UserIMBinding, BindingCode
 from app.models.rewards import PointTransaction, RenewalCard, AIUsageQuota, Points
 
@@ -33,6 +33,8 @@ from app.api.stream import router as stream_router
 from app.api.auth import router as auth_router
 from app.api.users import router as users_router
 from app.api.im_gateway import router as im_router
+from app.api.friends import router as friends_router
+from app.api.groups import router as groups_router
 from app.api.deps import get_current_admin, get_current_user
 from app.services.rewards import RewardsService
 from app.services.stream_chat import stream_chat_service
@@ -185,6 +187,10 @@ async def startup_event():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE users_ext ADD COLUMN backup_email VARCHAR"))
             logger.warning("  [DB] Added missing users_ext.backup_email column for compatibility.")
+        if "hashed_password" not in user_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users_ext ADD COLUMN hashed_password VARCHAR"))
+            logger.warning("  [DB] Added missing users_ext.hashed_password column for compatibility.")
         try:
             product_cols = {c["name"] for c in inspector.get_columns("products")}
             if "source_platform" not in product_cols:
@@ -203,6 +209,17 @@ async def startup_event():
             pass
         PromoShareLink.__table__.create(bind=engine, checkfirst=True)
         OrderAttribution.__table__.create(bind=engine, checkfirst=True)
+        FriendRequest.__table__.create(bind=engine, checkfirst=True)
+        Friendship.__table__.create(bind=engine, checkfirst=True)
+        FriendBlock.__table__.create(bind=engine, checkfirst=True)
+        SquareActivity.__table__.create(bind=engine, checkfirst=True)
+        Comment.__table__.create(bind=engine, checkfirst=True)
+        ActivityCommentReply.__table__.create(bind=engine, checkfirst=True)
+        SquareActivityLike.__table__.create(bind=engine, checkfirst=True)
+        ChatGroup.__table__.create(bind=engine, checkfirst=True)
+        ChatGroupMember.__table__.create(bind=engine, checkfirst=True)
+        ChatGroupAuditLog.__table__.create(bind=engine, checkfirst=True)
+        ChatGroupMemberSetting.__table__.create(bind=engine, checkfirst=True)
         try:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE promo_share_links ALTER COLUMN share_token TYPE VARCHAR(255)"))
@@ -401,6 +418,8 @@ app.include_router(system_router, prefix=f"{settings.API_V1_STR}/system", tags=[
 app.include_router(stream_router, prefix=f"{settings.API_V1_STR}/stream", tags=["stream"])
 app.include_router(auth_router, prefix=f"{settings.API_V1_STR}/auth", tags=["auth"])
 app.include_router(im_router, prefix=f"{settings.API_V1_STR}/im", tags=["im"])
+app.include_router(friends_router, prefix=f"{settings.API_V1_STR}/friends", tags=["friends"])
+app.include_router(groups_router, prefix=f"{settings.API_V1_STR}/groups", tags=["groups"])
 app.include_router(proxy_router, prefix=f"{settings.API_V1_STR}/checkin", tags=["checkin"])
 
 # --- 2. STATIC ASSETS & FALLBACK (v5.7.24) ---

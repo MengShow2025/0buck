@@ -1,7 +1,7 @@
 import { Package, ShieldCheck, ShoppingCart, ChevronLeft, ChevronRight, Star, MapPin, Calendar, Info, Zap, Award, CheckCircle2, Truck, Timer, Minus, Plus, Scale, Box, Users, TrendingUp, Share2 } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 import { useEffect, useMemo, useState } from 'react';
-import { productApi } from '../../../services/api';
+import { imApi, productApi } from '../../../services/api';
 import { getCheckoutBlockReasonText } from '../utils/checkoutBlockReason';
 
 export const ProductDetailDrawer: React.FC = () => {
@@ -20,6 +20,37 @@ export const ProductDetailDrawer: React.FC = () => {
       minimumFractionDigits: currency === 'JPY' ? 0 : 2,
       maximumFractionDigits: currency === 'JPY' ? 0 : 2
     });
+  };
+
+  const handleShare = async () => {
+    try {
+      const numericId = Number(selectedProductId);
+      const payload =
+        Number.isFinite(numericId) && numericId > 0
+          ? {
+              card_type: 'product' as const,
+              target_type: 'product' as const,
+              target_id: numericId,
+              share_category: 'distribution' as const,
+              entry_type: 'product_detail_share',
+            }
+          : {
+              card_type: 'invite' as const,
+              target_type: 'none' as const,
+              share_category: 'distribution' as const,
+              entry_type: 'product_detail_share',
+            };
+      const resp = await imApi.generatePromoCard(payload);
+      const link = resp.data?.universal_link || resp.data?.link || resp.data?.short_link;
+      if (link) {
+        await navigator.clipboard.writeText(String(link));
+        alert('分销本商品链接已复制');
+      } else {
+        alert('暂未生成分享链接');
+      }
+    } catch (_e) {
+      alert('分享链接生成失败，请稍后重试');
+    }
   };
 
   const DEMO_PRODUCTS: Record<string, any> = {
@@ -218,7 +249,7 @@ export const ProductDetailDrawer: React.FC = () => {
 
         {/* Global Share Button */}
         <div className="absolute top-4 left-4 z-30 group/share">
-          <button className="w-10 h-10 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20 shadow-xl active:scale-90 transition-all hover:bg-orange-600 hover:border-orange-400">
+          <button onClick={handleShare} className="w-10 h-10 bg-black/40 backdrop-blur-md rounded-full flex items-center justify-center text-white border border-white/20 shadow-xl active:scale-90 transition-all hover:bg-orange-600 hover:border-orange-400">
             <Share2 className="w-5 h-5" />
           </button>
           <div className="absolute left-12 top-1/2 -translate-y-1/2 bg-orange-600 text-white text-[10px] font-black px-2 py-1 rounded opacity-0 group-hover/share:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-lg uppercase tracking-tight">

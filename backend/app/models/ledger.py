@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, JSON, ForeignKey, Boolean, Enum, Numeric, Date
+from sqlalchemy import Column, Integer, BigInteger, String, Float, DateTime, JSON, ForeignKey, Boolean, Enum, Numeric, Date, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 import uuid
@@ -26,6 +26,7 @@ class UserExt(Base):
     
     # v5.5: Backup Recovery Email (Alternative to Phone)
     backup_email = Column(String(255), nullable=True, index=True)
+    hashed_password = Column(String, nullable=True)
     
     # v3.8.0: Payment Security
     hashed_payment_password = Column(String, nullable=True)
@@ -423,3 +424,129 @@ class Comment(Base):
     user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), index=True)
     content = Column(String)
     created_at = Column(DateTime, default=func.now())
+
+
+class ActivityCommentReply(Base):
+    __tablename__ = "activity_comment_replies"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    activity_id = Column(UUID(as_uuid=True), index=True, nullable=False)
+    comment_id = Column(UUID(as_uuid=True), ForeignKey("comments.id"), index=True, nullable=False)
+    user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), index=True, nullable=False)
+    content = Column(String, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+
+
+class SquareActivityLike(Base):
+    __tablename__ = "square_activity_likes"
+    __table_args__ = (
+        UniqueConstraint("activity_id", "user_id", name="uq_square_activity_like"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    activity_id = Column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=func.now())
+
+
+class FriendRequest(Base):
+    __tablename__ = "friend_requests"
+    __table_args__ = (
+        UniqueConstraint("requester_id", "recipient_id", "status", name="uq_friend_request_pair_status"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    requester_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=False, index=True)
+    recipient_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=False, index=True)
+    message = Column(String(255), nullable=True)
+    status = Column(String(20), default="pending", index=True)  # pending / accepted / ignored / canceled
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class Friendship(Base):
+    __tablename__ = "friendships"
+    __table_args__ = (
+        UniqueConstraint("user_id", "friend_id", name="uq_friendship_pair"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=False, index=True)
+    friend_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=False, index=True)
+    status = Column(String(20), default="active", index=True)  # active / deleted
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class FriendBlock(Base):
+    __tablename__ = "friend_blocks"
+    __table_args__ = (
+        UniqueConstraint("user_id", "blocked_user_id", name="uq_friend_block_pair"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=False, index=True)
+    blocked_user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=func.now())
+
+
+class ChatGroup(Base):
+    __tablename__ = "chat_groups"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    stream_channel_type = Column(String(30), default="messaging", nullable=False)
+    stream_channel_id = Column(String(128), unique=True, index=True, nullable=False)
+    name = Column(String(120), nullable=False)
+    avatar_url = Column(String(500), nullable=True)
+    owner_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=False, index=True)
+    group_type = Column(String(20), default="private", index=True)  # private/public
+    status = Column(String(20), default="active", index=True)  # active/archived/dissolved
+    settings = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class ChatGroupMember(Base):
+    __tablename__ = "chat_group_members"
+    __table_args__ = (
+        UniqueConstraint("group_id", "user_id", name="uq_chat_group_member"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    group_id = Column(BigInteger, ForeignKey("chat_groups.id"), nullable=False, index=True)
+    user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=False, index=True)
+    role = Column(String(20), default="member", index=True)  # owner/admin/member
+    state = Column(String(20), default="active", index=True)
+    muted_until = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+
+
+class ChatGroupAuditLog(Base):
+    __tablename__ = "chat_group_audit_logs"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    group_id = Column(BigInteger, ForeignKey("chat_groups.id"), nullable=False, index=True)
+    actor_user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=False, index=True)
+    action = Column(String(64), nullable=False, index=True)
+    target_user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=True, index=True)
+    payload = Column(JSON, nullable=True)
+    created_at = Column(DateTime, default=func.now())
+
+
+class ChatGroupMemberSetting(Base):
+    __tablename__ = "chat_group_member_settings"
+    __table_args__ = (
+        UniqueConstraint("group_id", "user_id", name="uq_chat_group_member_setting"),
+    )
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    group_id = Column(BigInteger, ForeignKey("chat_groups.id"), nullable=False, index=True)
+    user_id = Column(BigInteger, ForeignKey("users_ext.customer_id"), nullable=False, index=True)
+    self_remark = Column(String(255), nullable=True)
+    self_nickname = Column(String(100), nullable=True)
+    mute_notification = Column(Boolean, default=False)
+    pin_chat = Column(Boolean, default=False)
+    show_member_alias = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())

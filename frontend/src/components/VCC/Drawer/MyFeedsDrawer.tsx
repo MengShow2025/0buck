@@ -1,15 +1,19 @@
-import React, { useState } from 'react';
-import { Heart, MessageSquare, Share2, Trash2, Plus, Send, Image as ImageIcon, X, Camera, Video, Upload, Play, Crop, Check } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { Heart, MessageSquare, Share2, Trash2, Plus, Send, X, Camera, Upload, Play, Crop, Check, ChevronDown } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import { socialApi } from '../../../services/api';
+import { mapSocialComments } from '../utils/socialComments';
+import { getSocialPostErrorMessage } from '../utils/socialPostError';
 
 
 
-const CommentItem: React.FC<{ 
+const CommentItem: React.FC<{
   comment: any; 
   onReply: (commentId: string, userName: string) => void;
+  onDelete: (commentId: string) => void;
   onAvatarClick: () => void;
   isReply?: boolean;
-}> = ({ comment, onReply, onAvatarClick, isReply }) => {
+}> = ({ comment, onReply, onDelete, onAvatarClick, isReply }) => {
   const { t } = useAppContext();
   return (
   <div className={`flex flex-col gap-2 ${isReply ? 'ml-10 mt-2 relative' : ''}`}>
@@ -34,25 +38,45 @@ const CommentItem: React.FC<{
       </div>
       <div className="flex-1">
         <div className="flex items-center justify-between mb-0.5">
-          <span className={`${isReply ? 'text-[12px]' : 'text-[13px]'} font-black text-gray-900 dark:text-white`}>{comment.user}</span>
+          <div className="flex items-center gap-1.5">
+            <span className={`${isReply ? 'text-[12px]' : 'text-[13px]'} font-black text-gray-900 dark:text-white`}>{comment.user}</span>
+            {comment.isAuthor && (
+              <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-500/20 text-[10px] text-[#E8450A] font-bold">作者</span>
+            )}
+          </div>
           <span className="text-[10px] text-gray-400 font-bold">{comment.time}</span>
         </div>
         <p className={`${isReply ? 'text-[12px]' : 'text-[13px]'} text-gray-600 dark:text-gray-400 leading-snug font-medium`}>{comment.text}</p>
-        <button 
-          onClick={(e) => {
-            e.stopPropagation();
-            onReply(comment.id, comment.user);
-          }}
-          className="text-[11px] font-bold text-gray-400 mt-1 hover:text-[#E8450A] transition-colors"
-        >
-          {t('feed.reply')}
-        </button>
+        <div className="flex items-center gap-3 mt-1">
+          {!isReply && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onReply(comment.id, comment.user);
+              }}
+              className="text-[11px] font-bold text-gray-400 hover:text-[#E8450A] transition-colors"
+            >
+              {t('feed.reply')}
+            </button>
+          )}
+          {comment.canDelete && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(comment.id);
+              }}
+              className="text-[11px] font-bold text-gray-400 hover:text-red-500 transition-colors"
+            >
+              删除
+            </button>
+          )}
+        </div>
       </div>
     </div>
     {comment.replies && comment.replies.length > 0 && (
       <div className="ml-4">
         {comment.replies.map((reply: any) => (
-          <CommentItem key={reply.id} comment={reply} onReply={onReply} onAvatarClick={onAvatarClick} isReply />
+          <CommentItem key={reply.id} comment={reply} onReply={onReply} onDelete={onDelete} onAvatarClick={onAvatarClick} isReply />
         ))}
       </div>
     )}
@@ -61,9 +85,9 @@ const CommentItem: React.FC<{
 };
 
 export const MyFeedsDrawer: React.FC = () => {
-  const { pushDrawer, t } = useAppContext();
+  const { pushDrawer, t, user } = useAppContext();
   
-  const INITIAL_MY_FEEDS = [
+  const INITIAL_MY_FEEDS: any[] = [
     {
       id: 'mf1',
       content: t('feed.mock_content_1'),
@@ -111,40 +135,94 @@ export const MyFeedsDrawer: React.FC = () => {
   const [feeds, setFeeds] = useState(INITIAL_MY_FEEDS);
   const [isPosting, setIsPosting] = useState(false);
   const [newPostContent, setNewPostContent] = useState('');
-  const [selectedMedia, setSelectedMedia] = useState<{ type: 'image' | 'video', url: string, isCropped?: boolean }[]>([]);
+  const [selectedMedia, setSelectedMedia] = useState<{ type: 'image' | 'video', url: string, isCropped?: boolean, file?: File }[]>([]);
   const [croppingIndex, setCroppingIndex] = useState<number | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ feedId: string, commentId?: string, userName?: string } | null>(null);
   const [expandedFeedIds, setExpandedFeedIds] = useState<Set<string>>(new Set());
   const [replyContent, setReplyContent] = useState('');
   const [previewMedia, setPreviewMedia] = useState<{ type: 'image' | 'video', url: string } | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'friends'>('public');
+  const [showVisibilityMenu, setShowVisibilityMenu] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  const toggleComments = (feedId: string) => {
+  const loadMyActivities = async () => {
+    try {
+      const res = await socialApi.listActivities({ limit: 100 });
+      const items = (res.data?.items || []).filter((x: any) => Number(x.user_id) === Number(user?.customer_id));
+      const mapped = items.map((x: any) => ({
+        id: String(x.id),
+        content: String(x.content || ''),
+        time: String(x.timestamp || ''),
+        likes: Number(x.likes || 0),
+        liked: Boolean(x.liked),
+        commentsCount: Number(x.comments || 0),
+        visibility: String(x.visibility || 'public'),
+        comments: [],
+        media: (x.media || []).slice(0, 9).map((m: any) => ({ type: 'image', url: m.cdn_url || m.url })),
+      }));
+      setFeeds(mapped);
+    } catch {
+      setErrorMsg('动态加载失败，请稍后重试');
+    }
+  };
+
+  useEffect(() => {
+    loadMyActivities();
+  }, [user?.customer_id]);
+
+  const toggleComments = async (feedId: string) => {
     const newSet = new Set(expandedFeedIds);
     if (newSet.has(feedId)) {
       newSet.delete(feedId);
       if (replyingTo?.feedId === feedId) setReplyingTo(null);
     } else {
       newSet.add(feedId);
+      try {
+        const cRes = await socialApi.listComments(feedId);
+        const comments = mapSocialComments(cRes.data?.items || []).map((x: any) => ({
+          id: x.id,
+          user: x.user,
+          text: x.content,
+          time: x.timestamp,
+          canDelete: x.canDelete,
+          isAuthor: x.isAuthor,
+          replies: (x.replies || []).map((r: any) => ({
+            id: r.id,
+            user: r.user,
+            text: r.content,
+            time: r.timestamp,
+            canDelete: r.canDelete,
+            isAuthor: r.isAuthor,
+            replies: [],
+          })),
+        }));
+        setFeeds((prev: any[]) => prev.map((f: any) => (f.id === feedId ? { ...f, comments } : f)));
+      } catch {}
     }
     setExpandedFeedIds(newSet);
   };
 
   const handleMediaUpload = (type: 'image' | 'video') => {
-    const newMedia = {
-      type,
-      url: type === 'image' 
-        ? `https://picsum.photos/seed/${Date.now()}/600/400` // Uncropped aspect ratio
-        : `https://picsum.photos/seed/v_${Date.now()}/800/450`,
-      isCropped: false
-    };
-    const updatedMedia = [...selectedMedia, newMedia];
-    setSelectedMedia(updatedMedia);
-    
-    // Automatically trigger crop for images
-    if (type === 'image') {
-      setCroppingIndex(updatedMedia.length - 1);
+    if (type !== 'image') {
+      setErrorMsg('本期仅支持图文发布');
+      return;
     }
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    const picked = files
+      .filter((f) => f.type.startsWith('image/'))
+      .slice(0, 9)
+      .map((f) => ({ type: 'image' as const, url: URL.createObjectURL(f), isCropped: false, file: f }));
+    const updatedMedia = [...selectedMedia, ...picked].slice(0, 9);
+    setSelectedMedia(updatedMedia);
+    setCroppingIndex(updatedMedia.length ? updatedMedia.length - 1 : null);
+    e.currentTarget.value = '';
   };
 
   const applyCrop = (index: number) => {
@@ -170,57 +248,122 @@ export const MyFeedsDrawer: React.FC = () => {
     if (!newPostContent.trim() && selectedMedia.length === 0) return;
     
     setIsUploading(true);
-    // Simulate uploading to Shopify CDN
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const newFeed = {
-      id: `mf${Date.now()}`,
-      content: newPostContent,
-      time: t('common.now'),
-      likes: 0,
-      comments: [],
-      media: selectedMedia.map(m => ({ ...m, source: 'shopify_cdn' }))
-    };
-    
-    setFeeds([newFeed, ...feeds]);
-    setNewPostContent('');
-    setSelectedMedia([]);
-    setIsUploading(false);
-    setIsPosting(false);
+    setErrorMsg('');
+    try {
+      const committedMedia = [];
+      for (const m of selectedMedia) {
+        if (!m.file) continue;
+        const ticketRes = await socialApi.uploadTicket({
+          file_name: m.file.name || `feed-${Date.now()}.jpg`,
+          mime_type: m.file.type || 'image/jpeg',
+          file_size: m.file.size || 1,
+        });
+        const ticket = ticketRes.data?.ticket;
+        if (!ticket?.upload_url || !ticket?.resource_url) throw new Error('ticket_failed');
+        const formData = new FormData();
+        for (const p of ticket.parameters || []) {
+          formData.append(String(p.name), String(p.value));
+        }
+        formData.append('file', m.file);
+        const uploadResp = await fetch(String(ticket.upload_url), { method: 'POST', body: formData });
+        if (!uploadResp.ok) throw new Error('upload_failed');
+        const commitRes = await socialApi.commitMedia({
+          cdn_url: String(ticket.resource_url),
+          mime_type: m.file.type || 'image/jpeg',
+          size: m.file.size || 0,
+        });
+        committedMedia.push(commitRes.data?.item);
+      }
+      await socialApi.createActivity({
+        content: newPostContent,
+        visibility,
+        media: committedMedia,
+      });
+      setNewPostContent('');
+      setSelectedMedia([]);
+      setIsPosting(false);
+      await loadMyActivities();
+    } catch (err: any) {
+      setErrorMsg(getSocialPostErrorMessage(err));
+    } finally {
+      setIsUploading(false);
+    }
   };
 
-  const handleReply = (feedId: string) => {
+  const handleReply = async (feedId: string) => {
     if (!replyContent.trim()) return;
-    
-    const targetCommentId = replyingTo?.commentId;
-    const targetUser = replyingTo?.userName;
-    const finalContent = targetUser ? `@${targetUser} ${replyContent}` : replyContent;
-    const newReply = { id: `r${Date.now()}`, user: t('common.me'), text: finalContent, time: t('common.now'), replies: [] };
-
-    setFeeds(feeds.map(f => {
-      if (f.id === feedId) {
-        if (!targetCommentId) {
-          // Top level comment
-          return { ...f, comments: [...f.comments, newReply] };
-        } else {
-          // Recursive update to find the target comment
-          const updateComments = (comments: any[]): any[] => {
-            return comments.map(c => {
-              if (c.id === targetCommentId) {
-                return { ...c, replies: [...(c.replies || []), newReply] };
-              } else if (c.replies && c.replies.length > 0) {
-                return { ...c, replies: updateComments(c.replies) };
-              }
-              return c;
-            });
-          };
-          return { ...f, comments: updateComments(f.comments) };
-        }
-      }
-      return f;
-    }));
+    try {
+      await socialApi.createComment(feedId, replyContent, replyingTo?.commentId);
+      const cRes = await socialApi.listComments(feedId);
+      const comments = mapSocialComments(cRes.data?.items || []).map((x: any) => ({
+        id: x.id,
+        user: x.user,
+        text: x.content,
+        time: x.timestamp,
+        canDelete: x.canDelete,
+        isAuthor: x.isAuthor,
+        replies: (x.replies || []).map((r: any) => ({
+          id: r.id,
+          user: r.user,
+          text: r.content,
+          time: r.timestamp,
+          canDelete: r.canDelete,
+          isAuthor: r.isAuthor,
+          replies: [],
+        })),
+      }));
+      setFeeds(feeds.map((f: any) => (f.id === feedId ? { ...f, comments } : f)));
+    } catch {
+      setErrorMsg('评论失败，请稍后重试');
+    }
     setReplyContent('');
     setReplyingTo(null);
+  };
+
+  const handleLike = async (feedId: string, liked: boolean) => {
+    try {
+      if (liked) await socialApi.unlike(feedId);
+      else await socialApi.like(feedId);
+      await loadMyActivities();
+    } catch {
+      setErrorMsg('点赞失败，请稍后重试');
+    }
+  };
+
+  const handleDeleteFeed = async (feedId: string) => {
+    try {
+      await socialApi.deleteActivity(feedId);
+      setFeeds((prev: any[]) => prev.filter((f: any) => f.id !== feedId));
+    } catch {
+      setErrorMsg('删除失败，请稍后重试');
+    }
+  };
+
+  const handleDeleteComment = async (feedId: string, commentId: string) => {
+    try {
+      await socialApi.deleteComment(commentId);
+      const cRes = await socialApi.listComments(feedId);
+      const comments = mapSocialComments(cRes.data?.items || []).map((x: any) => ({
+        id: x.id,
+        user: x.user,
+        text: x.content,
+        time: x.timestamp,
+        canDelete: x.canDelete,
+        isAuthor: x.isAuthor,
+        replies: (x.replies || []).map((r: any) => ({
+          id: r.id,
+          user: r.user,
+          text: r.content,
+          time: r.timestamp,
+          canDelete: r.canDelete,
+          isAuthor: r.isAuthor,
+          replies: [],
+        })),
+      }));
+      setFeeds((prev: any[]) => prev.map((f: any) => (f.id === feedId ? { ...f, comments } : f)));
+    } catch {
+      setErrorMsg('删除评论失败，请稍后重试');
+    }
   };
 
   const handleDragStart = (index: number) => (e: React.DragEvent) => {
@@ -247,10 +390,24 @@ export const MyFeedsDrawer: React.FC = () => {
       onClick={() => {
         setExpandedFeedIds(new Set());
         setReplyingTo(null);
+        setShowVisibilityMenu(false);
       }}
     >
       {/* Post Header */}
-      <div className="px-4 py-6">
+      <div className="px-4 py-6 relative z-20 overflow-visible">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          multiple
+          className="hidden"
+          onChange={handleFileChange}
+        />
+        {!!errorMsg && (
+          <div className="mb-3 rounded-xl border border-red-200 bg-red-50 text-red-600 px-3 py-2 text-[12px]">
+            {errorMsg}
+          </div>
+        )}
         {!isPosting ? (
           <button 
             onClick={() => setIsPosting(true)}
@@ -262,7 +419,7 @@ export const MyFeedsDrawer: React.FC = () => {
             </div>
           </button>
         ) : (
-          <div className="bg-white/70 dark:bg-white/5 backdrop-blur-xl rounded-[32px] p-5 border border-white/40 dark:border-white/10 shadow-lg">
+          <div className="bg-white/70 dark:bg-white/5 backdrop-blur-xl rounded-[32px] p-5 border border-white/40 dark:border-white/10 shadow-lg relative z-30 overflow-visible">
             <div className="flex items-center justify-between mb-4">
               <span className="text-[15px] font-black text-gray-900 dark:text-white">{t('feed.post_title')}</span>
               <button onClick={() => setIsPosting(false)} className="text-gray-400"><X className="w-5 h-5" /></button>
@@ -334,32 +491,61 @@ export const MyFeedsDrawer: React.FC = () => {
 
             <div className="flex items-center justify-between mt-4">
               <div className="flex items-center gap-4">
-                <button 
+                <div className="relative z-[80]" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowVisibilityMenu((v) => !v);
+                    }}
+                    className="min-w-[120px] h-10 px-3 rounded-xl text-[14px] font-semibold bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/10 text-gray-800 dark:text-gray-100 flex items-center justify-between"
+                  >
+                    <span>{visibility === 'friends' ? '仅好友可看' : '完全公开'}</span>
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                  {showVisibilityMenu && (
+                    <div className="absolute left-0 top-[44px] z-[120] w-[200px] rounded-xl border border-gray-200 dark:border-white/15 bg-white dark:bg-[#1C1C1E] shadow-2xl overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVisibility('public');
+                          setShowVisibilityMenu(false);
+                        }}
+                        className={`w-full text-left px-3 py-2.5 text-[14px] ${visibility === 'public' ? 'bg-orange-50 dark:bg-orange-500/20 text-[#E8450A]' : 'text-gray-700 dark:text-gray-200'}`}
+                      >
+                        完全公开
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setVisibility('friends');
+                          setShowVisibilityMenu(false);
+                        }}
+                        className={`w-full text-left px-3 py-2.5 text-[14px] ${visibility === 'friends' ? 'bg-orange-50 dark:bg-orange-500/20 text-[#E8450A]' : 'text-gray-700 dark:text-gray-200'}`}
+                      >
+                        仅好友可看
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  aria-label={t('feed.upload_photo')}
                   onClick={() => handleMediaUpload('image')}
-                  className="flex flex-col items-center gap-1 text-gray-400 hover:text-[#E8450A] transition-colors"
+                  className="text-gray-400 hover:text-[#E8450A] transition-colors"
                 >
                   <div className="w-10 h-10 bg-gray-100 dark:bg-white/5 rounded-xl flex items-center justify-center">
                     <Camera className="w-5 h-5" />
                   </div>
-                  <span className="text-[10px] font-bold">{t('feed.upload_photo')}</span>
                 </button>
-                <button 
-                  onClick={() => handleMediaUpload('video')}
-                  className="flex flex-col items-center gap-1 text-gray-400 hover:text-red-500 transition-colors"
-                >
-                  <div className="w-10 h-10 bg-gray-100 dark:bg-white/5 rounded-xl flex items-center justify-center">
-                    <Video className="w-5 h-5" />
-                  </div>
-                  <span className="text-[10px] font-bold">{t('feed.record_video')}</span>
-                </button>
-                <button 
+                <button
+                  type="button"
+                  aria-label={t('feed.upload')}
                   onClick={() => handleMediaUpload('image')}
-                  className="flex flex-col items-center gap-1 text-gray-400 hover:text-blue-500 transition-colors"
+                  className="text-gray-400 hover:text-blue-500 transition-colors"
                 >
                   <div className="w-10 h-10 bg-gray-100 dark:bg-white/5 rounded-xl flex items-center justify-center">
                     <Upload className="w-5 h-5" />
                   </div>
-                  <span className="text-[10px] font-bold">{t('feed.upload')}</span>
                 </button>
               </div>
               <button 
@@ -371,7 +557,7 @@ export const MyFeedsDrawer: React.FC = () => {
                 {isUploading ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    {t('feed.sync_shopify')}
+                    发布中
                   </>
                 ) : t('feed.post_action')}
               </button>
@@ -394,7 +580,7 @@ export const MyFeedsDrawer: React.FC = () => {
                   </div>
                 </div>
                 <button 
-                  onClick={() => setFeeds(feeds.filter(f => f.id !== feed.id))}
+                  onClick={() => handleDeleteFeed(feed.id)}
                   className="w-9 h-9 flex items-center justify-center bg-red-500/10 text-red-500 rounded-[14px] active:scale-90 transition-all"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -406,8 +592,8 @@ export const MyFeedsDrawer: React.FC = () => {
               </p>
 
               {feed.media && feed.media.length > 0 && (
-                <div className={`grid gap-1.5 mb-4 ${feed.media.length === 1 ? 'grid-cols-1' : feed.media.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                  {feed.media.map((m, idx) => (
+                <div className={`grid gap-1.5 mb-4 ${feed.media.length === 1 ? 'grid-cols-1' : 'grid-cols-3'}`}>
+                  {feed.media.map((m: any, idx: number) => (
                     <div 
                       key={idx} 
                       onClick={() => setPreviewMedia({ type: m.type as any, url: m.url })}
@@ -427,14 +613,17 @@ export const MyFeedsDrawer: React.FC = () => {
               )}
 
               <div className="flex items-center gap-6 pt-2">
-                <button className="flex items-center gap-1.5 text-[13px] font-bold text-gray-400 hover:text-red-500 transition-colors">
+                <button
+                  onClick={() => handleLike(feed.id, !!feed.liked)}
+                  className={`flex items-center gap-1.5 text-[13px] font-bold transition-colors ${feed.liked ? 'text-red-500' : 'text-gray-400 hover:text-red-500'}`}
+                >
                   <Heart className="w-4 h-4" /> {feed.likes}
                 </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); toggleComments(feed.id); }}
                   className={`flex items-center gap-1.5 text-[13px] font-bold active:scale-95 transition-all duration-200 ${expandedFeedIds.has(feed.id) ? 'text-blue-500 scale-110' : 'text-gray-400 hover:text-blue-500'}`}
                 >
-                  <MessageSquare className={`w-4 h-4 ${expandedFeedIds.has(feed.id) ? 'fill-current' : ''}`} /> {feed.comments.length}
+                  <MessageSquare className={`w-4 h-4 ${expandedFeedIds.has(feed.id) ? 'fill-current' : ''}`} /> {(feed.commentsCount || feed.comments.length)}
                 </button>
                 <button 
                   onClick={(e) => { e.stopPropagation(); pushDrawer('share_menu'); }}
@@ -449,10 +638,11 @@ export const MyFeedsDrawer: React.FC = () => {
             {expandedFeedIds.has(feed.id) && (
               <div className="bg-gray-50/50 dark:bg-white/5 border-t border-gray-100/50 dark:border-white/5 p-5 space-y-4" onClick={(e) => e.stopPropagation()}>
                 {feed.comments.map((comment: any) => (
-                  <CommentItem 
-                    key={comment.id} 
-                    comment={comment} 
-                    onReply={(commentId, userName) => setReplyingTo({ feedId: feed.id, commentId, userName })} 
+                  <CommentItem
+                    key={comment.id}
+                    comment={comment}
+                    onReply={(commentId, userName) => setReplyingTo({ feedId: feed.id, commentId, userName })}
+                    onDelete={(commentId) => handleDeleteComment(feed.id, commentId)}
                     onAvatarClick={() => pushDrawer('user_profile')}
                   />
                 ))}

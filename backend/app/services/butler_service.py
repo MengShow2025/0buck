@@ -12,6 +12,101 @@ from app.models.butler import UserButlerProfile, UserMemoryFact, UserMemorySeman
 from app.models import SystemConfig
 from app.core.celery_app import celery_app
 from app.services.semantic_memory import semantic_memory_service
+from app.services.recommendation_guard import can_recommend_now
+
+
+def _build_user_mode_guidance(has_history: bool) -> str:
+    if has_history:
+        return (
+            "\n### DIALOGUE MODE: RETURNING USER\n"
+            "- Prefer 'recommend first, then confirm lightly'.\n"
+            "- Provide 2-3 matched options first based on known preferences.\n"
+            "- Ask at most ONE necessary follow-up question.\n"
+            "- Avoid questionnaire-style repeated preference probing.\n"
+        )
+    return (
+        "\n### DIALOGUE MODE: NEW USER\n"
+        "- Ask 1-2 key questions first, then provide matched recommendations.\n"
+        "- Keep questions concise and high-signal (style/budget/use case).\n"
+        "- Avoid over-questioning before delivering value.\n"
+    )
+
+
+def _build_emotional_support_guidance(last_message: Optional[str]) -> str:
+    lowered = (last_message or "").lower()
+    emotional_signals = [
+        "累", "好累", "崩溃", "烦", "难受", "辛苦", "压力", "委屈", "心情差",
+        "tired", "exhausted", "burnout", "stressed", "upset", "frustrated",
+    ]
+    if not any(k in lowered for k in emotional_signals):
+        return ""
+    return (
+        "\n### EMOTIONAL SUPPORT MODE\n"
+        "- Step 1: acknowledge feelings first with warm, friend-like empathy.\n"
+        "- Step 2: provide 1-2 tiny actionable relief steps (breathing, hydration, short reset).\n"
+        "- Step 3: optional gentle recommendation only AFTER empathy + help, max 1 item.\n"
+        "- Never start with product push when user is venting negative emotion.\n"
+    )
+
+
+def _build_companion_conversion_guidance(last_message: Optional[str], recommend_enabled: bool) -> str:
+    if not recommend_enabled:
+        return ""
+    lowered = (last_message or "").lower()
+    planning_signals = [
+        "攻略", "准备", "清单", "怎么买", "怎么选", "怎么安排", "要带什么",
+        "guide", "plan", "checklist", "prepare", "how to choose",
+    ]
+    if not any(k in lowered for k in planning_signals):
+        return ""
+    return (
+        "\n### COMPANION CONVERSION MODE\n"
+        "- After completing the user's plan/help request, you must include one actionable recommendation result.\n"
+        "- Actionable means: concrete shortlist (2-3 options) or direct next step (e.g., add to buy list).\n"
+        "- Avoid pure encyclopedia answers in planning scenarios.\n"
+        "- Do not ask more than ONE follow-up question in this mode.\n"
+        "- Do not output markdown markers such as '**', '#', or raw bullet symbols intended for markdown rendering.\n"
+    )
+
+
+def _build_surprise_mode_guidance(last_message: Optional[str], recommend_enabled: bool) -> str:
+    if not recommend_enabled:
+        return ""
+    lowered = (last_message or "").lower()
+    surprise_signals = [
+        "惊喜", "不落俗套", "送礼", "礼物", "帮我选",
+        "surprise", "gift", "pick for me",
+    ]
+    if not any(k in lowered for k in surprise_signals):
+        return ""
+    return (
+        "\n### SURPRISE MODE (HIGH PRIORITY)\n"
+        "- User intent is clear: provide 3 ready options immediately (with brief reasons), then ask at most one light preference question.\n"
+        "- Never start with multi-question questionnaire.\n"
+        "- If product card is available, prefer card + concise explanation.\n"
+        "- Keep tone warm and companion-like; no markdown formatting symbols.\n"
+    )
+
+
+def _build_identity_style_guidance(identity_mode: Optional[str]) -> str:
+    mode = (identity_mode or "ai_butler").strip().lower()
+    if mode == "life_pilot":
+        return (
+            "\n### IDENTITY STYLE\n"
+            "- Present yourself as 'Life Pilot' (生活领航员) in default self-reference.\n"
+            "- Tone should feel proactive and companion-like, not command-like.\n"
+        )
+    if mode == "exclusive_twin":
+        return (
+            "\n### IDENTITY STYLE\n"
+            "- Present yourself as user's '专属分身' in default self-reference.\n"
+            "- Tone should feel intimate but respectful, with practical companionship.\n"
+        )
+    return (
+        "\n### IDENTITY STYLE\n"
+        "- Present yourself as 'AI Butler' in default self-reference.\n"
+        "- Tone should feel trustworthy, warm, and professional.\n"
+    )
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -38,6 +133,8 @@ class ButlerService:
         l1_rules = self.db.query(SystemConfig).filter(SystemConfig.key == "AI_GLOBAL_ENFORCEMENT_L1").first()
         l1_prompt = l1_rules.value if l1_rules else (
             "### L1: SYSTEM ENFORCEMENT (MANDATORY)\n"
+            "0. CORE ORDER: MAIN TASK FIRST. Complete the user's explicit request before any recommendation.\n"
+            "   Recommendation is optional, lightweight, and must never interrupt task completion.\n"
             "1. Mask '1688/Alibaba' as 'Supply Library'.\n"
             "2. Enforce 4.0x Profit Margin for all price mentions.\n"
             "3. Use Shadow IDs (Zone 2) for all product/supplier references.\n"
@@ -58,6 +155,9 @@ class ButlerService:
             "6. WISHING WELL: If a user asks for a product we don't have, or a specific design/color not in stock, "
             "trigger 'trigger_wishing_well'. If you detect a PAIN POINT (e.g., 'too heavy', 'fragile'), acknowledge it "
             "empathetically and explain that 0Buck Lab will use this insight to source a better version for them.\n"
+            "7. DOMAIN BOUNDARY: Do NOT become a generic programming/coding tool. "
+            "If user asks coding tasks, politely redirect to life-service value and continue to help with planning/arrangement.\n"
+            "8. FORBIDDEN: blunt refusal + hard sales redirection (e.g., 'I can't do that, but buy products').\n"
         )
 
         # --- L2: Strategy Layer (Persona Template) ---
@@ -93,12 +193,14 @@ class ButlerService:
         else:
             l3_memory += "- No specific user history yet. Be curious and observant."
 
+        sem_hits = False
         if last_message:
             try:
                 sem = await semantic_memory_service.search(user_id=user_id, query=last_message, limit=5)
             except Exception:
                 sem = []
             if sem:
+                sem_hits = True
                 l3_memory += "\n### L3: SEMANTIC MEMORY (TOPK)\n"
                 for item in sem:
                     txt = str(item.get("content") or "").strip()
@@ -116,6 +218,24 @@ class ButlerService:
             if profile.butler_name:
                 l3_memory += f"\n- MANDATORY: Always identify yourself as '{profile.butler_name}' in your responses."
 
+        has_history = bool(facts) or sem_hits or bool(profile and (profile.user_nickname or profile.butler_name))
+        l3_memory += _build_user_mode_guidance(has_history)
+        l3_memory += _build_emotional_support_guidance(last_message)
+        l3_memory += _build_companion_conversion_guidance(
+            last_message,
+            recommend_enabled=can_recommend_now(self.db, user_id=user_id),
+        )
+        l3_memory += _build_surprise_mode_guidance(
+            last_message,
+            recommend_enabled=can_recommend_now(self.db, user_id=user_id),
+        )
+        identity_mode = None
+        if profile and isinstance(profile.personality, dict):
+            ui_settings = profile.personality.get("ui_settings")
+            if isinstance(ui_settings, dict):
+                identity_mode = ui_settings.get("identity_mode")
+        l3_memory += _build_identity_style_guidance(identity_mode)
+
         # Final Assembly
         final_prompt = f"{l1_prompt}\n\n{l2_prompt}\n\n{l3_memory}"
         return final_prompt
@@ -128,12 +248,18 @@ class ButlerService:
         from app.services.c2m_service import C2MService
         c2m = C2MService(self.db)
         
+        if not can_recommend_now(self.db, user_id=user_id):
+            return (
+                "\n### C2M RECOMMENDATION GUARD\n"
+                "User has disabled recommendations. Complete the main task only and do not trigger wishing-well/promotional suggestions.\n"
+            )
+
         similar_wishes = await c2m.find_similar_wishes(last_message)
         
         guidance = "\n### v3.3.1 C2M WISHING WELL PROTOCOL\n"
         guidance += "You are now aware of the 'Wishing Well' (许愿池) feature. Use this logic:\n"
         guidance += "1. If the user mentions a missing product or a pain point, trigger the 'trigger_wishing_well' tool.\n"
-        guidance += "2. Mention the 'Socialized' aspect: 'If we get N people to support this within 48h, we trigger the Founding Team Price.'\n"
+        guidance += "2. Keep recommendation subtle and optional. One concise suggestion maximum after the main task is completed.\n"
         
         if similar_wishes:
             top_wish = similar_wishes[0]

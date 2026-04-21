@@ -1,6 +1,8 @@
-import React, { useState } from 'react';
-import { Search, Flame, Bell, ChevronRight, MessageSquare, Heart, Share2, Calendar, Users, Zap, TrendingUp, Check, ChevronDown, Play, Star, ShieldCheck, X, PlusCircle } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Search, Flame, ChevronRight, MessageSquare, Heart, Share2, Calendar, Users, Zap, TrendingUp, ChevronDown, Play, Star, X, PlusCircle, Trash2 } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import { socialApi } from '../../../services/api';
+import { mapSocialComments } from '../utils/socialComments';
 
 const TOPICS = [
   { id: 't1', name: 'square.topic_must_buy', count: '12.5w', color: 'text-orange-500', bg: 'bg-orange-50' },
@@ -193,9 +195,73 @@ const FeedCard: React.FC<{ i: number; onMediaClick: (type: 'image' | 'video', ur
 };
 
 export const SquareDrawer: React.FC = () => {
-  const { setActiveDrawer, setActiveChat, pushDrawer, setSelectedProductId, t } = useAppContext();
+  const { setActiveDrawer, setActiveChat, pushDrawer, setSelectedProductId, t, user } = useAppContext();
   const [joinedWishlist, setJoinedWishlist] = useState<number[]>([]);
   const [previewMedia, setPreviewMedia] = useState<{ type: 'image' | 'video'; url: string } | null>(null);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
+  const [openCommentsId, setOpenCommentsId] = useState<string | null>(null);
+  const [commentsByActivity, setCommentsByActivity] = useState<Record<string, any[]>>({});
+  const [commentDraftByActivity, setCommentDraftByActivity] = useState<Record<string, string>>({});
+  const [replyingToByActivity, setReplyingToByActivity] = useState<Record<string, { id: string; user: string } | null>>({});
+
+  const loadActivities = async () => {
+    try {
+      setErrorMsg('');
+      const res = await socialApi.listActivities({ limit: 20 });
+      setActivities(res.data?.items || []);
+    } catch {
+      setActivities([]);
+      setErrorMsg('社群动态加载失败');
+    }
+  };
+
+  useEffect(() => {
+    loadActivities();
+  }, []);
+
+  const refreshComments = async (activityId: string) => {
+    const res = await socialApi.listComments(activityId);
+    setCommentsByActivity((prev) => ({ ...prev, [activityId]: mapSocialComments(res.data?.items || []) }));
+  };
+
+  const toggleComments = async (activityId: string) => {
+    if (openCommentsId === activityId) {
+      setOpenCommentsId(null);
+      return;
+    }
+    setOpenCommentsId(activityId);
+    try {
+      await refreshComments(activityId);
+    } catch {
+      setCommentsByActivity((prev) => ({ ...prev, [activityId]: [] }));
+    }
+  };
+
+  const submitComment = async (activityId: string) => {
+    const content = String(commentDraftByActivity[activityId] || '').trim();
+    if (!content) return;
+    try {
+      const replying = replyingToByActivity[activityId];
+      await socialApi.createComment(activityId, content, replying?.id);
+      setCommentDraftByActivity((prev) => ({ ...prev, [activityId]: '' }));
+      setReplyingToByActivity((prev) => ({ ...prev, [activityId]: null }));
+      await refreshComments(activityId);
+      await loadActivities();
+    } catch {
+      setErrorMsg('评论失败，请稍后重试');
+    }
+  };
+
+  const removeComment = async (activityId: string, commentId: string) => {
+    try {
+      await socialApi.deleteComment(commentId);
+      await refreshComments(activityId);
+      await loadActivities();
+    } catch {
+      setErrorMsg('删除评论失败，请稍后重试');
+    }
+  };
 
   const handleActionClick = (e: React.MouseEvent, item: any) => {
     e.stopPropagation();
@@ -402,12 +468,166 @@ export const SquareDrawer: React.FC = () => {
             </button>
           </div>
           
-          {[1, 2, 3, 4, 5].map(i => (
-            <FeedCard 
-              key={i} 
-              i={i} 
-              onMediaClick={(type, url) => setPreviewMedia({ type, url })}
-            />
+          {!!errorMsg && (
+            <div className="mb-2 rounded-xl border border-red-200 bg-red-50 text-red-600 px-3 py-2 text-[12px]">
+              {errorMsg}
+            </div>
+          )}
+          {activities.map((item: any) => (
+            <div key={item.id} className="bg-white/95 dark:bg-white/5 backdrop-blur-xl rounded-[28px] shadow-sm border border-white/40 dark:border-white/10 p-4 mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <img src={item.avatar} alt={item.user} className="w-9 h-9 rounded-xl object-cover" />
+                  <div>
+                    <div className="text-[14px] font-bold text-gray-900 dark:text-white">{item.user}</div>
+                    <div className="text-[10px] text-gray-400">{item.timestamp || ''}</div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {!!item.is_official && (
+                    <div className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-500/20 text-blue-600">
+                      {item.official_type === 'topic' ? '官方话题' : '官方活动'}
+                    </div>
+                  )}
+                  {!!item.pinned && (
+                    <div className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-500/20 text-amber-700">
+                      置顶
+                    </div>
+                  )}
+                  <div className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-500">
+                    {item.visibility === 'friends' ? '仅好友可看' : '完全公开'}
+                  </div>
+                  {user?.user_type === 'admin' && !!item.is_official && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await socialApi.pinActivity(item.id, !item.pinned);
+                          await loadActivities();
+                        } catch {
+                          setErrorMsg('置顶操作失败，请稍后重试');
+                        }
+                      }}
+                      className="text-[10px] px-2 py-0.5 rounded-full border border-gray-200 dark:border-white/20 text-gray-600 dark:text-gray-300"
+                    >
+                      {item.pinned ? '取消置顶' : '设为置顶'}
+                    </button>
+                  )}
+                </div>
+              </div>
+              <p className="text-[14px] text-gray-700 dark:text-gray-300 mb-3">{item.content}</p>
+              {!!item.media?.length && (
+                <div className={`grid gap-1 mb-3 ${item.media.length === 1 ? 'grid-cols-1' : item.media.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                  {item.media.map((m: any, idx: number) => (
+                    <div key={idx} className="aspect-square rounded-xl overflow-hidden border border-white/10 shadow-sm cursor-pointer" onClick={() => setPreviewMedia({ type: 'image', url: m.cdn_url || m.url })}>
+                      <img src={m.cdn_url || m.url} alt="feed" className="w-full h-full object-cover" />
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="flex items-center gap-6 text-gray-500 dark:text-gray-400">
+                <button
+                  onClick={async () => {
+                    const nextLiked = !item.liked;
+                    const delta = nextLiked ? 1 : -1;
+                    setActivities((prev) => prev.map((x: any) => (
+                      x.id === item.id
+                        ? { ...x, liked: nextLiked, likes: Math.max(0, Number(x.likes || 0) + delta) }
+                        : x
+                    )));
+                    try {
+                      if (item.liked) await socialApi.unlike(item.id);
+                      else await socialApi.like(item.id);
+                    } catch {
+                      setActivities((prev) => prev.map((x: any) => (
+                        x.id === item.id ? { ...x, liked: item.liked, likes: Number(item.likes || 0) } : x
+                      )));
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 text-[13px] font-bold ${item.liked ? 'text-red-500' : 'hover:text-red-500'}`}
+                >
+                  <Heart className={`w-4 h-4 ${item.liked ? 'fill-current' : ''}`} /> {item.likes}
+                </button>
+                <button className="flex items-center gap-1.5 text-[13px] font-bold">
+                  <MessageSquare className="w-4 h-4" onClick={() => toggleComments(item.id)} /> {item.comments}
+                </button>
+                <button onClick={() => pushDrawer('share_menu')} className="flex items-center gap-1.5 text-[13px] font-bold ml-auto hover:text-[#E8450A]">
+                  <Share2 className="w-4 h-4" />
+                </button>
+              </div>
+              {openCommentsId === item.id && (
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-white/10 space-y-2">
+                  {(commentsByActivity[item.id] || []).map((c: any) => (
+                    <div key={c.id} className="text-[12px] rounded-lg border border-gray-200 dark:border-white/10 px-2 py-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <div className="font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-1.5">
+                            {c.user}
+                            {c.isAuthor && (
+                              <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-500/20 text-[10px] text-[#E8450A] font-bold">作者</span>
+                            )}
+                          </div>
+                          <div className="text-gray-600 dark:text-gray-300">{c.content}</div>
+                          <button
+                            onClick={() => setReplyingToByActivity((prev) => ({ ...prev, [item.id]: { id: c.id, user: c.user } }))}
+                            className="mt-1 text-[11px] text-gray-400 hover:text-[#E8450A]"
+                          >
+                            回复
+                          </button>
+                        </div>
+                        {c.canDelete && (
+                          <button onClick={() => removeComment(item.id, c.id)} className="text-gray-400 hover:text-red-500" title="删除评论">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                      {(c.replies || []).map((r: any) => (
+                        <div key={r.id} className="mt-2 ml-4 pl-2 border-l border-gray-200 dark:border-white/10 flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-1.5">
+                              {r.user}
+                              {r.isAuthor && (
+                                <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-500/20 text-[10px] text-[#E8450A] font-bold">作者</span>
+                              )}
+                            </div>
+                            <div className="text-gray-600 dark:text-gray-300">{r.content}</div>
+                          </div>
+                          {r.canDelete && (
+                            <button onClick={() => removeComment(item.id, r.id)} className="text-gray-400 hover:text-red-500" title="删除回复">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                  {replyingToByActivity[item.id] && (
+                    <div className="text-[11px] text-gray-500">
+                      正在回复 @{replyingToByActivity[item.id]?.user}
+                      <button
+                        onClick={() => setReplyingToByActivity((prev) => ({ ...prev, [item.id]: null }))}
+                        className="ml-2 text-[#E8450A]"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      value={commentDraftByActivity[item.id] || ''}
+                      onChange={(e) => setCommentDraftByActivity((prev) => ({ ...prev, [item.id]: e.target.value }))}
+                      placeholder={replyingToByActivity[item.id] ? `回复 @${replyingToByActivity[item.id]?.user}` : "写评论..."}
+                      className="flex-1 bg-gray-100/70 dark:bg-white/5 rounded-full px-3 py-1.5 text-[12px] outline-none"
+                    />
+                    <button
+                      onClick={() => submitComment(item.id)}
+                      className="px-3 py-1.5 rounded-full text-[12px] bg-[var(--wa-teal)] text-white"
+                    >
+                      发送
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           ))}
           
           <div className="py-8 flex justify-center">
@@ -463,4 +683,3 @@ export const SquareDrawer: React.FC = () => {
     </div>
   );
 };
-

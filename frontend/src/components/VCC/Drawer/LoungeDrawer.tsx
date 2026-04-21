@@ -1,16 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Search, VolumeX, ShieldAlert, Sparkles, MessageCircle, Bot, UserPlus, Users, MessageSquare, Plus, PlusCircle, UserCheck, ChevronLeft } from 'lucide-react';
+import { Search, VolumeX, ShieldAlert, Sparkles, Bot, UserPlus, Users, Plus, PlusCircle, UserCheck, ChevronLeft } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import { friendsApi, groupsApi } from '../../../services/api';
 
 export const LoungeDrawer: React.FC = () => {
-  const { setActiveDrawer, setActiveChat, pushDrawer, t, user } = useAppContext();
+  const { setActiveDrawer, setActiveChat, pushDrawer, t, user, requireAuth } = useAppContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const [searchResults, setSearchResults] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'chat' | 'discover'>('chat');
 
   const [leftGroups, setLeftGroups] = useState<string[]>([]);
   const [closedGroups, setClosedGroups] = useState<string[]>([]);
+  const [dynamicGroups, setDynamicGroups] = useState<any[]>([]);
+  const [dynamicPrivateChats, setDynamicPrivateChats] = useState<any[]>([]);
 
   useEffect(() => {
     // Load hidden groups
@@ -25,6 +29,44 @@ export const LoungeDrawer: React.FC = () => {
     return () => window.removeEventListener('storage', loadHiddenGroups);
   }, []);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const f = await friendsApi.list();
+        const friendItems = (f.data?.items || []).map((x: any) => ({
+          id: `private_${x.id}`,
+          name: x.name,
+          avatar: x.avatar,
+          lastMessage: '',
+          time: '',
+          unread: 0,
+          type: 'private',
+          userId: Number(x.id),
+        }));
+        setDynamicPrivateChats(friendItems);
+      } catch {
+        setDynamicPrivateChats([]);
+      }
+      try {
+        await groupsApi.bootstrapDefaults();
+        const res = await groupsApi.list();
+        const items = (res.data?.items || []).map((g: any) => ({
+          id: `group_${g.id}`,
+          name: g.name,
+          avatar: g.avatar_url || `https://ui-avatars.com/api/?name=${encodeURIComponent(g.name || 'Group')}&background=random`,
+          lastMessage: '',
+          time: '',
+          unread: 0,
+          type: 'group',
+          memberCount: 0,
+        }));
+        setDynamicGroups(items);
+      } catch {
+        setDynamicGroups([]);
+      }
+    })();
+  }, []);
+
   const handleRestoreGroups = () => {
     localStorage.removeItem('vcc_left_groups');
     localStorage.removeItem('vcc_closed_groups');
@@ -34,18 +76,6 @@ export const LoungeDrawer: React.FC = () => {
 
   const CHAT_LIST = [
     {
-      id: '1',
-      name: t('lounge.official'),
-      avatar: 'https://ui-avatars.com/api/?name=Official&background=0D8ABC&color=fff',
-      icon: <Sparkles className="w-6 h-6 text-white" />,
-      avatarBg: 'bg-[var(--wa-teal)]',
-      lastMessage: t('lounge.msg_iphone_launch'),
-      time: '10:42',
-      unread: 1,
-      isOfficial: true,
-      type: 'topic'
-    },
-    {
       id: '2',
       name: user?.butler_name || t('lounge.ai_butler'),
       icon: <Bot className="w-6 h-6 text-white" />,
@@ -54,40 +84,8 @@ export const LoungeDrawer: React.FC = () => {
       time: t('common.yesterday'),
       unread: 0,
       isOfficial: true,
+      isAiButler: true,
       type: 'private'
-    },
-    {
-      id: 'friend_1',
-      name: 'Alex Design',
-      avatar: 'https://ui-avatars.com/api/?name=Alex&background=random',
-      lastMessage: t('lounge.msg_camera_group'),
-      time: '14:20',
-      unread: 0,
-      type: 'private'
-    },
-    {
-      id: '3',
-      name: t('lounge.group_nyc'),
-      icon: <MessageCircle className="w-6 h-6 text-white" />,
-      avatarBg: 'bg-green-500',
-      lastMessage: t('lounge.msg_camping_gear'),
-      time: t('common.tuesday'),
-      unread: 12,
-      isMuted: true,
-      type: 'group',
-      memberCount: 482
-    },
-    {
-      id: '4',
-      name: t('lounge.group_digital'),
-      icon: <MessageCircle className="w-6 h-6 text-white" />,
-      avatarBg: 'bg-blue-500',
-      lastMessage: t('lounge.msg_dumbo_headphones'),
-      time: t('common.monday'),
-      unread: 0,
-      isMuted: true,
-      type: 'group',
-      memberCount: 1250
     },
     {
       id: '5',
@@ -102,14 +100,35 @@ export const LoungeDrawer: React.FC = () => {
     }
   ];
 
-  const VISIBLE_CHAT_LIST = CHAT_LIST.filter(chat => !leftGroups.includes(chat.id) && !closedGroups.includes(chat.id));
+  const MERGED_CHAT_LIST = [...dynamicGroups, ...dynamicPrivateChats, ...CHAT_LIST];
+  const VISIBLE_CHAT_LIST = MERGED_CHAT_LIST.filter(chat => !leftGroups.includes(chat.id) && !closedGroups.includes(chat.id));
 
-  const SEARCH_RESULTS = [
-    { id: 's1', name: t('lounge.tech_expert'), id_str: '0B-8827', type: 'user', isFriend: false, avatar: 'https://ui-avatars.com/api/?name=TE&background=random' },
-    { id: 's2', name: t('lounge.alex_design'), id_str: '0B-1024', type: 'user', isFriend: true, avatar: 'https://ui-avatars.com/api/?name=Alex&background=random' },
-    { id: 's3', name: `# ${t('square.topic_must_buy')}`, type: 'topic', memberCount: `12.5${t('square.unit_k')}` },
-    { id: 's4', name: t('square.group_hardware'), type: 'group', memberCount: 85 }
-  ];
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (!q) {
+      setSearchResults([]);
+      return;
+    }
+    const timer = window.setTimeout(async () => {
+      try {
+        const res = await friendsApi.search(q);
+        const users = (res.data?.items || []).map((x: any) => ({
+          id: x.id,
+          user_id: x.id,
+          name: x.name,
+          id_str: x.email || `UID-${x.id}`,
+          type: 'user',
+          isFriend: x.relation === 'friend',
+          relation: x.relation,
+          avatar: x.avatar,
+        }));
+        setSearchResults(users);
+      } catch {
+        setSearchResults([]);
+      }
+    }, 250);
+    return () => window.clearTimeout(timer);
+  }, [searchQuery]);
 
   const handleChatClick = (chat: any) => {
     setActiveChat({
@@ -117,15 +136,22 @@ export const LoungeDrawer: React.FC = () => {
       name: chat.name,
       type: chat.type,
       avatar: chat.avatar,
-      memberCount: chat.memberCount
+      peerUserId: chat.userId ? Number(chat.userId) : (chat.user_id ? Number(chat.user_id) : undefined),
+      memberCount: chat.memberCount,
+      isOfficial: chat.isOfficial,
+      isAiButler: chat.isAiButler,
     });
     pushDrawer('chat_room');
   };
 
-  const handleAddFriend = (e: React.MouseEvent, user: any) => {
+  const handleAddFriend = async (e: React.MouseEvent, user: any) => {
     e.stopPropagation();
-    console.log('Adding friend:', user.name);
-    // Logic for sending request
+    const candidateId = Number(user.user_id);
+    if (!Number.isFinite(candidateId) || candidateId <= 0) return;
+    try {
+      await friendsApi.requestAdd(candidateId, `Hi ${user.name}, let's connect on 0Buck.`);
+      setSearchResults((prev) => prev.map((x) => (x.user_id === candidateId ? { ...x, relation: 'pending_out' } : x)));
+    } catch {}
   };
 
   const PLUS_MENU_OPTIONS = [
@@ -169,7 +195,7 @@ export const LoungeDrawer: React.FC = () => {
           </div>
           
           <button 
-            onClick={() => pushDrawer('contacts')}
+            onClick={() => requireAuth(() => pushDrawer('contacts'))}
             className="w-10 h-10 flex items-center justify-center bg-white dark:bg-white/5 rounded-2xl border border-gray-200 dark:border-white/10 shadow-sm active:scale-90 transition-all text-gray-600 dark:text-gray-300"
             title={t('lounge.friend_mgmt') || 'Contacts'}
           >
@@ -203,7 +229,7 @@ export const LoungeDrawer: React.FC = () => {
                       key={option.id}
                       onClick={() => {
                         setShowPlusMenu(false);
-                        if (option.id === 'group') pushDrawer('contacts'); // Redirect to selection for now
+                        if (option.id === 'group') pushDrawer('group_create');
                         if (option.id === 'add') setIsSearching(true);
                       }}
                       className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 dark:hover:bg-white/5 rounded-[18px] transition-colors text-left group"
@@ -246,7 +272,7 @@ export const LoungeDrawer: React.FC = () => {
               <div className="px-4 py-3 text-[13px] font-bold text-gray-500 uppercase tracking-wider sticky top-0 bg-[#F2F2F7] dark:bg-[#000000] z-10">
                 {t('lounge.search_results')}
               </div>
-              {SEARCH_RESULTS.map((result) => (
+              {searchResults.map((result) => (
                 <div 
                   key={result.id}
                   onClick={() => handleChatClick(result)}
@@ -272,7 +298,11 @@ export const LoungeDrawer: React.FC = () => {
                     </div>
                     <div className="text-[14px] text-gray-500 dark:text-gray-400 truncate">
                       {result.type === 'user' ? (
-                        result.isFriend ? <span className="text-green-500 text-[12px] font-medium">{t('lounge.already_friend')}</span> : t('lounge.not_friend')
+                        result.relation === 'friend'
+                          ? <span className="text-green-500 text-[12px] font-medium">{t('lounge.already_friend')}</span>
+                          : result.relation === 'pending_out'
+                            ? <span className="text-[12px] font-medium text-amber-500">Pending</span>
+                            : t('lounge.not_friend')
                       ) : (
                         <span className="flex items-center gap-1">
                           <Users className="w-3.5 h-3.5" />
@@ -281,7 +311,7 @@ export const LoungeDrawer: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  {result.type === 'user' && !result.isFriend && (
+                  {result.type === 'user' && result.relation !== 'friend' && result.relation !== 'pending_out' && (
                     <button 
                       onClick={(e) => handleAddFriend(e, result)}
                       className="px-3 py-1.5 bg-[var(--wa-teal)] text-white text-[13px] font-bold rounded-full active:scale-95 transition-transform"
@@ -294,7 +324,7 @@ export const LoungeDrawer: React.FC = () => {
             </div>
           ) : (
             <div className="animate-in fade-in duration-300">
-              {VISIBLE_CHAT_LIST.map((chat, index) => (
+              {VISIBLE_CHAT_LIST.map((chat) => (
                 <div 
                   key={chat.id}
                   onClick={() => handleChatClick(chat)}

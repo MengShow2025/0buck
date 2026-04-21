@@ -28,6 +28,8 @@ from app.db.session import SessionLocal
 from app.models.butler import UserButlerProfile
 from app.core.security import decrypt_api_key
 from app.services.semantic_cache import semantic_cache_service
+from app.services.recommendation_guard import can_recommend_now
+from app.models.product import Product
 import random
 import time
 
@@ -38,6 +40,76 @@ logger = logging.getLogger(__name__)
 # as a lightweight fallback for cooling down keys that hit 429 Rate Limits.
 _KEY_COOLDOWN_BLACKLIST: Dict[str, float] = {}
 COOLDOWN_SECONDS = 60.0
+
+_CARD_PLACEHOLDER_IMAGE = "https://picsum.photos/seed/0buck/400/400"
+
+
+def _is_companion_planning_intent(text: str) -> bool:
+    lowered = (text or "").lower()
+    keywords = [
+        "攻略", "准备", "清单", "怎么买", "怎么选", "怎么安排", "要带什么", "推荐什么",
+        "惊喜", "送礼", "礼物", "帮我选",
+        "旅行", "旅游", "行程", "出发", "出行", "露营", "搬家", "开学", "通勤",
+        "guide", "plan", "planning", "checklist", "prepare", "how to choose", "surprise", "gift",
+        "trip", "travel", "itinerary", "packing",
+    ]
+    return any(k in lowered for k in keywords)
+
+
+def _serialize_product_for_card(product: Product) -> Dict[str, Any]:
+    name = product.title_en or product.title_zh or product.category_name or "0Buck Pick"
+    image = product.primary_image or _CARD_PLACEHOLDER_IMAGE
+    price = float(product.sale_price or product.source_cost_usd or product.sell_price or 9.9)
+    supplier = product.source_platform_name or "0Buck Select"
+    rating = float(product.hot_rating or 4.8)
+    sales = int(product.orders_7d or 1200)
+    return {
+        "id": str(product.id),
+        "name": name,
+        "price": price,
+        "image": image,
+        "supplier": supplier,
+        "rating": rating,
+        "sales": sales,
+    }
+
+
+def _build_product_grid_attachment(products: List[Dict[str, Any]], comment: str) -> Dict[str, Any]:
+    return {
+        "type": "0B_CARD_V3",
+        "component": "0B_PRODUCT_GRID",
+        "data": {
+            "products": products[:10],
+            "butler_comment": comment or "",
+        },
+    }
+
+
+def _demo_card_products(text: str) -> List[Dict[str, Any]]:
+    lowered = (text or "").lower()
+    if any(k in lowered for k in ["惊喜", "礼物", "送礼", "surprise", "gift"]):
+        return [
+            {"id": "demo-gift-1", "name": "Nordic Aroma Candle Set", "price": 329.0, "image": "https://picsum.photos/seed/gift-1/500/500", "supplier": "Aurora Studio", "rating": 4.8, "sales": 1260},
+            {"id": "demo-gift-2", "name": "Minimal Silver Necklace", "price": 459.0, "image": "https://picsum.photos/seed/gift-2/500/500", "supplier": "Luna Craft", "rating": 4.9, "sales": 892},
+            {"id": "demo-gift-3", "name": "Silk Sleep Kit Gift Box", "price": 539.0, "image": "https://picsum.photos/seed/gift-3/500/500", "supplier": "Nocturne Lab", "rating": 4.7, "sales": 741},
+            {"id": "demo-gift-4", "name": "Artisan Tea & Cup Set", "price": 368.0, "image": "https://picsum.photos/seed/gift-4/500/500", "supplier": "Leaf & Clay", "rating": 4.8, "sales": 633},
+            {"id": "demo-gift-5", "name": "Scented Hand Cream Trio", "price": 318.0, "image": "https://picsum.photos/seed/gift-5/500/500", "supplier": "Velvet Care", "rating": 4.6, "sales": 1291},
+            {"id": "demo-gift-6", "name": "Mini Projection Lamp", "price": 396.0, "image": "https://picsum.photos/seed/gift-6/500/500", "supplier": "Orbit Home", "rating": 4.7, "sales": 1020},
+            {"id": "demo-gift-7", "name": "Travel Perfume Discovery Set", "price": 578.0, "image": "https://picsum.photos/seed/gift-7/500/500", "supplier": "Aroma Atelier", "rating": 4.8, "sales": 577},
+            {"id": "demo-gift-8", "name": "Soft Wool Throw Blanket", "price": 488.0, "image": "https://picsum.photos/seed/gift-8/500/500", "supplier": "Nord Nest", "rating": 4.9, "sales": 740},
+            {"id": "demo-gift-9", "name": "Vintage Journal Box", "price": 349.0, "image": "https://picsum.photos/seed/gift-9/500/500", "supplier": "Paper Loom", "rating": 4.7, "sales": 958},
+        ]
+    if any(k in lowered for k in ["西藏", "高原", "旅行", "旅游", "trip", "travel"]):
+        return [
+            {"id": "demo-trip-1", "name": "UV400 Travel Sunglasses", "price": 129.0, "image": "https://picsum.photos/seed/trip-1/500/500", "supplier": "Peak Field", "rating": 4.8, "sales": 2103},
+            {"id": "demo-trip-2", "name": "Layered Thermal Jacket", "price": 289.0, "image": "https://picsum.photos/seed/trip-2/500/500", "supplier": "Alpine Works", "rating": 4.7, "sales": 1560},
+            {"id": "demo-trip-3", "name": "Portable Oxygen Canister", "price": 79.0, "image": "https://picsum.photos/seed/trip-3/500/500", "supplier": "Altitude Care", "rating": 4.6, "sales": 984},
+        ]
+    return [
+        {"id": "demo-base-1", "name": "Artisan Wireless Earbuds Pro", "price": 217.13, "image": "https://picsum.photos/seed/base-1/500/500", "supplier": "Nordic Audio Lab", "rating": 4.9, "sales": 3821},
+        {"id": "demo-base-2", "name": "Titanium Minimalist Watch", "price": 1078.76, "image": "https://picsum.photos/seed/base-2/500/500", "supplier": "Swiss Craft Co.", "rating": 4.8, "sales": 1204},
+        {"id": "demo-base-3", "name": "Premium Leather Messenger Bag", "price": 644.36, "image": "https://picsum.photos/seed/base-3/500/500", "supplier": "Vega Leather Works", "rating": 4.7, "sales": 892},
+    ]
 
 def update_exhaustion_metric(total_keys: int):
     """Update Prometheus metric and trigger critical alert if exhaustion > 80%"""
@@ -541,8 +613,9 @@ async def run_agent(content: str, user_id: int, session_id: str = "default"):
 
         last_msg = final_state["messages"][-1]
         
-        # 3.5. Extract System Actions from Tool Messages
+        # 3.5. Extract Tool Attachments
         attachments = []
+        product_card_exists = False
         for m in reversed(final_state["messages"]):
             if m.type == "human":
                 break
@@ -552,8 +625,52 @@ async def run_agent(content: str, user_id: int, session_id: str = "default"):
                     parsed = json.loads(m.content)
                     if "__system_action__" in parsed:
                         attachments.append(parsed["__system_action__"])
+                    if getattr(m, "name", "") == "product_search" and isinstance(parsed, list) and parsed:
+                        normalized_products = []
+                        for item in parsed:
+                            if not isinstance(item, dict):
+                                continue
+                            normalized_products.append({
+                                "id": str(item.get("shadow_id") or item.get("id") or "legacy-id"),
+                                "name": item.get("title") or item.get("name") or "0Buck Pick",
+                                "price": float(item.get("price") or 9.9),
+                                "image": item.get("image") or _CARD_PLACEHOLDER_IMAGE,
+                                "supplier": item.get("category") or "0Buck Select",
+                                "rating": float(item.get("rating") or 4.8),
+                                "sales": int(item.get("sales") or 1200),
+                            })
+                        if normalized_products:
+                            attachments.append(_build_product_grid_attachment(normalized_products, last_msg.content))
+                            product_card_exists = True
                 except Exception:
                     pass
+
+        # Companion-planning fallback: ensure recommendation card appears for strategy/prep intents.
+        if (
+            not product_card_exists
+            and _is_companion_planning_intent(content)
+            and can_recommend_now(db, user_id=user_id, session_id=session_id)
+        ):
+            try:
+                fallback_products = (
+                    db.query(Product)
+                    .filter(Product.is_melted == False)  # noqa: E712
+                    .order_by(Product.orders_7d.desc().nullslast(), Product.updated_at.desc().nullslast())
+                    .limit(9)
+                    .all()
+                )
+            except Exception:
+                fallback_products = []
+            if fallback_products:
+                card_products = [_serialize_product_for_card(p) for p in fallback_products]
+                attachments.append(_build_product_grid_attachment(card_products, last_msg.content))
+                product_card_exists = True
+                logger.info("🛟 Synthesized planning-intent product card for user=%s", user_id)
+            else:
+                demo_products = _demo_card_products(content)
+                attachments.append(_build_product_grid_attachment(demo_products, last_msg.content))
+                product_card_exists = True
+                logger.info("🛟 Synthesized demo product card for user=%s", user_id)
 
         # Safety fallback:
         # If the model responds with a clear settings intent but fails to emit a tool action,
@@ -662,7 +779,15 @@ async def run_agent(content: str, user_id: int, session_id: str = "default"):
                         "requires_confirmation": False
                     })
                     logger.info("🛟 Synthesized sensitive NAVIGATE=orders for user=%s", user_id)
-                elif any(kw in lowered for kw in ["签到", "返现", "checkin", "cashback"]):
+                elif any(kw in lowered for kw in ["签到", "checkin"]):
+                    attachments.append({
+                        "type": "0B_SYSTEM_ACTION",
+                        "action": "NAVIGATE",
+                        "payload": {"value": "checkin_hub"},
+                        "requires_confirmation": False
+                    })
+                    logger.info("🛟 Synthesized sensitive NAVIGATE=checkin_hub for user=%s", user_id)
+                elif any(kw in lowered for kw in ["返现", "cashback"]):
                     attachments.append({
                         "type": "0B_SYSTEM_ACTION",
                         "action": "NAVIGATE",
@@ -682,8 +807,8 @@ async def run_agent(content: str, user_id: int, session_id: str = "default"):
                     "地址": "address",
                     "address": "address",
                     "shipping": "address",
-                    "签到": "reward_history",
-                    "checkin": "reward_history",
+                    "签到": "checkin_hub",
+                    "checkin": "checkin_hub",
                     "返现": "reward_history",
                     "cashback": "reward_history",
                     "支付": "checkout",

@@ -74,4 +74,16 @@ class StreamChatService:
             
         return channel.send_message(message_payload, user_id="0buck_system")
 
+    def add_members(self, channel_type: str, channel_id: str, members: List[str]):
+        channel = self.server_client.channel(channel_type, channel_id)
+        return channel.add_members(members)
+
+    def remove_members(self, channel_type: str, channel_id: str, members: List[str]):
+        channel = self.server_client.channel(channel_type, channel_id)
+        return channel.remove_members(members)
+
+    def update_channel(self, channel_type: str, channel_id: str, extra_data: Dict[str, Any]):
+        channel = self.server_client.channel(channel_type, channel_id)
+        return channel.update(extra_data or {})
+
 stream_chat_service = StreamChatService()

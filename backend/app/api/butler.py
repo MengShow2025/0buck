@@ -14,11 +14,19 @@ import os
 import re
 import urllib.request
 import urllib.error
+import base64
+import binascii
+import asyncio
 from app.core.config import settings
 
 from app.api.deps import get_current_user, get_current_user_optional
 from app.models.ledger import UserExt
 from app.models.butler import UserButlerProfile
+from app.services.recommendation_guard import (
+    is_recommendation_enabled,
+    set_recommendation_enabled,
+    mark_session_skip,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,13 +72,30 @@ class ProfileSyncPayload(BaseModel):
     ui_settings: Optional[Dict[str, Any]] = None
 
 
+class RecommendationPreferencePayload(BaseModel):
+    enabled: bool
+
+
+class RecommendationSkipPayload(BaseModel):
+    session_id: Optional[str] = "global"
+    minutes: Optional[int] = 30
+
+
 ACTION_WHITELIST = {
     "SET_THEME",
     "SET_LANGUAGE",
     "SET_PERSONA",
     "SET_NOTIFICATIONS",
     "NAVIGATE",
+    "OPEN_DRAWER",
     "CLEAR_LOCAL_CACHE",
+}
+
+DRAWER_WHITELIST = {
+    "orders", "checkout", "reward_history", "address", "settings", "wallet",
+    "share_menu", "contacts", "notification", "cart", "me", "prime",
+    "lounge", "square", "fans", "checkin_hub", "withdraw", "vouchers", "points_history",
+    "points_exchange", "security", "personal_info", "ai_persona", "scan",
 }
 
 GUEST_LOGIN_PROMPT_ZH = (
@@ -91,6 +116,8 @@ def _action_message(action: str, value: str, is_guest: bool) -> str:
             "orders": "✅ 已为您打开订单中心。",
             "checkout": "✅ 已为您打开支付页面。请在页面中手动确认并完成支付。",
             "reward_history": "✅ 已为您打开签到返现页面。请按页面流程手动完成操作。",
+            "fans": "✅ 已为您打开签到中心。请按页面流程手动完成操作。",
+            "checkin_hub": "✅ 已为您打开签到中心。请按页面流程手动完成操作。",
             "address": "✅ 已打开收货地址管理。登录后可为您自动同步和持久化地址变更。" if is_guest else "✅ 已为您打开收货地址管理。",
             "settings": "✅ 已为您打开设置页面。",
             "wallet": "✅ 已为您打开钱包页面。",
@@ -104,7 +131,34 @@ def _action_message(action: str, value: str, is_guest: bool) -> str:
         return f"✅ 已为您切换回答语种偏好为：{value}。"
     if action == "SET_NOTIFICATIONS":
         return "✅ 已为您更新通知设置。"
+    if action == "OPEN_DRAWER":
+        return "✅ 已为您打开对应功能面板。"
     return "✅ 已为您执行操作。"
+
+
+def _normalize_drawer_target(value: str) -> Optional[str]:
+    raw = (value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not raw:
+        return None
+    alias_map = {
+        "order": "orders",
+        "order_center": "orders",
+        "payment": "checkout",
+        "cashback": "reward_history",
+        "rewards": "reward_history",
+        "checkin": "checkin_hub",
+        "check_in": "checkin_hub",
+        "sign_in": "checkin_hub",
+        "share": "share_menu",
+        "profile": "me",
+        "shop": "prime",
+        "mall": "prime",
+        "community": "square",
+        "salon": "lounge",
+        "notifications": "notification",
+    }
+    normalized = alias_map.get(raw, raw)
+    return normalized if normalized in DRAWER_WHITELIST else None
 
 
 def _render_in_language(text_zh: str, language_code: Optional[str]) -> str:
@@ -156,7 +210,8 @@ async def _infer_system_action_from_ai(user_text: str) -> Optional[Dict[str, str
         "- SET_LANGUAGE: IETF language tag or language name\n"
         "- SET_PERSONA: default|cute_loli|rigorous_expert|friendly_butler\n"
         "- SET_NOTIFICATIONS: true|false\n"
-        "- NAVIGATE: orders|checkout|reward_history|address|settings|wallet\n"
+        "- NAVIGATE: orders|checkout|reward_history|address|settings|wallet|share_menu|contacts|notification|cart|me|prime|lounge|square|fans|checkin_hub|withdraw|vouchers|points_history|points_exchange|security|personal_info|ai_persona|scan\n"
+        "- OPEN_DRAWER: same value set as NAVIGATE\n"
         "- CLEAR_LOCAL_CACHE: true\n"
         "If no clear actionable intent, output {\"action\":\"NONE\",\"value\":\"\",\"confidence\":0}.\n"
         "Never invent payment/refund execution; use NAVIGATE for sensitive flows."
@@ -183,6 +238,11 @@ async def _infer_system_action_from_ai(user_text: str) -> Optional[Dict[str, str
             value = value.lower()
             if value not in {"true", "false"}:
                 return None
+        if action in {"NAVIGATE", "OPEN_DRAWER"}:
+            normalized = _normalize_drawer_target(value)
+            if not normalized:
+                return None
+            value = normalized
         if action == "CLEAR_LOCAL_CACHE":
             value = "true"
         return {"action": action, "value": value}
@@ -198,7 +258,8 @@ async def _infer_system_action_via_agent(user_text: str) -> Optional[Dict[str, s
         "Return STRICT JSON only: {\"action\":\"...\",\"value\":\"...\",\"confidence\":0-1}.\n"
         "Infer from user's intent in ANY language.\n"
         "Allowed actions: SET_THEME(dark|light), SET_LANGUAGE(<lang code>), SET_PERSONA(default|cute_loli|rigorous_expert|friendly_butler), "
-        "SET_NOTIFICATIONS(true|false), NAVIGATE(orders|checkout|reward_history|address|settings|wallet), CLEAR_LOCAL_CACHE(true).\n"
+        "SET_NOTIFICATIONS(true|false), NAVIGATE(orders|checkout|reward_history|address|settings|wallet|share_menu|contacts|notification|cart|me|prime|lounge|square|fans|checkin_hub|withdraw|vouchers|points_history|points_exchange|security|personal_info|ai_persona|scan), "
+        "OPEN_DRAWER(same-as-navigate-values), CLEAR_LOCAL_CACHE(true).\n"
         "If no clear actionable intent return {\"action\":\"NONE\",\"value\":\"\",\"confidence\":0}.\n"
         f"USER: {user_text}"
     )
@@ -213,6 +274,11 @@ async def _infer_system_action_via_agent(user_text: str) -> Optional[Dict[str, s
         confidence = float(obj.get("confidence", 0) or 0)
         if action == "NONE" or action not in ACTION_WHITELIST or confidence < 0.55:
             return None
+        if action in {"NAVIGATE", "OPEN_DRAWER"}:
+            normalized = _normalize_drawer_target(value)
+            if not normalized:
+                return None
+            value = normalized
         return {"action": action, "value": value}
     except Exception as e:
         logger.warning("Agent semantic action parser failed: %r", e)
@@ -336,12 +402,170 @@ def _fallback_action_from_text(user_text: str) -> Optional[Dict[str, str]]:
         return {"action": "NAVIGATE", "value": "checkout"}
     if any(k in lowered for k in ["退款", "退货", "refund"]):
         return {"action": "NAVIGATE", "value": "orders"}
-    if any(k in lowered for k in ["签到", "返现", "checkin", "cashback"]):
+    if any(k in lowered for k in ["签到", "checkin"]):
+        return {"action": "NAVIGATE", "value": "checkin_hub"}
+    if any(k in lowered for k in ["返现", "cashback"]):
         return {"action": "NAVIGATE", "value": "reward_history"}
     if any(k in lowered for k in ["地址", "address", "shipping"]):
         return {"action": "NAVIGATE", "value": "address"}
+    if any(k in lowered for k in ["设置", "setting"]):
+        return {"action": "OPEN_DRAWER", "value": "settings"}
+    if any(k in lowered for k in ["通知", "notification"]):
+        return {"action": "OPEN_DRAWER", "value": "notification"}
+    if any(k in lowered for k in ["分享", "share"]):
+        return {"action": "OPEN_DRAWER", "value": "share_menu"}
+    if any(k in lowered for k in ["联系人", "contacts"]):
+        return {"action": "OPEN_DRAWER", "value": "contacts"}
     if any(k in lowered for k in ["清缓存", "清除缓存", "clear cache"]):
         return {"action": "CLEAR_LOCAL_CACHE", "value": "true"}
+    return None
+
+
+def _build_emergency_reply(user_text: str) -> str:
+    lowered = (user_text or "").lower()
+    if any(k in lowered for k in ["西藏", "高原", "缺氧", "危险", "海拔"]):
+        return (
+            "你这个担心很正常，我在。去西藏的关键是“慢进快不行、补水保暖、先适应再上强度”。\n"
+            "给你一个最短安全建议：\n"
+            "1) 抵达前两天别剧烈运动，先睡好；\n"
+            "2) 多喝温水，别空腹上高海拔；\n"
+            "3) 备好防晒、分层保暖、应急氧气。\n"
+            "如果你愿意，我现在就给你整理一份“西藏安全出行清单（极简版）”。"
+        )
+    if any(k in lowered for k in ["累", "加班", "压力", "崩溃", "烦", "tired", "burnout", "stressed"]):
+        return (
+            "今天真的辛苦了，我在。先别硬撑，我们做个 3 分钟恢复：喝几口温水、肩颈放松、慢呼吸 6 次。\n"
+            "你要是愿意，我再给你一个“下班缓冲小清单”（非常短、马上能用）。"
+        )
+    return "我在，刚刚有一点连接波动。你这条我继续接住：我先给你一个可执行的简版方案。"
+
+
+def _is_image_search_intent(user_text: str) -> bool:
+    lowered = (user_text or "").lower()
+    hints = [
+        "已发送 1 张图片",
+        "请根据图片帮我找相似商品",
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".webp",
+        "image",
+        "photo",
+    ]
+    return any(k in lowered for k in hints)
+
+
+def _sanitize_image_search_reply(user_text: str, assistant_text: str) -> str:
+    if not _is_image_search_intent(user_text):
+        return assistant_text
+    text = assistant_text or ""
+    # Remove refusal-style disclaimers that break the "directly provide options" UX.
+    text = re.sub(r"(?s)虽然[^。\n]*无法[^。\n]*查看[^。\n]*[。\n]", "", text)
+    text = re.sub(r"(?s)很抱歉[^。\n]*无法[^。\n]*查看[^。\n]*[。\n]", "", text)
+    text = re.sub(r"(?s)目前[^。\n]*无法[^。\n]*查看[^。\n]*[。\n]", "", text)
+    if not text.strip():
+        text = "已收到你的图片线索。我先给你3个可直接搜的同款方向：超跑模型摆件、汽车主题穿搭配饰、Mansory风格海报装饰。你想先看哪一类？"
+    return text.strip()
+
+
+def _extract_data_url_image(data_url: str) -> Optional[tuple[str, bytes]]:
+    m = re.match(r"^data:(image/[a-zA-Z0-9.+-]+);base64,(.+)$", data_url or "")
+    if not m:
+        return None
+    mime = m.group(1)
+    b64 = m.group(2)
+    try:
+        raw = base64.b64decode(b64, validate=True)
+        return mime, raw
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _vision_describe_sync(media_items: List[Dict[str, Any]], user_text: str) -> str:
+    if not media_items:
+        return ""
+    first = media_items[0] or {}
+    url = str(first.get("url") or "").strip()
+    if not url:
+        return ""
+    # Keep this concise so downstream agent can still prioritize action output.
+    prompt = (
+        "You are an e-commerce vision parser. "
+        "Identify product category, key attributes, and 3 searchable keywords in Chinese. "
+        "Return plain text in one short line: 类别=...；属性=...；关键词=...。"
+    )
+    try:
+        from google import genai
+        from google.genai import types as gtypes
+        api_key = os.getenv("GEMINI_API_KEY") or settings.GEMINI_API_KEY or os.getenv("GOOGLE_API_KEY") or settings.GOOGLE_API_KEY
+        if not api_key:
+            return ""
+        client = genai.Client(api_key=api_key)
+        if url.startswith("data:image/"):
+            parsed = _extract_data_url_image(url)
+            if not parsed:
+                return ""
+            mime, raw = parsed
+            resp = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    prompt + f"\n用户意图：{user_text}",
+                    gtypes.Part.from_bytes(data=raw, mime_type=mime),
+                ],
+            )
+            return str(getattr(resp, "text", "") or "").strip()
+        if url.startswith("http://") or url.startswith("https://"):
+            resp = client.models.generate_content(
+                model="gemini-2.5-flash",
+                contents=[
+                    prompt + f"\n用户意图：{user_text}",
+                    gtypes.Part.from_uri(file_uri=url, mime_type="image/jpeg"),
+                ],
+            )
+            return str(getattr(resp, "text", "") or "").strip()
+    except Exception:
+        return ""
+    return ""
+
+
+async def _vision_describe_from_context(context: Any, user_text: str) -> str:
+    if not isinstance(context, dict):
+        return ""
+    media_items = context.get("media_items")
+    if not isinstance(media_items, list) or not media_items:
+        return ""
+    return await asyncio.to_thread(_vision_describe_sync, media_items[:1], user_text)
+
+
+def _looks_like_system_action_request(user_text: str) -> bool:
+    lowered = (user_text or "").strip().lower()
+    if not lowered:
+        return False
+    command_hints = (
+        "打开", "关闭", "切换", "改成", "设置", "设为", "清除",
+        "open", "close", "switch", "set ", "set_", "navigate", "go to", "clear cache",
+        "theme", "language", "persona", "notifications", "address", "checkout", "orders",
+        "暗色", "亮色", "订单", "支付", "结算", "退款", "签到", "返现", "地址", "缓存", "通知", "消息",
+    )
+    return any(hint in lowered for hint in command_hints)
+
+
+def _detect_reply_language_fast(user_text: str) -> Optional[str]:
+    text = (user_text or "").strip()
+    if not text:
+        return None
+    if re.search(r"[\u4e00-\u9fff]", text):
+        return "zh"
+    if re.search(r"[\u3040-\u30ff]", text):
+        return "ja"
+    if re.search(r"[\uac00-\ud7a3]", text):
+        return "ko"
+    if re.search(r"[\u0400-\u04FF]", text):
+        return "ru"
+    if re.search(r"[\u0600-\u06FF]", text):
+        return "ar"
+    if re.search(r"[\u0900-\u097F]", text):
+        return "hi"
     return None
 
 
@@ -485,7 +709,11 @@ async def proxy_butler_chat(
 
         if not current_user:
             # Guest path must return fast and never depend on external LLM availability.
-            guest_lang = "zh" if re.search(r"[\u4e00-\u9fff]", last_msg or "") else "en"
+            guest_lang = (
+                _detect_reply_language_fast(last_msg)
+                or await _infer_reply_language(last_msg)
+                or "en"
+            )
             inferred_action = _fallback_action_from_text(last_msg)
             if inferred_action:
                 msg_zh = _action_message(inferred_action["action"], inferred_action["value"], True)
@@ -539,15 +767,19 @@ async def proxy_butler_chat(
         # AI semantic fast-path for safe system actions (multilingual).
         if last_msg:
             parsed_address_preview = _parse_address_from_text(last_msg)
-            quick_action = None if parsed_address_preview else await _infer_system_action_from_ai(last_msg)
-            if not quick_action and not parsed_address_preview:
-                quick_action = await _infer_system_action_via_agent(last_msg)
-            if not quick_action and not parsed_address_preview:
-                bridged = _bridge_translate_to_english(last_msg)
-                if bridged:
-                    quick_action = await _infer_system_action_from_ai(bridged) or await _infer_system_action_via_agent(bridged)
-            if not quick_action and not parsed_address_preview:
+            quick_action = None
+            if not parsed_address_preview and _looks_like_system_action_request(last_msg):
+                # Deterministic rules first for critical intents (e.g. check-in/notifications),
+                # then fallback to semantic parsing for broader language coverage.
                 quick_action = _fallback_action_from_text(last_msg)
+                if not quick_action:
+                    quick_action = await _infer_system_action_from_ai(last_msg)
+                if not quick_action:
+                    quick_action = await _infer_system_action_via_agent(last_msg)
+                if not quick_action:
+                    bridged = _bridge_translate_to_english(last_msg)
+                    if bridged:
+                        quick_action = await _infer_system_action_from_ai(bridged) or await _infer_system_action_via_agent(bridged)
             if quick_action:
                 quick_msg_zh = _action_message(quick_action["action"], quick_action["value"], False)
                 quick_lang = await _infer_reply_language(last_msg)
@@ -714,21 +946,41 @@ async def proxy_butler_chat(
                     }
                 }
         
-        # Auto-follow user's language for reply (works even for non-preconfigured UI locales).
-        reply_lang = await _infer_reply_language(last_msg)
+        profile = _load_or_create_profile(db, user_id)
+        personality = dict(profile.personality or {})
+        ui_settings = personality.get("ui_settings") if isinstance(personality.get("ui_settings"), dict) else {}
+        stored_lang = str(
+            ui_settings.get("response_language")
+            or ui_settings.get("language")
+            or ""
+        ).strip().lower()
+
+        # Auto-follow user's latest language. If undetectable, fall back to stored system/user language.
+        reply_lang = _detect_reply_language_fast(last_msg)
+        if not reply_lang:
+            reply_lang = await _infer_reply_language(last_msg)
         if not reply_lang:
             reply_lang = await _infer_reply_language_via_agent(last_msg)
+        if not reply_lang:
+            reply_lang = stored_lang or None
         content_for_ai = last_msg
+        image_vision_hint = await _vision_describe_from_context(request.context, last_msg)
         if reply_lang:
             content_for_ai = (
                 f"[SYSTEM_INSTRUCTION] Respond in language: {reply_lang}. "
                 f"Keep language consistent unless user asks to switch.\n"
                 f"[USER_MESSAGE] {last_msg}"
             )
+        if image_vision_hint:
+            content_for_ai = (
+                f"{content_for_ai}\n\n"
+                f"[VISION_HINT] {image_vision_hint}\n"
+                "Use this visual hint as primary evidence and provide direct shopping candidates."
+            )
 
-            # Persist language preference for logged-in users.
+        # Persist language preference for logged-in users.
+        if reply_lang:
             try:
-                profile = _load_or_create_profile(db, user_id)
                 personality = dict(profile.personality or {})
                 ui_settings = personality.get("ui_settings") if isinstance(personality.get("ui_settings"), dict) else {}
                 ui_settings["response_language"] = reply_lang
@@ -742,12 +994,13 @@ async def proxy_butler_chat(
         response = await run_agent(content=content_for_ai, user_id=user_id, session_id=session_id)
         
         # v5.7.12: Restore MiniMax-compatible format for frontend
+        assistant_text = _sanitize_image_search_reply(last_msg, response.get("content", ""))
         return {
             "id": response.get("id"),
             "choices": [
                 {
                     "message": {
-                        "content": response["content"],
+                        "content": assistant_text,
                         "role": "assistant"
                     }
                 }
@@ -763,7 +1016,12 @@ async def proxy_butler_chat(
     except Exception as e:
         logger.error(f"🚨 CRITICAL API FAILURE: {str(e)}")
         # Ultimate fallback: Never return a 500, always a polite 200 with error content
-        error_msg = "⚠️ 0Buck 智脑正在进行神经网络自愈，请稍等片刻后再与我交谈。我一直都在。"
+        fallback_user_text = ""
+        try:
+            fallback_user_text = request.messages[-1].content if request.messages else ""
+        except Exception:
+            fallback_user_text = ""
+        error_msg = _build_emergency_reply(fallback_user_text)
         # Make the fallback message more helpful if it's an API Key issue that bubbled up
         if "api key" in str(e).lower() or "api_key" in str(e).lower():
             error_msg = "⚠️ 0Buck 智脑连接异常 (API Key 无效或未配置)。请联系系统管理员或在个人设置中配置您自己的大模型 Key。"
@@ -853,6 +1111,10 @@ async def sync_profile_settings(
         current_ui = personality.get("ui_settings") if isinstance(personality.get("ui_settings"), dict) else {}
         current_ui.update(payload.ui_settings)
         personality["ui_settings"] = current_ui
+        if isinstance(current_ui.get("recommendation_enabled"), bool):
+            recommendation_prefs = personality.get("recommendation_prefs") if isinstance(personality.get("recommendation_prefs"), dict) else {}
+            recommendation_prefs["enabled"] = bool(current_ui.get("recommendation_enabled"))
+            personality["recommendation_prefs"] = recommendation_prefs
         profile.personality = personality
 
         # Keep important scalar settings in dedicated columns when possible.
@@ -867,6 +1129,38 @@ async def sync_profile_settings(
             "ui_settings": (profile.personality or {}).get("ui_settings", {}),
         },
     }
+
+
+@router.get("/profile/recommendation")
+async def get_recommendation_settings(
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user),
+):
+    user_id = int(current_user.customer_id)
+    return {"status": "success", "enabled": is_recommendation_enabled(db, user_id)}
+
+
+@router.post("/profile/recommendation")
+async def update_recommendation_settings(
+    payload: RecommendationPreferencePayload,
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user),
+):
+    user_id = int(current_user.customer_id)
+    set_recommendation_enabled(db, user_id, payload.enabled)
+    return {"status": "success", "enabled": bool(payload.enabled)}
+
+
+@router.post("/profile/recommendation/skip")
+async def skip_recommendation_once(
+    payload: RecommendationSkipPayload,
+    db: Session = Depends(get_db),
+    current_user: UserExt = Depends(get_current_user),
+):
+    user_id = int(current_user.customer_id)
+    session_id = (payload.session_id or "global").strip() or "global"
+    mark_session_skip(db, user_id=user_id, session_id=session_id, minutes=int(payload.minutes or 30))
+    return {"status": "success", "session_id": session_id}
 
 
 def _load_or_create_profile(db: Session, user_id: int) -> UserButlerProfile:

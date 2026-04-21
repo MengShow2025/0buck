@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { Target, Gift, Users, Trophy, ChevronRight, ShieldCheck, Share2, Award, Zap, TrendingUp, Copy, QrCode, Calendar, Clock, ChevronDown, ChevronUp, UserCheck, Star, HelpCircle } from 'lucide-react';
+import { Target, Users, Trophy, ChevronRight, ShieldCheck, Share2, Award, Zap, Copy, QrCode, Calendar, ChevronDown, ChevronUp, Star, HelpCircle } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import { imApi } from '../../../services/api';
 
 export const FanCenterDrawer: React.FC = () => {
-  const { pushDrawer, t, hasCheckedInToday, setHasCheckedInToday, userLevel, isInfluencer, influencerRatios } = useAppContext();
-  const [isDetailsExpanded, setIsDetailsExpanded] = useState(false);
+  const { pushDrawer, t, userLevel, isInfluencer, influencerRatios } = useAppContext();
   const [isRatesExpanded, setIsRatesExpanded] = useState(false);
 
   // Define ratios for each level
@@ -35,11 +35,6 @@ export const FanCenterDrawer: React.FC = () => {
       currentPhase: 7,
       activeOrdersCount: 3
     },
-    orderDetails: [
-      { id: 'ORD-001', name: 'Wireless Earbuds', phase: '7/20', daysLeft: 4, rate: '5%', estAmount: '15.00' },
-      { id: 'ORD-002', name: 'Mechanical Watch', phase: '3/20', daysLeft: 12, rate: '8%', estAmount: '22.50' },
-      { id: 'ORD-003', name: 'Leather Bag', phase: '1/20', daysLeft: 25, rate: '5%', estAmount: '8.30' }
-    ],
     breakdown: [
       { label: t('fan.fan_reward'), amount: '245.00', count: 12, icon: Users, color: 'text-purple-500', bg: 'bg-purple-50' },
       { label: t('fan.referral_reward'), amount: '97.50', count: 8, icon: Zap, color: 'text-blue-500', bg: 'bg-blue-50' },
@@ -47,14 +42,30 @@ export const FanCenterDrawer: React.FC = () => {
     ]
   };
 
-  const handleSignIn = () => {
-    setHasCheckedInToday(true);
-    // Logic for batch sign-in across all orders
+  const handleOpenCheckinHub = () => {
+    pushDrawer('checkin_hub');
   };
 
-  const handleCopy = () => {
-    navigator.clipboard.writeText(rewardStats.referralCode);
-    alert(t('fan.referral_copied'));
+  const handleCopy = async () => {
+    try {
+      const resp = await imApi.generatePromoCard({
+        card_type: 'invite',
+        target_type: 'none',
+        share_category: 'fan_source',
+        entry_type: 'fan_register_share',
+      });
+      const link = resp.data?.universal_link || resp.data?.link || resp.data?.short_link;
+      if (link) {
+        await navigator.clipboard.writeText(String(link));
+        alert(t('fan.referral_copied'));
+      } else {
+        await navigator.clipboard.writeText(rewardStats.referralCode);
+        alert(t('fan.referral_copied'));
+      }
+    } catch (_e) {
+      await navigator.clipboard.writeText(rewardStats.referralCode);
+      alert(t('fan.referral_copied'));
+    }
   };
 
   const handleGenerateQR = () => {
@@ -63,114 +74,25 @@ export const FanCenterDrawer: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-[#F2F2F7] dark:bg-[#000000] p-4 gap-4 pb-32 overflow-y-auto no-scrollbar">
-      {/* 1. Daily Multi-Order Sign-in Section */}
-      <div className="bg-white dark:bg-[#1C1C1E] rounded-[32px] p-6 shadow-xl border border-[var(--wa-teal)]/20 relative">
-        <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
-          <Calendar className="w-24 h-24 text-[var(--wa-teal)]" />
-        </div>
-        
-        <div className="flex justify-between items-start mb-6 relative z-10">
-          <div className="space-y-1">
-            <h4 className="text-[12px] font-black text-gray-400 uppercase tracking-widest">{t('fan.progress_title')}</h4>
-            <div className="flex items-baseline gap-2">
-              <span className="text-[32px] font-black text-gray-900 dark:text-white tracking-tighter">${rewardStats.rebateSummary.totalPendingAmount}</span>
-              <span className="text-[12px] text-[var(--wa-teal)] font-bold">{t('fan.estimated_rebate')}</span>
+      {/* Check-in moved to dedicated hub */}
+      <div className="bg-white dark:bg-[#1C1C1E] rounded-[28px] p-5 border border-gray-100 dark:border-white/10 shadow-sm">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="text-[12px] font-black text-gray-400 uppercase tracking-widest">{t('title.checkin_hub')}</h4>
+            <div className="text-[24px] font-black text-gray-900 dark:text-white mt-1">
+              ${rewardStats.rebateSummary.totalPendingAmount}
             </div>
+            <p className="text-[12px] text-gray-500 dark:text-white/65 mt-1">{t('checkin.building_momentum')}</p>
           </div>
-          <div className="text-right">
-            <div className="flex items-center gap-1.5 text-orange-600 font-black text-[14px]">
-              <Clock className="w-4 h-4" />
-              <span>{t('fan.fastest_prefix')}{rewardStats.rebateSummary.daysRemaining}{t('fan.fastest_suffix')}</span>
-            </div>
-            <button 
-              onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-              className="flex items-center gap-1 text-[10px] text-gray-400 hover:text-gray-600 font-bold uppercase mt-1 ml-auto active:scale-95 transition-all"
-            >
-              <span>{rewardStats.rebateSummary.activeOrdersCount}{t('fan.syncing_suffix')}</span>
-              {isDetailsExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            </button>
-          </div>
+          <Calendar className="w-10 h-10 text-[var(--wa-teal)]/70" />
         </div>
-
-        {/* Progress & Action */}
-        <div className="space-y-4 relative z-10">
-          <div className="h-2 w-full bg-gray-100 dark:bg-white/5 rounded-full overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: '65%', background: 'linear-gradient(90deg, #FF7A3D 0%, #E8450A 100%)', boxShadow: '0 0 10px rgba(232,69,10,0.35)' }} />
-          </div>
-          
-          <button
-            onClick={handleSignIn}
-            disabled={hasCheckedInToday}
-            style={!hasCheckedInToday ? { background: 'linear-gradient(135deg, #FF7A3D 0%, #E8450A 100%)', boxShadow: '0 4px 14px rgba(232,69,10,0.35)' } : undefined}
-            className={`w-full py-3.5 rounded-2xl font-semibold text-[15px] transition-all flex items-center justify-center gap-2 ${
-              hasCheckedInToday
-              ? 'bg-gray-100 dark:bg-white/5 text-gray-400 cursor-not-allowed'
-              : 'text-white active:scale-95'
-            }`}
-          >
-            {hasCheckedInToday ? <UserCheck className="w-5 h-5" /> : <Calendar className="w-5 h-5" />}
-            {hasCheckedInToday ? t('fan.check_in_done') : t('fan.check_in_all')}
-          </button>
-        </div>
-
-        {/* Expandable Order Details */}
-        <div className="mt-4 pt-4 border-t border-gray-50 dark:border-white/5">
-          <button 
-            onClick={() => setIsDetailsExpanded(!isDetailsExpanded)}
-            className="w-full flex items-center justify-between text-[11px] font-black text-gray-400 uppercase tracking-tighter hover:text-gray-600 transition-colors"
-          >
-            <span>{t('fan.view_details')}</span>
-            {isDetailsExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </button>
-          
-          {isDetailsExpanded && (
-            <div 
-              className="mt-4 space-y-3 animate-in fade-in slide-in-from-top-2"
-              onClick={() => setIsDetailsExpanded(false)}
-            >
-              {rewardStats.orderDetails.map(order => (
-                <div 
-                  key={order.id} 
-                  className="bg-gray-50 dark:bg-white/5 rounded-2xl p-3 flex items-center justify-between border border-gray-100 dark:border-white/5 cursor-pointer active:scale-[0.98] transition-all"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Optional: navigate to order detail
-                    // pushDrawer('order_detail'); 
-                  }}
-                >
-                  <div className="space-y-0.5">
-                    <div 
-                      className="text-[12px] font-black text-[var(--wa-teal)] underline underline-offset-2 decoration-[var(--wa-teal)]/30 active:text-[var(--wa-teal)]/70 transition-colors cursor-pointer"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setIsDetailsExpanded(false);
-                        pushDrawer('order_detail');
-                      }}
-                    >
-                      {order.id}
-                    </div>
-                    <div className="flex items-center gap-2 text-[10px] text-gray-400 font-bold uppercase">
-                      <span 
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setIsDetailsExpanded(false);
-                        }}
-                      >
-                        {t('fan.phase')} {order.phase}
-                      </span>
-                      <span className="w-1 h-1 rounded-full bg-gray-300" />
-                      <span>{t('fan.days_left_prefix')}{order.daysLeft}{t('fan.days_left_suffix')}</span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[13px] font-black text-[var(--wa-teal)]">${order.estAmount}</div>
-                    <div className="text-[9px] text-orange-500 font-bold mt-0.5">{t('fan.milestone_reward')} {order.rate}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <button
+          onClick={handleOpenCheckinHub}
+          className="mt-4 w-full rounded-2xl px-4 py-3 bg-[linear-gradient(135deg,#FF8A53_0%,#E14B14_100%)] text-white font-semibold text-[15px] flex items-center justify-between active:scale-[0.99] transition-all shadow-[0_10px_22px_rgba(225,75,20,0.28)]"
+        >
+          <span>{t('fan.check_in_all')}</span>
+          <ChevronRight className="w-4 h-4" />
+        </button>
       </div>
 
       {/* 2. My Referral Identity & Reward Rates */}

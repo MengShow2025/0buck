@@ -3,6 +3,7 @@ import { Bot, Sparkles } from 'lucide-react';
 import { CustomMessageUI } from '../CustomMessageUI';
 import { VCCInput } from '../VCCInput';
 import { useAppContext } from '../AppContext';
+import BongoCat from '../BongoCat';
 
 interface Message {
   id: string;
@@ -76,15 +77,9 @@ export const DesktopChatView: React.FC<Props> = ({ messages, isAiTyping, onSendM
               >
                 <Bot className="w-4 h-4 text-white" />
               </div>
-              <div className="bg-zinc-100 dark:bg-zinc-800 rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm">
-                <div className="flex gap-1.5 items-center h-4">
-                  {[0, 1, 2].map(i => (
-                    <span
-                      key={i}
-                      className="w-1.5 h-1.5 bg-zinc-400 rounded-full animate-bounce"
-                      style={{ animationDelay: `${i * 0.15}s` }}
-                    />
-                  ))}
+              <div className="bg-zinc-100 dark:bg-zinc-800 rounded-2xl rounded-bl-sm px-4 py-2 shadow-sm flex items-center justify-center">
+                <div className="w-8 h-8 opacity-80">
+                  <BongoCat isTyping={true} />
                 </div>
               </div>
             </div>

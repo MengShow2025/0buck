@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Package, Search, Scale, CheckCircle2, Share2, Crown, Zap, ShieldCheck, Coins, ArrowRight, Star } from 'lucide-react';
 import { useAppContext } from '../AppContext';
-import { productApi } from '../../../services/api';
+import { imApi, productApi } from '../../../services/api';
 import { getCheckoutBlockReasonText } from '../utils/checkoutBlockReason';
 
 const MOCK_PRODUCTS = [
@@ -78,6 +78,13 @@ export const PrimeDrawer: React.FC = () => {
   useEffect(() => {
     const fetchProducts = async () => {
       setIsLoading(true);
+      const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('access_token');
+      if (!hasToken) {
+        setProducts(MOCK_PRODUCTS);
+        setHasMore(false);
+        setIsLoading(false);
+        return;
+      }
       try {
         const resp = await productApi.getDiscovery(userCountry, 1);
         const normalized = (resp.data?.products || []).map((p: any) => {
@@ -107,6 +114,11 @@ export const PrimeDrawer: React.FC = () => {
 
   const loadMore = async () => {
     if (isLoadingMore || !hasMore) return;
+    const hasToken = typeof window !== 'undefined' && !!localStorage.getItem('access_token');
+    if (!hasToken) {
+      setHasMore(false);
+      return;
+    }
     setIsLoadingMore(true);
     const nextPage = page + 1;
     try {
@@ -156,9 +168,36 @@ export const PrimeDrawer: React.FC = () => {
     });
   };
 
-  const handleShare = (e: React.MouseEvent, productId: string) => {
+  const handleShare = async (e: React.MouseEvent, productId: string) => {
     e.stopPropagation();
-    console.log(`Sharing product: ${productId} via Direct Referral link`);
+    try {
+      const numericId = Number(productId);
+      const payload =
+        Number.isFinite(numericId) && numericId > 0
+          ? {
+              card_type: 'product' as const,
+              target_type: 'product' as const,
+              target_id: numericId,
+              share_category: 'distribution' as const,
+              entry_type: 'product_card_share',
+            }
+          : {
+              card_type: 'invite' as const,
+              target_type: 'none' as const,
+              share_category: 'distribution' as const,
+              entry_type: 'product_card_share',
+            };
+      const resp = await imApi.generatePromoCard(payload);
+      const link = resp.data?.universal_link || resp.data?.link || resp.data?.short_link;
+      if (link) {
+        await navigator.clipboard.writeText(String(link));
+        alert('分销链接已复制');
+      } else {
+        alert('暂未生成分享链接');
+      }
+    } catch (_e) {
+      alert('分享链接生成失败，请稍后重试');
+    }
   };
 
   const benefits = [

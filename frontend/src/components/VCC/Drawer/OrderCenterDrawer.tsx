@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Package, Truck, Clock, ChevronRight, Gift, Copy, ShieldCheck } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import { imApi } from '../../../services/api';
 
 const DUMMY_ORDERS = [
   {
@@ -103,6 +104,26 @@ const DUMMY_ORDERS = [
 export const OrderCenterDrawer: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'all' | 'rebate' | 'group'>('all');
   const { pushDrawer, t } = useAppContext();
+
+  const handleCopyGroupBuyLink = async () => {
+    try {
+      const resp = await imApi.generatePromoCard({
+        card_type: 'invite',
+        target_type: 'none',
+        share_category: 'group_buy',
+        entry_type: 'order_group_buy_share',
+      });
+      const link = resp.data?.universal_link || resp.data?.link || resp.data?.short_link;
+      if (link) {
+        await navigator.clipboard.writeText(String(link));
+        alert('拼团分享链接已复制');
+      } else {
+        alert('暂未生成拼团分享链接');
+      }
+    } catch (_e) {
+      alert('拼团链接生成失败，请稍后重试');
+    }
+  };
 
   return (
     <div className="flex flex-col h-full bg-[#F2F2F7] dark:bg-black">
@@ -291,7 +312,7 @@ export const OrderCenterDrawer: React.FC = () => {
                           </div>
 
                           <div className="flex gap-2 relative z-10">
-                        <button className="flex-1 text-white text-[12px] font-semibold py-2.5 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2"
+                        <button onClick={handleCopyGroupBuyLink} className="flex-1 text-white text-[12px] font-semibold py-2.5 rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2"
                           style={{ background: 'linear-gradient(135deg, #FF7A3D 0%, #E8450A 100%)', boxShadow: '0 2px 10px rgba(232,69,10,0.25)' }}>
                           <Copy className="w-4 h-4" /> {t('order.copy_item_link')}
                         </button>

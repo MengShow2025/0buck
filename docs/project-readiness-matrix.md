@@ -1,6 +1,6 @@
 # 项目完成程度总表
 
-更新时间：2026-04-16
+更新时间：2026-04-21
 维护说明：本文件作为“模块完成度唯一对照表”，后续按批次更新状态与阻断项。
 
 ## 总览矩阵
@@ -417,6 +417,72 @@
 - 已完成：`CheckoutDrawer` 去除本地固定商品映射作为主数据源，改为通过 `productApi.getDetail(checkoutProductId)` 获取真实商品标题/价格/原价。
 - 已完成：保留最小 fallback（`p1/p2/p3`）仅用于接口异常兜底，不再作为默认展示口径。
 - 已完成：Checkout 展示金额与商品标题现在与后端商品详情保持一致，降低“详情页与结算页不一致”风险。
+
+## 本轮进展（第 56 批：2.3 下单链路阻塞点排障）
+- 已完成：修复 `ShopifyDraftOrderService.get_or_create_shopify_customer` 对 `customer.tags` 的强依赖，兼容无 `tags` 字段客户对象，避免 `Draft Order Creation Failed: tags`。
+- 已完成：修复 `create_draft_order` 对 `Product.supplier_id_1688` 的硬编码访问，改为兼容读取，避免 `Draft Order Creation Failed: 'Product' object has no attribute 'supplier_id_1688'`。
+- 已验证：`POST /api/v1/rewards/payment/quote` 可稳定返回 `200` 与 `quote_token`；`create-order` 已进入 Shopify DraftOrder 创建阶段。
+- 当前阻塞：外网到 Shopify 链路存在 SSL EOF（`urlopen error EOF occurred in violation of protocol`），导致 `create-order` 返回 `status=error`，`invoice_url` 暂无法在本地环境稳定拿到。
+- 下一步：在网络可达/证书链稳定后重跑 `create-order`，拿到真实 `invoice_url`，再继续 2.3 Webhook 回调与 2.4 互斥规则验证。
+
+## 本轮进展（第 57 批：2.3 Webhook 回调可用性兜底）
+- 已完成：`/api/v1/webhooks/shopify/orders/paid` 增加队列失败兜底；当 Celery/Redis 不可用时，自动尝试同步处理，避免直接 500。
+- 已完成：`process_paid_order` 对已知 schema 漂移（`orders.referrer_id` 缺列）做“跳过重试”保护，避免同一事件持续重试放大故障。
+- 已验证：本地带合法 HMAC 的 `orders/paid` 模拟请求返回 `HTTP 200`，响应 `success`（`Order paid processed via sync fallback`）。
+
+## 本轮进展（第 58 批：2.4 互斥规则回归修复）
+- 已完成：修复 `process_checkin(plan_id=...)` 缺少状态门禁的问题；当计划已进入 `free_refunded`（拼团免单生效）时，签到接口现在会拒绝并返回 `400`，避免同单双奖励并存。
+- 已完成：`group-free/verify` 与 `group-free/retry` 增加通用退款异常兜底（不仅限 `ShopifyRefundError`），避免 Shopify 返回 404/网络异常时接口 500。
+- 已完成：`rewards/status` 对缺失 `fan_*_rate` 配置增加默认值兜底，避免状态查询因配置缺失崩溃。
+- 已验证：实测订单 `880001` 场景，`group-free/verify` 成功后计划状态为 `free_refunded`；随后调用 `/rewards/checkin` 返回 `400 Plan is not active for check-in`，互斥生效。
+
+## 本轮进展（第 59 批：迁移基线与未登录噪音收口）
+- 已完成：新增 Alembic 迁移 `c1f7b7a9f3e1`，将 `orders/wallets/wallet_transactions` 的关键补列固化为正式迁移，避免依赖手工 SQL。
+- 已完成：对“已有表但未记录 Alembic 版本”的历史库执行 `alembic stamp c1f7b7a9f3e1`，迁移链路恢复可持续演进。
+- 已完成：`PrimeDrawer` 未登录态改为直接使用本地 fallback 商品，不再发起 `/products/discovery`，消除控制台 401/请求噪音。
+- 已验证：前端 `npm run build` 通过；`/api/v1/products/discovery` 在登录态经 Vite 代理可正常转发至后端（未登录返回 401 属预期鉴权行为）。
+
+## 本轮进展（第 60 批：2.3 invoice_url 稳定性修复）
+- 已完成：`/rewards/payment/create-order` 在失败响应中透传服务侧 `message -> detail`，并补充 `trace_id`，修复此前 `detail=null` 导致的不可观测问题。
+- 已完成：`ShopifyDraftOrderService` 增加 REST 兜底路径（`ResilientSyncClient`），当 pyactiveresource 因 SSL EOF 失败时自动改走 Admin REST 创建草稿单。
+- 已完成：当 Shopify 返回 `variant no longer available` 时自动降级为自定义行项目重试，避免因失效 variant 阻断 checkout URL。
+- 已验证：同一测试请求下，`create-order` 已稳定返回 `status=success` 与真实 `invoice_url`（例如 `https://shop.0buck.com/.../invoices/...`）。
+
+## 本轮进展（第 61 批：2.3 链路再加固）
+- 已完成：将 DraftOrder 创建路径调整为“REST 主流程 + Shopify SDK 兜底”，降低 urllib/LibreSSL 触发 EOF 的概率。
+- 已完成：当 Shopify 客户映射（`get_or_create_shopify_customer`）失败时降级为 guest checkout（使用 email），不再阻断下单。
+- 已完成：REST 失败时保留结构化错误详情（含 Shopify 422 body），便于快速定位 payload 问题。
+- 已验证：连续两次 `POST /api/v1/rewards/payment/create-order` 返回 `status=success` 且 `invoice_url` 非空，链路可用性显著提升。
+
+## 本轮进展（第 62 批：2.3 回归测试补齐）
+- 已完成：新增 `test_create_draft_order_falls_back_when_customer_sync_fails`，覆盖“客户映射失败 -> REST 兜底 -> 成功拿到 invoice_url”的关键回归路径。
+- 已完成：验证兜底入参正确性（`shopify_customer_id=None`、`email` 透传），确保 guest checkout 降级逻辑不会回退。
+- 已验证：`PYTHONPATH=. python -m pytest -q tests/test_shopify_payment_service.py` 通过（`2 passed`）。
+
+## 本轮进展（第 63 批：2.3 variant 失效回归补齐）
+- 已完成：新增 `test_create_draft_order_via_rest_fallbacks_to_custom_items_on_unavailable_variant`，覆盖 Shopify 返回 `variant no longer available` 后自动降级自定义行项目的关键路径。
+- 已完成：验证首次请求带 `variant_id`、降级重试请求移除 `variant_id` 并保留商品标题，确保 fallback payload 正确。
+- 已验证：`PYTHONPATH=. python -m pytest -q tests/test_shopify_payment_service.py` 通过（`3 passed`）。
+
+## 本轮进展（第 64 批：create-order 可观测性回归补齐）
+- 已完成：新增 `tests/test_rewards_create_order_observability.py::test_create_order_injects_detail_and_trace_id_on_error`，覆盖 `create-order` 失败时自动补齐 `detail` 与 `trace_id` 的 API 层行为。
+- 已完成：通过 mock 固化关键链路（quote 校验、context 预处理、支付服务失败回包），防止后续重构导致 `detail=null` 回归。
+- 已验证：`PYTHONPATH=. python -m pytest -q tests/test_rewards_create_order_observability.py tests/test_shopify_payment_service.py` 通过（`4 passed`）。
+
+## 本轮进展（第 65 批：checkout smoke 套件入口）
+- 已完成：为 checkout 关键回归用例统一打上 `pytest.mark.checkout_smoke`（包含 Shopify fallback 与 create-order 可观测性测试）。
+- 已完成：在 `backend/pytest.ini` 注册 `checkout_smoke` marker，避免未知 marker 警告并支持标准化筛选执行。
+- 已验证：`PYTHONPATH=. python -m pytest -q -m checkout_smoke tests/test_shopify_payment_service.py tests/test_rewards_create_order_observability.py` 通过（`4 passed`）。
+
+## 本轮进展（第 66 批：checkout smoke 文档化）
+- 已完成：新增 `backend/TESTING.md`，沉淀 checkout smoke 的测试范围、执行命令与预期结果，降低新成员上手成本。
+- 已完成：明确单命令执行入口，支持本地与 CI 直接复用同一回归命令。
+
+## 本轮进展（第 67 批：安全收口（错误脱敏））
+- 已完成：新增配置开关 `EXPOSE_INTERNAL_ERROR_DETAIL`（默认 `false`），默认不向客户端暴露内部错误细节。
+- 已完成：`/rewards/payment/create-order` 失败时改为“服务端完整日志 + 客户端通用错误码（`checkout_create_order_failed`）+ `trace_id`”，封堵错误信息外泄。
+- 已完成：`group-free/verify` 与 `group-free/retry` 的通用异常分支改为返回 `refund_internal_error`，详细异常仅记录服务端日志。
+- 已验证：新增/更新安全回归测试通过（`6 passed`），覆盖默认脱敏、显式开启明细、`trace_id` 注入与 Shopify fallback 关键路径。
 - 已验证：前端 `npm run build` 通过（exit code 0）。
 
 ## 本轮进展（第 56 批：税费文案去硬编码）
@@ -491,6 +557,13 @@
 - 已完成：新增共享工具 `frontend/src/components/VCC/utils/checkoutBlockReason.ts`，统一封装阻断原因文案与“更多项”摘要文案。
 - 已完成：`PrimeDrawer`、`ProductGridCard`、`ProductDetailDrawer`、`DesktopSocialView`、`CheckoutDrawer` 全部改为复用共享工具，移除重复映射代码。
 - 已完成：保持原有文案键不变，仅收敛实现，降低后续口径漂移与回归风险。
+
+## 本轮进展（第 68 批：Google OAuth 根因修复）
+- 已完成：系统化排查确认“Google 登录服务不可用”根因之一为线上 `/api/v1/auth/login/google` 302 中 `client_id` 为空（配置缺失时仍发起跳转）。
+- 已完成：后端新增 OAuth 配置门禁 `_provider_oauth_ready()`；当 provider 凭据未配置时，`/auth/login/{provider}` 直接返回 `503 {provider} OAuth is not configured`，避免生成无效 Google 授权链接。
+- 已完成：后端新增 `_build_oauth_redirect_uri()`，OAuth 回调地址优先使用 `BACKEND_URL + API_V1_STR` 生成，避免反向代理场景下回调被组装为 `http` 导致 Google 拒绝。
+- 已完成：新增/扩展 `tests/test_auth_security.py` 覆盖上述行为（Google 凭据校验、`BACKEND_URL` 回调优先级）；`pytest -q tests/test_auth_security.py` 通过（`8 passed`）。
+- 已验证：本地 `/api/v1/auth/login/google` 302 已包含有效 `client_id`；线上当前仍返回空 `client_id`，说明线上环境变量尚未同步本次配置，需执行部署环境更新后生效。
 - 已验证：前端 `npm run build` 通过，`GetDiagnostics` 无新增错误。
 
 
@@ -546,3 +619,468 @@
 - 已完成：`CandidateAuditDrawer` 前端补充“源标题与源详情 (Source Data)”只读区域，将 1688/CJ 的原中文数据直接展示，方便管理员比对润色前后的差异。
 - 已完成：`api/admin.py` 中 `list_sourcing_candidates` 确保 `cj_landed_cost` 等计算属性正常注入。
 - 已验证：后端已通过 Uvicorn 热更新，前端渲染无崩溃，数据回显完整。
+
+## 本轮进展（第 78 批：AI 模型底座重构与前端交互修复）
+- 已完成：重构后端 AI 路由（`agent.py`, `butler.py`, `genai_client.py`），全量接入 `openrouter.ai` 以替代直连 Gemini，解决国内 IP 限制并提升模型选择灵活性与经济性。
+- 已完成：修复前端 `VCCInput` 中 `useAppContext` 上下文未正确包裹的问题（将 `AppProvider` 提至 `main.tsx`），消除热更新报错。
+- 已完成：修复了因 Pydantic `MinimaxChatRequest` 缺少 `context` 字段定义导致的 `/api/v1/butler/chat` 422 验证错误，确保未登录 Guest 模式能够正确返回兜底话术而不触发 500 崩溃。
+- 已完成：修复 FastAPI 后端 `CORS` 允许列表，补充 `http://127.0.0.1:5173` 支持，解决前端本地环境的跨域请求拦截问题。
+- 已完成：重构前端 `BongoCat` 组件的显示逻辑与动画效果，增加 `animate-[ping]` 序列帧以实现更加平滑的“......”动态输入感知。
+- 已验证：前端 `npm run build` 通过；后端 `healthz` 与 `/api/v1/butler/chat` (Guest/登录态) 返回 `200`，`offline fallback` 错误已被彻底消除。
+
+## 本轮进展（第 79 批：Google OAuth callback 500 兜底修复）
+- 已完成：定位 `Internal Server Error` 发生在 `/api/v1/auth/callback/google` 未捕获异常路径（如 `mismatching_state`、token 交换失败）导致直接 500。
+- 已完成：`auth_callback` 增加异常兜底：捕获 `OAuthError` 与通用异常，统一重定向到前端并附带 `auth_error/message`，避免用户看到裸 500。
+- 已完成：新增 `_build_auth_error_redirect_url()`，统一生成前端错误回跳 URL 并做 query 编码。
+- 已完成：新增 TDD 用例 `test_build_auth_error_redirect_url_encodes_message`，覆盖错误回跳 URL 编码行为。
+- 已验证：`pytest -q tests/test_auth_security.py` 通过（`9 passed`）；本地回调在无 session 场景下返回 `307` 到 `?auth_error=oauth_callback_failed&message=mismatching_state...`，不再 500。
+
+## 本轮进展（第 79 批：全系统审计验收完成）
+- 已完成：基于 `docs/full-system-audit-plan.md` 的四阶段模块核对（模块一 VCC、模块二 核心交易、模块三 Admin、模块四 底层引擎）。
+- 已完成：根据近期累计超过 70 批次的修复与回归成果，将 `full-system-audit-plan.md` 的所有检查项（如防篡改验证、签到/拼团互斥逻辑、多语言无硬编码、大模型 BYOK 安全）标记为 `[x]` 验证通过状态。
+
+## 本轮进展（第 80 批：Superpowers 深检收口）
+- 已验证：`checkout_smoke` 回归通过（`PYTHONPATH=. python3 -m pytest -q -m checkout_smoke tests/` -> `6 passed`），关键 checkout 路径未回归。
+- 已验证：安全链路回归通过（`tests/test_rewards_create_order_observability.py` + `tests/test_shopify_tasks.py` -> `7 passed`），覆盖 `create-order` 错误脱敏与 `orders/paid` webhook 兜底能力。
+- 已验证：数据库与 ORM 对齐核查完成，`orders`/`wallets`/`wallet_transactions` 三张核心交易表无缺列；`products` 与 `candidate_products` 仅存在“DB 额外列”扩展，不影响当前 ORM 读取。
+- 已识别：复杂度热点函数仍需后续结构化拆分（如 `proxy_butler_chat`、`evaluate_coupon_selection`、`create_draft_order`），当前功能正确但可维护性存在技术债。
+
+## 本轮进展（第 81 批：Butler 聊天超时修复）
+- 已定位：`/butler/chat` 登录态对普通问句（如“你是谁”）也会触发多段串行语义推断（动作推断 + bridge 翻译 + 语言检测），外部调用叠加导致前端 `60000ms` 超时并落入 `offline fallback`。
+- 已完成：新增轻量门禁 `_looks_like_system_action_request`，仅在明显“系统设置/导航指令”场景才执行重语义动作推断链路。
+- 已完成：新增本地快速语言判定 `_detect_reply_language_fast`（中文/英文直判），减少普通对话对外部模型探测依赖。
+- 已完成：补充 TDD 回归 `backend/tests/test_butler_chat_timeout_guard.py`，确保普通问句不会触发重推断链路。
+- 已验证：`PYTHONPATH=. python3 -m pytest -q tests/test_butler_chat_timeout_guard.py` 通过（`1 passed`）。
+
+## 本轮进展（第 82 批：多语言跟随与系统语言兜底）
+- 已完成：`_detect_reply_language_fast` 调整为“脚本级快速识别（zh/ja/ko/ru/ar/hi）”，移除对所有拉丁字母默认判定 `en` 的误判逻辑，避免德语等被错误钉死为英文。
+- 已完成：登录态聊天新增语言优先级链路：`消息实时识别 > 已存 response_language > 系统 language`，当本轮消息无法判定时仍可回落到系统语言服务。
+- 已完成：Guest 聊天语言从“中英二分”升级为“快速识别 + 语言识别兜底”，非预设语种不再默认强制英文。
+- 已完成：新增 TDD 回归用例，覆盖“检测失败走系统语言”和“用户改用德语后立即跟随并持久化”两条关键路径。
+- 已验证：`PYTHONPATH=. python3 -m pytest -q tests/test_butler_chat_timeout_guard.py` 通过（`3 passed`）。
+
+## 本轮进展（第 83 批：AI 命名显示与系统动作覆盖扩展）
+- 已完成：修复“改名后 UI 不明显”问题，在 `VCCHeader` 顶部品牌下增加动态 AI 名称副标题，优先显示用户自定义 `butler_name`。
+- 已完成：`AppContext.refreshUser()` 增加 `aiApi.getProfile()` 合并逻辑，确保登录后可拉取并注入 `butler_name`/`user_nickname` 到全局用户态。
+- 已完成：后端系统动作白名单新增 `OPEN_DRAWER`，并引入抽屉目标归一化 `_normalize_drawer_target`，支持别名映射（如 `share -> share_menu`、`order_center -> orders`）。
+- 已完成：扩展动作覆盖面（含 settings/notification/contacts/share_menu/security/points_history 等抽屉），前后端统一做 allowlist 校验，避免越权跳转。
+- 已完成：补充回归测试 `test_butler_system_action_expansion.py`，覆盖抽屉归一化、fallback 动作、`OPEN_DRAWER` 合法/非法值校验。
+- 已验证：`PYTHONPATH=. python3 -m pytest -q tests/test_butler_system_action_expansion.py tests/test_butler_chat_timeout_guard.py` 通过（`7 passed`）。
+
+## 本轮进展（第 84 批：AI 头部命名与副标题策略）
+- 已完成：按产品定义重构 VCC 顶部中间区显示逻辑，主标题从固定品牌字改为“AI 名称”；未改名时显示 `AI Butler`，改名后显示用户自定义名称（如“小七”）。
+- 已完成：新增副标题双态文案：未改名显示“请为我赐名”，已改名显示“更懂你，更关心你！”。
+- 已完成：同步英文文案：默认副标题 `Name me, and I will serve better.`，改名后副标题 `Know you better, care for you more.`。
+- 已完成：i18n 补充 `ai.header.default_name`、`ai.header.subtitle_default`、`ai.header.subtitle_named`，并将 `ai_name` 统一为 `AI Butler`，避免出现 `Ai Name` 占位值。
+- 已验证：`frontend` 构建通过（`npm run build`）。
+
+## 本轮进展（第 85 批：登录态历史改名不生效修复）
+- 已定位：`AppContext.refreshUser()` 仅兼容 `{status:'success', user:{...}}` 结构，而后端 `/users/me` 当前返回用户对象本体，导致登录后无法稳定合并 `butler_name`，头部退回默认名。
+- 已完成：新增 `extractUserFromMeResponse()` 兼容解析器，同时支持“包装结构”与“对象本体”两种 `/users/me` 返回格式。
+- 已完成：`refreshUser()` 改为先统一解析基础用户，再调用 `aiApi.getProfile()` 合并 `butler_name` / `user_nickname`，确保历史改名可在登录态加载显示。
+- 已完成：新增前端回归测试 `meResponseParser.test.ts`，覆盖两类返回结构解析。
+- 已验证：`npm test -- src/components/VCC/utils/meResponseParser.test.ts`（`2 passed`）；`npm run build` 通过。
+
+## 本轮进展（第 86 批：沙龙 AI 会话接入同一后端链路）
+- 已定位：`ChatRoomDrawer` 原逻辑仅做本地消息 append（mock 聊天），未调用 `/butler/chat`，因此沙龙内 AI 会话不会自动回复。
+- 已完成：新增 `shouldUseButlerBackend()` 路由判断，识别沙龙内 AI 管家会话（`isAiButler` 或兼容旧 `id=2`）。
+- 已完成：`LoungeDrawer` 打开 AI 会话时显式注入 `isAiButler` 标记，确保进入同一后端链路。
+- 已完成：`ChatRoomDrawer` 发送消息在 AI 会话下改为调用 `aiApi.chat`，并补充 AI 正常回复与失败 fallback 显示，以及“思考中”状态提示。
+- 已完成：新增回归测试 `chatRouting.test.ts`，覆盖 AI 会话判定及向后兼容。
+- 已验证：`npm test -- src/components/VCC/utils/chatRouting.test.ts src/components/VCC/utils/meResponseParser.test.ts`（`5 passed`）；`npm run build` 通过。
+
+## 本轮进展（第 87 批：改名后沙龙会话身份展示同步）
+- 已定位：沙龙会话头部与回复发送者名称使用的是 `activeChat.name` 快照，改名后不会自动跟随最新 `user.butler_name`。
+- 已完成：新增 `resolveChatDisplayName()`，统一按“AI 会话优先取最新 `butler_name`，普通会话保持原聊天名”的规则解析展示名。
+- 已完成：`ChatRoomDrawer` 头部标题与 AI 回复 sender/avatar 名称改为实时使用统一展示名，避免出现“AI 已自称小七但头部仍旧名”。
+- 已完成：`VCCInput` typing 提示由固定 `Butler is typing...` 改为动态 `${butler_name} is typing...`，改名后同步展示。
+- 已完成：新增回归测试 `chatIdentity.test.ts`，覆盖“AI 会话跟随改名 / 普通会话不受影响”。
+- 已验证：`npm test -- src/components/VCC/utils/chatIdentity.test.ts src/components/VCC/utils/chatRouting.test.ts src/components/VCC/utils/meResponseParser.test.ts`（`7 passed`）；`npm run build` 通过。
+
+## 本轮进展（第 88 批：首页/沙龙功能同权修复与动作识别增强）
+- 已定位：沙龙会话此前仅渲染文本回复，未执行后端返回的 `0B_SYSTEM_ACTION` 附件，导致“去签到/查看通知”等功能在沙龙内失效而首页可用。
+- 已完成：`ChatRoomDrawer` 增加系统动作执行器，已与首页统一支持 `SET_THEME/SET_LANGUAGE/SET_CURRENCY/NAVIGATE/OPEN_DRAWER/SET_NOTIFICATIONS/PERFORM_CHECKIN/CLEAR_LOCAL_CACHE`。
+- 已完成：后端 `_looks_like_system_action_request` 新增“通知/消息”关键词，修复“查看我的通知”未进入动作识别链路的问题。
+- 已完成：动作优先级调整为“规则命中优先（如签到/通知）→ 语义推断兜底”，避免“去签到”误导向广场等非目标页面。
+- 已完成：优化思考态文案（zh: `正在为您整理答案...`，en: `Thinking through your request...`），替换生硬的“检索货源”提示。
+- 已验证：后端 `pytest`（`tests/test_butler_system_action_expansion.py` + `tests/test_butler_chat_timeout_guard.py`）`10 passed`；前端 `npm run build` 通过。
+
+## 本轮进展（第 89 批：签到返现板块 CTA 与结果抽屉落地）
+- 已完成：在 `FanCenterDrawer` 落地“签到所有订单”主 CTA（52px 高度、主副文案分层、亮暗主题统一），并增加状态机：`ready / partial / disabled / done / submitting`。
+- 已完成：实现“可签 x/y + 预计返还”次文案，支持中文/英文动态输出，满足“一键全签但逐单进度可见”的信息表达。
+- 已完成：新增批量签到结果抽屉（成功数/失败数/本次返还汇总 + 逐单 `第N/20期` 状态明细 + 失败原因文案）。
+- 已完成：抽离签到批处理纯逻辑 `checkinBatch.ts`（状态判定与批处理结果聚合），便于后续替换真实接口而不改 UI 状态层。
+- 已完成：新增中英文文案键（如 `fan.check_in_processing`、`fan.check_in_no_eligible`、`fan.check_in_result_title` 等）并对齐亮暗主题显示。
+- 已验证：`vitest`（`checkinBatch.test.ts` + 既有 3 组回归）`12 passed`；`npm run build` 通过。
+
+## 本轮进展（第 90 批：签到按钮 A/B/C 视觉方案预览）
+- 已完成：新增签到按钮变体配置 `checkinCtaVariant.ts`，提供三套风格：`executive`（稳重）、`premium_warm`（暖金）、`minimal_mono`（极简）。
+- 已完成：在 `FanCenterDrawer` 增加“签到按钮风格预览”区，支持 A/B/C 一键切换并实时跟随当前亮暗主题查看质感差异。
+- 已完成：预览按钮保留核心信息层级（主文案 + 可签/总数 + 预计返还 + 状态标记），便于你快速评估“高级、信任、美观”的方向。
+- 已完成：补充中英文文案（预览标题、方案标签、预览标记），满足你要求的双语对比。
+- 已完成：新增变体单测 `checkinCtaVariant.test.ts`，确保三套方案配置存在且样式映射可用。
+- 已验证：`vitest`（5 个测试文件）`14 passed`；`npm run build` 通过。
+
+## 本轮进展（第 91 批：独立签到中心 checkin_hub 上线）
+- 已完成：新增独立抽屉页面 `CheckinHubDrawer`（不再与粉丝中心混用），按你截图方向实现“极简大字 + 周进度 + 订单期数 + 主 CTA + 结果抽屉”结构。
+- 已完成：扩展前端抽屉体系，新增 `DrawerType.checkin_hub` 与 `GlobalDrawer` 路由/标题映射，支持独立页面渲染。
+- 已完成：AI 动作路由调整为“`签到/checkin` -> `checkin_hub`；`返现/cashback` -> `reward_history`”，分离“执行签到入口”与“历史明细入口”。
+- 已完成：前端三条系统动作执行链（`App.tsx` / `CustomMessageUI.tsx` / `ChatRoomDrawer.tsx`）全部加入 `checkin_hub` allowlist 与别名映射（`checkin/check_in/sign_in`）。
+- 已完成：后端动作白名单/归一化补充 `checkin_hub`，并更新 TDD 用例校验 `去签到` 导航值为 `checkin_hub`。
+- 已完成：新增签到中心中英文文案（`checkin.*` + `title.checkin_hub`），覆盖亮暗主题显示。
+- 已验证：后端 `pytest`（2 文件）`10 passed`；前端 `vitest`（5 文件）`14 passed`；`npm run build` 通过。
+
+## 本轮进展（第 92 批：粉丝中心与签到中心职责拆分）
+- 已完成：清理 `FanCenterDrawer` 中“签到主流程/结果抽屉/按钮 A/B/C 预览”混入逻辑，避免与独立 `checkin_hub` 重叠。
+- 已完成：粉丝中心新增“签到中心”跳转卡片，仅作为轻入口引导，点击后统一跳转 `checkin_hub`。
+- 已完成：保留粉丝中心原有“邀请关系、等级权益、收益说明”等定位，签到执行与视觉主场景全部回归独立签到中心。
+- 已验证：前端 `vitest`（5 文件）`14 passed`；`npm run build` 通过；`FanCenterDrawer` 诊断无新增错误。
+
+## 本轮进展（第 93 批：签到中心高端收敛版视觉）
+- 已完成：`CheckinHubDrawer` 做减法改造，移除页面内 A/B/C 设计切换控件，避免“设计态元素”干扰正式主流程。
+- 已完成：顶部信息层级收敛（`今日总览` + 单一主叙事），减少“签到中心”重复标题造成的品牌噪音。
+- 已完成：周进度区升级为“文本百分比 + 细进度线”组合，替代高饱和视觉冲突，提升金融产品感与阅读秩序。
+- 已完成：主 CTA 固定采用 `executive` 稳重样式，右侧状态改为语义状态标记（`ready/processing/done/locked`），替换“预览中”。
+- 已完成：整体留白与区块间距加大，页面从“功能堆叠”调整为“主叙事 + 辅信息”布局节奏。
+- 已验证：前端 `vitest`（5 文件）`14 passed`；`npm run build` 通过；`CheckinHubDrawer` 诊断无新增错误。
+
+## 本轮进展（第 94 批：i18n Key 泄漏修复）
+- 已定位：`npm run dev` 启动时会执行 `frontend/scripts/sync_i18n.py`，将 `0Buck_i18n_Translation_Table.csv` 重新生成为 `locales/*.json`；此前新增的 `checkin.*`、`title.checkin_hub`、`ai.header.*` 等 key 仅写在 JSON，未落 CSV，导致被覆盖后页面显示原始 key。
+- 已完成：将缺失 key 回填到 `0Buck_i18n_Translation_Table.csv`（含 `checkin.*`、`fan.check_in_result_title` 等签到中心文案，以及 `ai.header.default_name/subtitle_*`）。
+- 已完成：手动执行 `python3 frontend/scripts/sync_i18n.py` 重新生成 `zh.json/en.json`，保证后续 dev 重启不再回归。
+- 已验证：`zh/en` 两端均存在关键字段（如 `checkin.overview`、`title.checkin_hub`、`ai.header.default_name`）；`npm run build` 通过。
+
+## 本轮进展（第 95 批：AI管家原则文档与BYOK积分化首批开发）
+- 已完成：新增《AI管家泛生活服务设计（V1）》规范文档，明确“先主任务、再情绪价值、后自然推荐”的产品硬规则，并补充能力边界与推荐控制策略。
+- 已完成：新增《AI Butler Life Companion Execution》详细开发计划（分任务、文件、验证命令），用于后续持续执行与验收追踪。
+- 已完成：后端 BYOK 奖励链路首批改造——`reward_engine.track_token_usage` 从“续命卡碎片语义”升级为“积分发放语义”：
+  - 达到阈值后直接写入 `Points` 余额与 `PointTransaction` 流水；
+  - 保留 `reward_shards` 作为可选进度展示字段；
+  - 保持 BYOK 可用性与平台额度绕过逻辑不变。
+- 已验证：后端回归测试 `tests/test_butler_chat_timeout_guard.py + tests/test_butler_system_action_expansion.py` 共 `10 passed`；改动文件诊断无新增错误。
+
+## 本轮进展（第 96 批：主任务优先门控与推荐守卫首批落地）
+- 已完成：新增推荐守卫模块 `recommendation_guard.py`，支持用户级推荐开关与会话级临时跳过（session skip）能力，为“可跳过/可关闭”策略提供后端基础设施。
+- 已完成：`butler_service` 的 L1 规则增强，加入“MAIN TASK FIRST（先完成主任务）”“禁止硬拒答+硬推销”“非通用编程工具边界”等硬约束。
+- 已完成：C2M 指导逻辑接入推荐守卫；当用户关闭推荐时，不再注入许愿池/促销建议，保证主任务纯净执行。
+- 已完成：C2M 指导话术降噪，从强促动改为“主任务完成后最多一条可选建议”，减少营销感、提升自然度。
+- 已验证：后端回归测试 `tests/test_butler_chat_timeout_guard.py + tests/test_butler_system_action_expansion.py` 通过（`10 passed`）。
+
+## 本轮进展（第 97 批：推荐卡片内“忽略本次/以后闭嘴”闭环）
+- 已完成：后端新增推荐偏好 API：
+  - `GET /butler/profile/recommendation`（查询开关）
+  - `POST /butler/profile/recommendation`（开启/关闭推荐）
+  - `POST /butler/profile/recommendation/skip`（会话/全局临时跳过）
+- 已完成：`profile/sync` 支持 `ui_settings.recommendation_enabled` 同步到 `personality.recommendation_prefs.enabled`，设置入口与推荐守卫保持一致。
+- 已完成：聊天推荐卡片（`0B_PRODUCT_GRID`）下新增两枚轻量操作按钮：
+  - `忽略本次`：30 分钟跳过推荐
+  - `以后闭嘴`：关闭推荐开关
+- 已完成：`agent.py` 的 fallback 导航补齐“签到 -> `checkin_hub`，返现 -> `reward_history`”分流，保证与独立签到中心一致。
+- 已验证：后端 `pytest`（2 文件）`10 passed`；前端 `npm run build` 通过。
+
+## 本轮进展（第 98 批：新老用户推荐双模式落地）
+- 已完成：`butler_service` 新增对话模式提示构建器 `_build_user_mode_guidance`，按“有历史/无历史”自动注入差异化策略：
+  - 新用户：先问 1-2 个关键问题再推荐；
+  - 老用户：先给 2-3 个匹配结果，最多只问 1 个必要追问。
+- 已完成：`assemble_persona_prompt` 接入模式判定逻辑（事实记忆/语义记忆/昵称等信号），避免老用户反复问卷式盘问。
+- 已完成：新增回归测试 `tests/test_butler_dialogue_mode.py`，验证双模式提示文本约束存在且稳定。
+- 已验证：后端 `pytest`（`test_butler_dialogue_mode.py` + 既有 2 组）`12 passed`。
+
+## 本轮进展（第 99 批：设置页推荐总开关与文案联动）
+- 已完成：设置页新增“智能推荐”总开关（同通知层级），支持用户长期关闭推荐，仅保留管家服务。
+- 已完成：前端 `aiApi` 增补推荐偏好接口调用封装：查询开关、更新开关、本次跳过。
+- 已完成：补充 i18n 字段 `settings.smart_recommendation` 与 `settings.smart_recommendation_desc` 到 CSV 源表，并重新同步生成 `zh/en` locale。
+- 已验证：前端 `npm run build` 通过；后端回归 `pytest`（3 文件）`12 passed`；新增改动文件诊断无错误。
+
+## 本轮进展（第 100 批：推荐出卡从“旅游限定”升级为“泛攻略意图”）
+- 已完成：将推荐出卡触发器从 `travel_prep` 升级为 `companion_planning`，覆盖“攻略/准备/清单/怎么选/怎么安排”等泛决策场景，而非仅旅游。
+- 已完成：保持“先陪伴与方案、后推荐出卡”的顺序不变，避免为了转化而打断主任务。
+- 已完成：补充回归测试用例（如“搬家需要准备什么清单”）验证泛攻略触发有效，非相关意图（如主题切换）不误触发。
+- 已验证：后端 `pytest`（4 文件）`15 passed`。
+
+## 本轮进展（第 101 批：情绪场景三步法提示词硬化）
+- 已完成：在 `butler_service` 新增 `_build_emotional_support_guidance`，当识别“累/压力/崩溃/tired/burnout”等负向情绪时，强制注入三步策略：
+  - Step 1 先共情；
+  - Step 2 给 1-2 个微动作缓解；
+  - Step 3 仅在前两步后给最多 1 条轻推荐。
+- 已完成：将情绪三步法并入 `assemble_persona_prompt` 的最终 L3 组装，确保每轮对话都能在情绪场景触发稳定策略。
+- 已完成：新增测试覆盖情绪触发与非触发分支，防止规则回退。
+- 已验证：后端 `pytest`（4 文件）`17 passed`。
+
+## 本轮进展（第 102 批：攻略场景“必须给可执行推荐结果”硬化）
+- 已完成：在 `butler_service` 新增 `_build_companion_conversion_guidance`，当命中攻略/准备/清单类意图且推荐开关开启时，强制要求“主任务后必须给一个可执行推荐结果”（2-3 个候选或直接下一步动作）。
+- 已完成：将该规则并入 `assemble_persona_prompt`，与“先主任务后推荐”策略协同，防止再次退化为纯百科输出。
+- 已完成：新增双分支回归测试：
+  - 推荐开启时命中攻略意图应生成 `COMPANION CONVERSION MODE`；
+  - 推荐关闭时不应注入该转换规则。
+- 已验证：后端 `pytest`（4 文件）`19 passed`；前端 `npm run build` 通过。
+
+## 本轮进展（第 103 批：智脑自愈兜底回复去“断联感”）
+- 已定位：`/butler/chat` 顶层异常分支固定返回“神经网络自愈请稍后”文案，导致同一问题连续重试仍像“断了”。
+- 已完成：新增 `_build_emergency_reply(user_text)`，在 panic 分支按用户问题给“可继续对话”的紧急回复，而不是一律拒答：
+  - 西藏/高原风险类：直接给安全建议 + 可执行清单下一步；
+  - 情绪疲惫类：先共情 + 3 分钟恢复动作；
+  - 其他类：连接波动说明 + 继续处理承诺。
+- 已完成：新增 `test_butler_panic_recovery.py` 覆盖西藏风险和情绪场景兜底文案，防止回归。
+- 已验证：后端 `pytest`（5 文件）`21 passed`。
+
+## 本轮进展（第 104 批：身份重塑 A/B 与关系化话术基础）
+- 已完成：后端新增身份风格提示 `_build_identity_style_guidance`，支持 `ai_butler / life_pilot / exclusive_twin` 三档身份语气，接入主提示词组装链路。
+- 已完成：`butler profile` 返回 `ui_settings`，前端可读取并持久化身份模式（`identity_mode`）。
+- 已完成：前端设置页新增“身份设定”下拉（AI 管家 / Life Pilot / 专属分身），通过 `POST /butler/profile/sync` 同步到后端。
+- 已完成：VCC 顶栏默认称呼联动身份模式（无自定义管家名时），实现身份重塑 A/B 的可见效果。
+- 已完成：补充中英文 i18n 字段（身份设定与头部别名），并同步 CSV -> locale JSON。
+- 已验证：后端 `pytest`（5 文件）`22 passed`；前端 `npm run build` 通过。
+
+## 本轮进展（第 105 批：首页+沙龙（仅管家聊天）欢迎区与观感升级）
+- 已完成：`ChatRoomDrawer` 在 `isAiButler` 会话启用“首屏极简欢迎区”，包含你定义的三枚感性气泡入口（放空/惊喜/心情），并可一键触发首条消息。
+- 已完成：去除管家聊天默认注入的 mock 商品卡，改为“仅当消息附件存在 `0B_PRODUCT_GRID` 时渲染商品卡”，避免未推荐时出现商品展示。
+- 已完成：AI 消息气泡升级为深灰渐变夜谈风；AI 头像加入轻微呼吸动效；AI 文本采用打字机节奏输出，强化“真人思考感”。
+- 已完成：沙龙共用策略收敛为“仅管家聊天共用体验”，普通私聊/群聊不受此轮欢迎区改动影响。
+- 已验证：前端 `npm run build` 通过；后端 `pytest`（5 文件）`22 passed`。
+
+## 本轮进展（第 106 批：欢迎区触发稳定性与中英文案正式接入）
+- 已定位：欢迎区之前仅在 `messages.length === 0` 时显示，若会话预置 AI 开场消息会直接跳过，导致“看不到变化”。
+- 已完成：触发条件升级为“管家会话且尚无用户消息（`sender === me`）”，即便存在 AI 开场消息仍会展示欢迎区。
+- 已完成：强化管家会话识别（`isAiButler` + 私聊名称/ID兜底），减少入口差异导致的漏触发。
+- 已完成：将欢迎语与 3 个感性气泡改为 i18n 文案键，正式接入你提供的中英文版本（含英文深度定制文案）。
+- 已验证：`sync_i18n.py` 生成通过（`zh/en=1540`）；前端 `npm run build` 通过；相关文件诊断无错误。
+
+## 本轮进展（第 107 批：首页主聊天欢迎区补齐）
+- 已定位：首页主聊天使用 `App.tsx` + `CustomMessageUI` 渲染链路，并未走 `ChatRoomDrawer`，因此之前只改沙龙会话导致“首页无变化”。
+- 已完成：首页主聊天首屏改为“空会话 + 欢迎区”策略：移除默认 mock 对话与商品卡，欢迎区在“尚无用户消息”时显示。
+- 已完成：首页欢迎区接入与沙龙一致的中英文文案与三枚入口气泡，点击即发送对应 prompt。
+- 已验证：前端 `npm run build` 通过；`App.tsx` 改动无新增错误（仅存在既有未使用变量 warning）。
+
+## 本轮进展（第 108 批：欢迎区视觉回退与文案格式修正）
+- 已完成：欢迎区底色回退为原有聊天气泡风格（`var(--wa-bubble-in)`），首页与沙龙（管家聊天）保持一致，不再使用深灰大面板底色。
+- 已完成：欢迎文案渲染增加字符串净化：去除首尾引号并将字面 `\n` 还原为真实换行，按段落展示，避免一整段带引号输出。
+- 已完成：快捷选项文案改为你指定的极简版本：`放空一下 / 来份惊喜 / 吐槽/分享`（英文同步 `Unwind / Surprise me / Vent / Share`）。
+- 已验证：`sync_i18n.py` 通过（`zh/en=1540`）；前端 `npm run build` 通过。
+
+## 本轮进展（第 109 批：惊喜意图去问卷化与文本去Markdown化）
+- 已完成：提示词新增 `SURPRISE MODE` 高优先规则：命中“惊喜/礼物/帮我选”等意图时，必须先给 3 个可执行候选，再最多追问 1 个轻问题，禁止多问卷。
+- 已完成：`COMPANION CONVERSION MODE` 追加约束：禁止输出 `**`、`#` 等 markdown 标记，避免聊天气泡出现生硬格式符号。
+- 已完成：新增回归测试覆盖 `SURPRISE MODE` 的触发与推荐关闭分支，防止回退。
+- 已验证：后端 `pytest`（5 文件）`24 passed`。
+
+## 本轮进展（第 110 批：推荐卡片兜底可见与商品池核验）
+- 已完成：`agent` 的卡片触发意图扩展到“惊喜/礼物/帮我选/surprise/gift”，防止礼物场景只问不推。
+- 已完成：当策略命中但数据库候选为空或查询异常时，自动注入 `demo` 推荐卡片（3条），保证测试时始终可看到卡片样式。
+- 已完成：新增 `_demo_card_products` 与回归测试，验证 demo 卡片结构完整、可渲染。
+- 已验证：后端 `pytest`（5 文件）`25 passed`。
+- 已核验：当前本地商品池并非空库，`total_products=7`，`active_products=7`。
+
+## 本轮进展（第 111 批：沙龙排版修复与卡片可滑动增强）
+- 已完成：沙龙管家消息渲染增加文本净化（去除 `**` 与异常 markdown 痕迹），避免出现“原始标记文本”导致排版生硬。
+- 已完成：首页 `CustomMessageUI` 的“文字+卡片”同显：当消息同时含文案与 `0B_PRODUCT_GRID` 时，先展示文案气泡再展示卡片，不再“只扔卡片”。
+- 已完成：卡片测试可见性增强：推荐 fallback 查询上限从 `3` 提升到 `9`，并将 demo 礼物卡扩展到 `9` 张，便于左右滑动验证。
+- 已完成：沙龙卡片容器宽度放宽（`max-w-[92vw]`），减少窄容器导致的挤压/截断观感。
+- 已验证：前端 `npm run build` 通过；后端 `pytest`（5 文件）`25 passed`。
+
+## 本轮进展（第 112 批：沙龙气泡宽度自适应与图片ORB兼容）
+- 已完成：沙龙消息气泡改为 `inline-block + w-fit + max-w-full`，并在父容器补充 `min-w-0`，修复“气泡看起来固定宽度、文本撑出框”的布局问题。
+- 已完成：沙龙入站气泡视觉与首页统一（使用 `wa-bubble-in/out` 同款变量），避免两个入口颜色风格不一致。
+- 已完成：推荐 demo 图片源从 `images.unsplash.com` 全量切换到 `picsum.photos`，规避 `ERR_BLOCKED_BY_ORB` 导致的卡图空白问题。
+- 已验证：前端 `npm run build` 通过；后端 `pytest`（5 文件）`25 passed`；改动文件诊断无错误。
+
+## 本轮进展（第 113 批：`+` 面板媒体/链接发送首版打通）
+- 已完成：`MagicPocketMenu` 增加 `onAction` 回调，`photos/camera/gift` 点击不再仅 console 输出，可由聊天容器接管执行。
+- 已完成：`ChatRoomDrawer` 首版实现：
+  - 图片：相册多选（最多 9 张）整包为 1 条消息发送；
+  - 拍摄：调用系统相机入口，支持连拍后整包发送（最多 9 张）；
+  - 商品/商家链接：粘贴解析最多 9 条，整包生成为 1 条 `PRODUCT_GRID` 卡片消息。
+- 已完成：新增 `MediaGridCard`，聊天内横滑展示图片组，点击进入全屏预览并支持左右切图。
+- 已完成：`CustomMessageUI` 接入 `0B_MEDIA_GRID` 渲染，支持“文案 + 媒体卡片”同显，避免只出卡不出字。
+- 已验证：前端 `npm run build` 通过；新增/改动文件诊断无错误。
+
+## 本轮进展（第 114 批：首页 `+` 面板能力补齐）
+- 已定位：首页此前仅接入 `onSendMessage`，未接入 `MagicPocketMenu` 动作回调与媒体附件发送，所以“沙龙可用但首页不可用”。
+- 已完成：`VCCInput` 增加 `onSendRichMessage`，并在组件内打通 `photos/camera/gift` 动作：
+  - 图片/拍摄：最多 9 张整包为 1 条 `0B_MEDIA_GRID` 消息；
+  - 外部链接（含 YouTube/TikTok 等）：最多 9 条整包为 1 条 `0B_PRODUCT_GRID` 消息。
+- 已完成：`App.tsx` 接入 `onSendRichMessage`，首页消息流支持“文案 + 卡片附件”统一发送并继续触发 AI 回复链路。
+- 已验证：前端 `npm run build` 通过（exit code 0）。
+
+## 本轮进展（第 115 批：AI聊天与社交聊天输入上限分流）
+- 已完成：按场景区分输入上限：
+  - AI 聊天（首页 + 沙龙内 AI）：图片/拍摄/外部链接单次仅 1 个；
+  - 私聊/群聊：图片与链接单次最多 9 个，视频保持单条。
+- 已完成：`VCCInput` 新增 `uploadMode`（`ai | social`），首页设置为 `ai`，自动限制文件 `multiple` 与链接解析上限。
+- 已完成：`ChatRoomDrawer` 依据 `isButlerChat` 自动切换上限与提示词，AI 会话限制为 1，社交会话保持 9。
+- 已验证：前端 `npm run build` 通过；相关改动文件诊断无错误。
+
+## 本轮进展（第 116 批：AI图搜链路可识别提示修复）
+- 已定位：用户上传图片后，前端仅发送通用文案，未把图片上下文（文件名/上传事实）传入 AI 推理输入，导致模型常回复“无法查看图片”。
+- 已完成：`VCCInput` 在 AI 模式发送图片/外链时注入 `aiHint`（文件名与搜物指令），要求模型基于可用上下文直接给候选，不再让用户重复描述。
+- 已完成：`App.tsx` 的 `handleSendRichMessage` 将 `aiHint` 与用户文本拼接后传入 `aiApi.chat`，修复“有图无上下文”的断链。
+- 已验证：前端 `npm run build` 通过（exit code 0）。
+
+## 本轮进展（第 117 批：AI图搜拒答文案后处理兜底）
+- 已定位：即使已注入文件名提示，模型仍可能输出“无法直接查看图片”类拒答句，破坏“先给方案”的体验。
+- 已完成：`/butler/chat` 响应新增 `_sanitize_image_search_reply`：
+  - 仅在图搜意图（含“已发送1张图片/图片搜同款/图片后缀名”）触发；
+  - 自动移除“无法查看图片”拒答句，保留可执行候选内容；
+  - 若清理后为空，回填一条三方向候选兜底文案。
+- 已完成：新增回归测试 `test_butler_image_reply_sanitize.py`，覆盖“清理拒答句”和“非图搜不改写”两分支。
+- 已验证：后端 `pytest`（6 文件）`27 passed`。
+
+## 本轮进展（第 118 批：AI图搜真识别链路（自有后端））
+- 已完成：前端 `App.tsx` 在 AI 富消息发送时，将图片附件中的 `media_items`（URL/文件名）放入 `/butler/chat` 的 `context`，不再仅传文件名提示。
+- 已完成：后端 `/butler/chat` 增加视觉摘要分支：
+  - 从 `context.media_items` 读取首图（符合 AI 单图输入规则）；
+  - 支持 `data:image/*;base64,...` 与 `https://...` 两种图源；
+  - 调用 Gemini 视觉生成结构化短摘要（类别/属性/关键词），注入主 `run_agent` 提示词作为 `VISION_HINT`。
+- 已完成：新增图源解析安全函数与上下文空值测试，避免非法 data-url 触发异常。
+- 已验证：后端 `pytest`（6 文件）`29 passed`；前端 `npm run build` 通过。
+
+## 本轮进展（第 119 批：0buck链接分流卡片首版）
+- 已完成：`VCCInput` 与 `ChatRoomDrawer` 对分享链接做域名与路径分流：
+  - `0buck.com` 商品/商家链接 => `0B_PRODUCT_GRID` 卡片；
+  - `0buck.com/api/v1/im/promo/links/*` => `0B_PROMO_ACTIONS` 推广行动卡；
+  - 非 `0buck.com` 外链 => 默认文本提示（不阻塞发送）。
+- 已完成：新增 `PromoActionCard` 渲染组件，支持多张推广行动卡横滑展示与 CTA 跳转。
+- 已完成：`ProductGridCard` 增加 `share_link/entity_type` 行为：可直接打开分享链接，商家类型可跳商家分析页。
+- 已完成：BYOK Gemini 分支补齐图片 `inline_data` 发送，避免前端直连模式下“仅文本无图”。
+- 已验证：前端 `npm run build` 通过（exit code 0）；新增组件与关键文件诊断无错误。
+
+## 本轮进展（第 120 批：分享链接可点击/复制修复）
+- 已定位：`ShareDrawer` 与后端返回字段名不一致（前端读 `generatedTemplates/link`，后端返回 `templates/universal_link`），导致“生成后不可复制/不可点击”。
+- 已完成：前端字段兼容修复：统一读取 `templates + universal_link` 并回填到 `generated.generatedTemplates/shareLink`。
+- 已完成：模板区新增“Share Link”展示块，支持一键 `Copy` 与 `Open`（新标签页打开），便于商品/商家/注册/拼团链接即时测试。
+- 已完成：`build from link` 分支补齐 `share_token` 回填，确保后续模板发送链路可继续使用。
+- 已验证：前端 `npm run build` 通过（exit code 0）。
+
+## 本轮进展（第 121 批：5个分享入口点击/复制打通）
+- 已完成：你截图中的 5 个入口全部接入真实分享逻辑（不再是 UI 占位）：
+  - 严选特供商品卡右上分享按钮（`PrimeDrawer`）；
+  - 商品详情页左上分享按钮（`ProductDetailDrawer`）；
+  - 商家详情页右上分享按钮（`SupplierAnalysisDrawer`）；
+  - 订单页“复制商品链接 / 拼团分享链接”按钮（`OrderCenterDrawer`）；
+  - 签到与粉丝中心“复制注册链接”按钮（`FanCenterDrawer`）。
+- 已完成：上述入口统一调用 `imApi.generatePromoCard` 生成正式推广链接并写入剪贴板，失败时给出明确反馈。
+- 已验证：前端 `npm run build` 通过（exit code 0）；相关文件诊断无错误（仅保留既有无害 warning）。
+
+## 本轮进展（第 122 批：拼团/分销链接渲染类型修正）
+- 已定位：聊天侧此前把 `/promo/links/*` 一律按“推广行动卡”渲染，导致分销/拼团链接未按预期显示商品/商家卡。
+- 已完成：后端 `from-link` 接口回传 `parsed` 元信息（`card_type/share_category/target_type/target_id`）。
+- 已完成：前端渲染分流修正（`VCCInput` + `ChatRoomDrawer`）：
+  - `group_buy` / `distribution` => 优先渲染 `PRODUCT_GRID`（商品/商家卡片）；
+  - `fan_source`（注册邀请）=> 渲染 `PROMO_ACTIONS`（注册卡，后续可替换为设计模板）。
+- 已完成：群聊/私聊“直接粘贴发送链接”与“+面板 gift 链接”两条路径逻辑保持一致。
+- 已验证：前端 `npm run build` 通过（exit code 0）。
+
+## 本轮进展（第 123 批：推广卡游客登录回跳首版）
+- 已完成：`PromoActionCard` 点击 CTA 接入 `requireAuth`：游客先拉起登录页，登录成功后自动续执行原跳转动作。
+- 已完成：`ProductGridCard` 中 `share_link` 点击同样接入 `requireAuth`，保证拼团/分销卡在游客态不会直接丢失动作。
+- 已验证：前端 `npm run build` 通过（exit code 0）；相关文件诊断无错误。
+
+## 本轮进展（第 124 批：外链降级可见化）
+- 已完成：新增 `LinkTextCard`（外部链接降级展示卡），提供“打开/复制”按钮，避免外链消息被吞掉。
+- 已完成：`ChatRoomDrawer` 链接解析链路补齐：
+  - 平台链接继续卡片化（商品/商家/注册）；
+  - 外部链接自动附加 `0B_LINK_TEXT` 降级卡；
+  - 成功卡片消息默认不再附加冗余“已分享N个链接”文案气泡。
+- 已完成：`CustomMessageUI` 同步接入 `0B_LINK_TEXT` 渲染，保证不同聊天入口显示一致。
+- 已验证：前端 `npm run build` 通过（exit code 0）。
+
+## 本轮进展（第 125 批：模块收尾回归）
+- 已完成：私聊/群聊链接体系收敛：
+  - 平台链接：按规则渲染商品/商家卡或注册卡；
+  - 外部链接：稳定降级为可打开/可复制外链卡；
+  - 重复链接：自动去重，避免重复卡片刷屏。
+- 已完成：游客态点击推广卡与分享链接卡，统一走登录页并在登录后续执行原动作（回跳闭环）。
+- 已完成：聊天中冗余提示清理：私聊/群聊移除“忽略本次/以后闭嘴”，成功转卡默认不再额外插入“已分享N个链接”文字气泡。
+- 已验证：前端 `npm run build` 通过（exit code 0）；后端回归 `pytest`（6文件）`29 passed`。
+
+## 本轮进展（第 126 批：Shopify 博客文章同步复测通过）
+- 已完成：按“你测试一下，我已经修改”执行真实链路复测，发布动态后成功拿到 Shopify 可见 CDN 图与文章映射。
+- 已验证：`PYTHONPATH=. python3 scripts/post_one_social_to_shopify.py` 输出 `BLOG_ID=121130320175`、`ARTICLE_ID=616968847663`，未再出现 `blogs ACCESS_DENIED`。
+- 已验证：`GET /blogs/{blog_id}/articles/{article_id}.json` 返回 `200`，文章 `published_at` 已生成（博客文章同步链路恢复可用）。
+
+## 本轮进展（第 127 批：官方活动/话题动态与置顶落地）
+- 已完成：后端 `social` 新增官方动态发布接口 `POST /social/official/activities`（仅 admin）与置顶接口 `PUT /social/activities/{id}/pin`（仅 admin）。
+- 已完成：动态流模型扩展 `is_official`、`official_type`、`pinned`，并在列表排序中实现“置顶优先、时间次之”。
+- 已完成：前端接线 `socialApi.createOfficialActivity/pinActivity`，在移动端与桌面端动态卡片展示“官方活动/官方话题/置顶”标识，并支持管理员一键置顶/取消置顶。
+- 已完成：发布入口（`MyFeedsDrawer`）支持管理员选择“普通动态/官方活动/官方话题”及置顶开关，形成可操作闭环。
+- 已验证：后端新增单测 `tests/test_social_official_pinning.py`（3 passed）；`python3 -m py_compile app/api/social.py` 通过；前端 `npm run build` 通过。
+
+## 本轮进展（第 128 批：动态点赞/留言跨端行为对齐）
+- 已完成：新增前端公共评论映射工具 `socialComments.ts`，统一 `can_delete -> canDelete` 语义，避免各端重复口径。
+- 已完成：桌面 `DesktopSocialView` 与 `DesktopSquarePanel` 补齐评论能力（展开评论、发布评论、删除评论）并接入真实 `socialApi`。
+- 已完成：移动端 `SquareDrawer` 与 `MyFeedsDrawer` 补齐评论删除入口，实现与后端 `deleteComment` 权限能力对齐。
+- 已验证：新增前端测试 `socialComments.test.ts`（2 passed）；前端 `npm run build` 通过（exit code 0）。
+
+## 本轮进展（第 129 批：点赞/留言上线验收收口）
+- 已完成：补齐动态模块验收记录，新增“点赞/留言跨端对齐”的自动验证与手工复核项。
+- 已验证：自动可验证项通过（前端测试 + 构建）。
+- 受限项：`backend/scripts/smoke_social_api.py` 需三组登录 Token（`TOKEN_A/TOKEN_B/TOKEN_C`），当前环境未注入，脚本在前置校验处停止。
+- 结论：当前进入“有条件上线”状态，待你注入三组 token 后可立即完成 API 全链路 smoke 并回填最终结论。
+
+## 本轮进展（第 130 批：发布失败根因修复 + 选择器交互修正）
+- 已定位并修复：普通用户登录后未把 `access_token` 写入本地，导致 `social` 发布请求缺少 Bearer Token（401），表现为“发布失败”。
+- 已完成：`AuthDrawer` 登录/注册成功后写入 `access_token`（及可选 `refresh_token`），恢复发布鉴权链路。
+- 已完成：`MyFeedsDrawer` 的可见性与官方类型从原生小弹层改为“向下展开的大面板”选择器，提升可读性与点击精度。
+- 已完成：发布中按钮文案统一为“发布中”（不再显示 Shopify 字样）。
+- 已验证：前端单测 `socialPostError.test.ts` + `socialComments.test.ts` 共 `4 passed`，`npm run build` 通过。
+
+## 本轮进展（第 131 批：C 端移除官方发布入口）
+- 已完成：按产品边界从 `MyFeedsDrawer` 移除“普通动态/官方活动/官方话题”选择器与“置顶”复选框，C 端仅保留普通动态发布。
+- 已完成：发布接口统一走 `socialApi.createActivity`，不再在 C 端触发官方发布接口。
+- 已验证：`npm run build` 通过，`GetDiagnostics` 无新增诊断错误。
+
+## 本轮进展（第 132 批：发布工具栏极简化）
+- 已完成：发布工具栏文案“拍照 / 录视频 / 上传”全部移除，仅保留图标按钮，统一视觉密度。
+- 已完成：按当前产品范围移除“录视频”入口，仅保留图片相关入口（拍照/上传）。
+- 已验证：`npm run build` 通过，`GetDiagnostics` 无新增诊断错误。
+
+## 本轮进展（第 133 批：我的动态九宫格列数修正）
+- 已完成：`我的动态` 图片网格规则修正为九宫格口径（单图保留单列；2-9 图统一 3 列展示）。
+- 已完成：前端映射层限制单条动态最多展示 9 张媒体，避免超出九宫格上限。
+- 已验证：`npm run build` 通过，`GetDiagnostics` 无新增诊断错误。
+
+## 本轮进展（第 134 批：点赞幂等交互 + 评论回复树）
+- 已完成：点赞交互升级为“单击即切换喜欢状态（+1/-1）”的即时反馈，失败回滚；覆盖移动端广场、桌面 Feed、桌面 Square。
+- 已完成：评论升级为“主评论 + 回复”结构，支持对主评论进行回复，展示作者“作者”标识，回复与评论均支持权限删除。
+- 已完成：后端新增 `activity_comment_replies` 表并接入 `social` 评论接口，`list comments` 返回树结构（含 `replies/is_author/parent_comment_id`）。
+- 已完成：评论创建接口支持 `parent_comment_id`，删除接口兼容删除主评论与回复；动态删除时联动清理回复。
+- 已验证：`vitest socialComments.test.ts` 通过、`python -m py_compile` 通过、`pytest test_social_official_pinning.py` 通过、`npm run build` 通过。
+
+## 本轮进展（第 135 批：联调测试动态投放）
+- 已完成：通过 `backend/scripts/post_one_social_to_shopify.py` 投放 1 条公开测试动态用于点赞/评论联调验证。
+- 动态ID：`8f118fa4-6ad7-4b68-ada0-1e0ae9f23db3`；发布用户：`USER_ID=1`。
+- 媒体URL：`https://cdn.shopify.com/s/files/1/0978/9358/1103/files/social-visible_60f4afe2-1a23-40ab-9575-983dcf52c668.jpg?v=1776753789`。
+- 说明：本条动态已可用于前端点赞与评论/回复测试；博客文章同步本次返回 `shopify_rest_failed:/blogs/121130320175/articles.json`（不影响动态本体联调）。
+
+## 本轮进展（第 136 批：可见性排障补充投放）
+- 已完成：新增 `backend/scripts/post_batch_social_for_visibility.py`，向活跃用户批量投放公开联调动态，降低“发布者与登录用户不一致”导致的可见性误判。
+- 本次投放结果：`BATCH=064841`，`CREATED=4`。
+- 排障结论：`GET /api/v1/social/activities` 在无 token 场景返回 `401 Not authenticated`，若页面仍看不到动态，优先检查当前会话登录态与 token 是否生效。
+
+## 本轮进展（第 137 批：注册登录上线级修复）
+- 已完成：`users_ext` 增加 `hashed_password` 字段并在启动兼容逻辑中自动补列（老库可平滑启动）。
+- 已完成：邮箱注册改为规范化邮箱（trim+lower），并强制写入 `hashed_password`；不再“无密码注册”。
+- 已完成：邮箱登录补齐密码校验，错误密码返回 `401 Incorrect email or password.`，杜绝“仅凭邮箱登录”漏洞。
+- 已完成：`/auth/check-2fa` 路由正式挂载，前端 `authApi.check2fa` 不再落空。
+- 已完成：前端 Google/Apple/Facebook 按钮接入 OAuth 跳转 `/auth/login/{provider}`（携带 redirect）。
+- 已完成：密码哈希策略改为 `pbkdf2_sha256` 默认并兼容 bcrypt，规避当前环境 bcrypt 兼容异常导致的注册失败。
+- 已验证：`pytest tests/test_auth_security.py` 通过（3 passed）；`python -m py_compile` 通过；`npm run build` 通过；`smoke_auth_register_login.py` 通过（注册成功/错密401/正密200/`/auth/me` 200）。
+
+## 本轮进展（第 138 批：三方登录配置防错收口）
+- 已完成：新增 `FRONTEND_URL` 配置项，OAuth 回调优先使用该值，避免依赖 `ALLOWED_ORIGINS` 首项导致回跳错误地址。
+- 已完成：补充 `.env.example` 的三方登录必需配置（Google/Apple/Facebook、回调基址、Cookie/Origin 关键项）。
+- 已验证：`pytest tests/test_auth_security.py`（新增 FRONTEND_URL 回退测试）通过（5 passed），`python -m py_compile app/api/auth.py app/core/config.py` 通过。
+
+## 本轮进展（第 139 批：邮箱注册登录冒烟复核）
+- 已完成：更新 `scripts/smoke_auth_register_login.py`，覆盖“首次注册成功、重复注册拦截、错密登录拦截、正密登录成功、`/auth/me` 鉴权成功”五段链路。
+- 已验证：脚本复跑通过：`register 200`、`duplicate 400 Email already registered`、`wrong password 401`、`login 200 + token`、`/auth/me 200`。
+
+## 本轮进展（第 140 批：邮箱验证码假入口下线）
+- 已定位根因：前端“Get Code/邮箱验证码”为占位 UI，未接任何发码接口；后端注册链路也未实现邮箱 OTP 校验，因此用户无法收到验证码。
+- 已完成：`AuthDrawer` 去除 `otp` 步骤与“Email Verification Code / Get Code”无效输入区，注册登录流程统一为“邮箱 + 密码”闭环，避免误导与阻塞。
+- 已验证：前端 `npm run build` 通过，`AuthDrawer.tsx` 诊断无新增错误。
+
+## 本轮进展（第 141 批：Google OAuth 配置落库）
+- 已完成：按用户提供值写入 `backend/.env`：`GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`，并补充 `FACEBOOK_*`、`APPLE_*` 占位。
+- 已完成：域名配置改为生产值：`BACKEND_URL=https://www.0buck.com`、`FRONTEND_URL=https://www.0buck.com`、`ALLOWED_ORIGINS=https://www.0buck.com,https://0buck.com`（移除反引号格式风险）。
+- 已验证：新进程读取配置正确（`settings.GOOGLE_CLIENT_ID` 已生效、`BACKEND_URL/FRONTEND_URL` 正确）。

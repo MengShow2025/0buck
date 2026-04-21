@@ -12,7 +12,10 @@ from .config import settings
 
 from passlib.context import CryptContext
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(
+    schemes=["pbkdf2_sha256", "bcrypt"],
+    deprecated="auto",
+)
 
 def get_password_hash(password: str) -> str:
     """v3.8.0: Create a secure hash for payment passwords."""

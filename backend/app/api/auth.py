@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from app.db.session import get_db
 from app.core.config import settings
-from app.core.security import create_access_token # Added
+from app.core.security import create_access_token, get_password_hash, verify_password
 from authlib.integrations.starlette_client import OAuth
 from starlette.responses import RedirectResponse
 import os
@@ -14,13 +14,14 @@ import qrcode
 import io
 import base64
 import logging
-from urllib.parse import urlparse, quote
+from urllib.parse import urlparse, quote, urlencode
 import threading
 import redis
 from datetime import datetime, timedelta
 from app.models.ledger import UserExt
 from app.models.butler import UserButlerProfile
 from app.api.deps import get_current_user
+from authlib.integrations.base_client.errors import OAuthError
 
 logger = logging.getLogger(__name__)
 
@@ -86,14 +87,84 @@ oauth.register(
 from pydantic import BaseModel, EmailStr
 
 class LoginRequest(BaseModel):
-    email: str # v4.6.8: Changed from EmailStr to str for better compatibility
+    email: EmailStr
     password: str
 
 class RegisterRequest(BaseModel):
-    email: str
+    email: EmailStr
     password: str
     confirm_password: str
     otp: Optional[str] = None # For future email verification
+
+
+def _normalize_email(value: str) -> str:
+    return str(value or "").strip().lower()
+
+
+def _verify_login_password(user: UserExt, plain_password: str) -> bool:
+    hashed = str(getattr(user, "hashed_password", "") or "")
+    if not hashed:
+        return False
+    try:
+        return verify_password(str(plain_password or ""), hashed)
+    except Exception:
+        return False
+
+
+def _resolve_frontend_url() -> str:
+    direct = str(getattr(settings, "FRONTEND_URL", "") or "").strip().rstrip("/")
+    if direct:
+        return direct
+    allowed = [x.strip().rstrip("/") for x in str(settings.ALLOWED_ORIGINS or "").split(",") if x.strip()]
+    if allowed:
+        return allowed[0]
+    return "http://localhost:5173"
+
+
+def _provider_oauth_ready(provider: str) -> bool:
+    p = str(provider or "").strip().lower()
+    if p == "google":
+        return bool(str(settings.GOOGLE_CLIENT_ID or "").strip() and str(settings.GOOGLE_CLIENT_SECRET or "").strip())
+    if p == "facebook":
+        return bool(str(settings.FACEBOOK_CLIENT_ID or "").strip() and str(settings.FACEBOOK_CLIENT_SECRET or "").strip())
+    if p == "apple":
+        return bool(str(settings.APPLE_CLIENT_ID or "").strip() and str(settings.APPLE_CLIENT_SECRET or "").strip())
+    if p == "alibaba":
+        return bool(str(settings.ALIBABA_1688_API_KEY or "").strip() and str(os.getenv("ALIBABA_1688_API_SECRET", "") or "").strip())
+    return False
+
+
+def _resolve_backend_url(request: Optional[Request]) -> Optional[str]:
+    direct = str(getattr(settings, "BACKEND_URL", "") or "").strip().rstrip("/")
+    if direct:
+        return direct
+    if request is None:
+        return None
+    forwarded_host = str(request.headers.get("x-forwarded-host", "") or "").split(",")[0].strip()
+    forwarded_proto = str(request.headers.get("x-forwarded-proto", "") or "").split(",")[0].strip()
+    if forwarded_host:
+        proto = forwarded_proto or request.url.scheme or "https"
+        return f"{proto}://{forwarded_host}"
+    return None
+
+
+def _build_oauth_redirect_uri(provider: str, request: Optional[Request]) -> str:
+    api_base = str(getattr(settings, "API_V1_STR", "/api/v1") or "/api/v1").rstrip("/")
+    backend = _resolve_backend_url(request)
+    if backend:
+        return f"{backend}{api_base}/auth/callback/{provider}"
+    if request is not None:
+        return str(request.url_for('auth_callback', provider=provider))
+    return f"http://localhost:8000{api_base}/auth/callback/{provider}"
+
+
+def _build_auth_error_redirect_url(frontend_url: str, error_code: str, message: str = "") -> str:
+    base = str(frontend_url or "").rstrip("/") or "http://localhost:5173"
+    params = {"auth_error": str(error_code or "oauth_error")}
+    safe_message = str(message or "").strip()
+    if safe_message:
+        params["message"] = safe_message[:220]
+    return f"{base}/?{urlencode(params)}"
 
 @router.post("/register")
 async def register_user(
@@ -105,21 +176,21 @@ async def register_user(
     v5.7.38: Explicit Registration Flow.
     Ensures new users must confirm password.
     """
+    normalized_email = _normalize_email(str(reg_data.email))
     if reg_data.password != reg_data.confirm_password:
         raise HTTPException(status_code=400, detail="Passwords do not match")
         
     if len(reg_data.password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
 
-    existing_user = db.query(UserExt).filter(UserExt.email == reg_data.email).first()
+    existing_user = db.query(UserExt).filter(UserExt.email == normalized_email).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="Email already registered")
 
     import hashlib
     import random
-    from app.core.security import get_password_hash
     
-    ref_hash = hashlib.md5(reg_data.email.encode()).hexdigest()[:6].upper()
+    ref_hash = hashlib.md5(normalized_email.encode()).hexdigest()[:6].upper()
     ref_code = f"USR{ref_hash}{random.randint(10, 99)}"
     
     max_user = db.query(UserExt).order_by(UserExt.customer_id.desc()).first()
@@ -128,16 +199,14 @@ async def register_user(
     # Assuming UserExt has a hashed_password field, if not, we skip it for this mock
     user = UserExt(
         customer_id=new_id,
-        email=reg_data.email,
-        first_name=reg_data.email.split("@")[0],
+        email=normalized_email,
+        first_name=normalized_email.split("@")[0],
         last_name="User",
         user_type="customer",
         is_active=True,
-        referral_code=ref_code
+        referral_code=ref_code,
+        hashed_password=get_password_hash(reg_data.password),
     )
-    # Check if hashed_password exists on model
-    if hasattr(user, 'hashed_password'):
-        user.hashed_password = get_password_hash(reg_data.password)
         
     db.add(user)
     db.commit()
@@ -146,7 +215,7 @@ async def register_user(
     from app.models.butler import UserButlerProfile
     profile = UserButlerProfile(
         user_id=user.customer_id,
-        user_nickname=reg_data.email.split("@")[0],
+        user_nickname=normalized_email.split("@")[0],
         butler_name="0Buck AI 管家",
         active_persona_id="default"
     )
@@ -193,10 +262,11 @@ async def login_v46(
     Supports default admin from ENV.
     """
     try:
-        user = db.query(UserExt).filter(UserExt.email == login_data.email).first()
+        normalized_email = _normalize_email(str(login_data.email))
+        user = db.query(UserExt).filter(UserExt.email == normalized_email).first()
         
         # 1. Default Admin Logic (Bootstrap)
-        if settings.DEFAULT_ADMIN_EMAIL and login_data.email == settings.DEFAULT_ADMIN_EMAIL and login_data.password == settings.DEFAULT_ADMIN_PASSWORD:
+        if settings.DEFAULT_ADMIN_EMAIL and normalized_email == _normalize_email(settings.DEFAULT_ADMIN_EMAIL) and login_data.password == settings.DEFAULT_ADMIN_PASSWORD:
             if not user:
                 # Check if ID 1 is taken by someone else
                 conflict = db.query(UserExt).filter(UserExt.customer_id == 1).first()
@@ -205,7 +275,7 @@ async def login_v46(
                 # v4.6.8: Use a more robust referral code generation
                 import hashlib
                 import random
-                ref_hash = hashlib.md5(login_data.email.encode()).hexdigest()[:6].upper()
+                ref_hash = hashlib.md5(normalized_email.encode()).hexdigest()[:6].upper()
                 ref_code = f"ADM{ref_hash}"
                 
                 # Double check referral code uniqueness
@@ -214,7 +284,7 @@ async def login_v46(
                 
                 user = UserExt(
                     customer_id=admin_id,
-                    email=settings.DEFAULT_ADMIN_EMAIL,
+                    email=normalized_email,
                     first_name="Admin",
                     last_name="Boss",
                     user_type="admin",
@@ -263,6 +333,8 @@ async def login_v46(
         # v5.7.38: Login flow shouldn't auto-register. If not found, throw error.
         if not user:
             raise HTTPException(status_code=401, detail="User not found. Please register first.")
+        if not _verify_login_password(user, login_data.password):
+            raise HTTPException(status_code=401, detail="Incorrect email or password.")
 
         # 3. Issue JWT
         access_token = create_access_token(subject=user.customer_id)
@@ -328,7 +400,7 @@ async def check_email_exists(
     v5.7.38: Check if email exists for Login/Register routing.
     """
     data = await request.json()
-    email = data.get("email")
+    email = _normalize_email(data.get("email"))
     if not email:
         raise HTTPException(status_code=400, detail="Email is required")
         
@@ -343,9 +415,10 @@ async def check_email_exists(
             "degraded": True,
             "message": "auth_check_temporarily_unavailable"
         }
+@router.post("/check-2fa")
 async def check_2fa_status(request: Request, db: Session = Depends(get_db)):
     data = await request.json()
-    email = data.get("email")
+    email = _normalize_email(data.get("email"))
     if not email:
         return {"required": False}
 
@@ -815,6 +888,8 @@ async def login(provider: str, request: Request, redirect: Optional[str] = None)
     """
     if provider not in ['google', 'apple', 'facebook', 'alibaba']:
         raise HTTPException(status_code=400, detail="Invalid provider")
+    if not _provider_oauth_ready(provider):
+        raise HTTPException(status_code=503, detail=f"{provider} OAuth is not configured")
     
     if redirect:
         safe_redirect = _sanitize_redirect_path(redirect)
@@ -822,8 +897,8 @@ async def login(provider: str, request: Request, redirect: Optional[str] = None)
             request.session['auth_redirect'] = safe_redirect
     
     # v4.7.3: Handle Alibaba-specific redirect logic
-    redirect_uri = request.url_for('auth_callback', provider=provider)
-    return await oauth.create_client(provider).authorize_redirect(request, str(redirect_uri))
+    redirect_uri = _build_oauth_redirect_uri(provider, request)
+    return await oauth.create_client(provider).authorize_redirect(request, redirect_uri)
 
 @router.get("/callback/{provider}", name='auth_callback')
 async def auth_callback(provider: str, request: Request, db: Session = Depends(get_db)):
@@ -832,11 +907,20 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
     Restores the 'auth_redirect' from session to complete the bridge.
     """
     client = oauth.create_client(provider)
-    token = await client.authorize_access_token(request)
-    
-    # Restored redirect URL from session (v5.7.25)
     saved_redirect = request.session.pop('auth_redirect', None)
-    frontend_url = settings.ALLOWED_ORIGINS.split(",")[0].rstrip("/")
+    frontend_url = _resolve_frontend_url()
+    try:
+        token = await client.authorize_access_token(request)
+    except OAuthError as exc:
+        logger.warning("OAuth callback failed for provider=%s: %s", provider, exc)
+        return RedirectResponse(
+            url=_build_auth_error_redirect_url(frontend_url, "oauth_callback_failed", str(exc))
+        )
+    except Exception as exc:
+        logger.exception("OAuth callback internal error for provider=%s", provider)
+        return RedirectResponse(
+            url=_build_auth_error_redirect_url(frontend_url, "oauth_internal_error", str(exc))
+        )
     
     # v4.7.3: Special handling for Alibaba Token (Save to SystemConfig)
     if provider == 'alibaba':
@@ -859,11 +943,15 @@ async def auth_callback(provider: str, request: Request, db: Session = Depends(g
         user_info = token.get('userinfo') 
 
     if not user_info:
-        raise HTTPException(status_code=400, detail="Failed to fetch user info")
+        return RedirectResponse(
+            url=_build_auth_error_redirect_url(frontend_url, "oauth_userinfo_missing", "Failed to fetch user info")
+        )
 
-    email = user_info.get('email')
+    email = _normalize_email(user_info.get('email'))
     if not email:
-        raise HTTPException(status_code=400, detail="Email not provided by OAuth provider")
+        return RedirectResponse(
+            url=_build_auth_error_redirect_url(frontend_url, "oauth_email_missing", "Email not provided by OAuth provider")
+        )
 
     # v3.7.6: REAL user lookup by email.
     user = db.query(UserExt).filter(UserExt.email == email).first()

@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { userApi, authApi } from '../../services/api';
+import { userApi, authApi, aiApi } from '../../services/api';
 import { translate, normalizeLanguage } from '../../i18n';
 
 type Theme = 'light' | 'dark' | 'system';
 type Language = 'en' | 'zh';
 type Currency = 'AUTO' | string; // Use string to support all world currencies dynamically
-export type DrawerType = 'none' | 'lounge' | 'square' | 'prime' | 'wallet' | 'fans' | 'product_detail' | 'checkout' | 'orders' | 'address' | 'service' | 'me' | 'cart' | 'all_group_buy' | 'all_fan_feeds' | 'all_topics' | 'chat_room' | 'notification' | 'contacts' | 'my_feeds' | 'user_profile' 
+export type DrawerType = 'none' | 'lounge' | 'square' | 'prime' | 'wallet' | 'fans' | 'checkin_hub' | 'product_detail' | 'checkout' | 'orders' | 'address' | 'service' | 'me' | 'cart' | 'all_group_buy' | 'all_fan_feeds' | 'all_topics' | 'chat_room' | 'notification' | 'contacts' | 'my_feeds' | 'user_profile' 
   | 'share_menu' 
+  | 'group_create'
+  | 'group_manage'
   | 'key_attributes'
   | 'product_reviews'
   | 'supplier_analysis'
@@ -51,19 +53,33 @@ export interface UserProfile {
   avatar_url?: string;
   butler_name?: string;
   user_nickname?: string;
+  ai_identity_mode?: 'ai_butler' | 'life_pilot' | 'exclusive_twin';
   user_tier: 'Bronze' | 'Silver' | 'Gold' | 'Platinum';
   user_type: string;
   referral_code?: string;
   is_two_factor_enabled: boolean;
 }
 
+export const extractUserFromMeResponse = (data: any): UserProfile | null => {
+  if (!data || typeof data !== 'object') return null;
+  if (data.status === 'success' && data.user && typeof data.user === 'object') {
+    return data.user as UserProfile;
+  }
+  if ('customer_id' in data && 'email' in data) {
+    return data as UserProfile;
+  }
+  return null;
+};
+
 export interface ChatContext {
   id: string;
   name: string;
   type: 'private' | 'group' | 'topic' | 'group_buy';
   avatar?: string;
+  peerUserId?: number;
   memberCount?: number;
   isOfficial?: boolean;
+  isAiButler?: boolean;
 }
 
 interface AppContextType {
@@ -213,8 +229,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const refreshUser = useCallback(async () => {
     try {
       const response = await userApi.getMe();
-      if (response.data.status === 'success') {
-        setUser(response.data.user);
+      const baseUser = extractUserFromMeResponse(response.data);
+      if (!baseUser) {
+        setUser(null);
+        return;
+      }
+      try {
+        const profileResp = await aiApi.getProfile(baseUser.customer_id);
+        const uiSettings = profileResp?.data?.ui_settings && typeof profileResp.data.ui_settings === 'object'
+          ? profileResp.data.ui_settings
+          : {};
+        setUser({
+          ...baseUser,
+          butler_name: profileResp?.data?.butler_name || baseUser.butler_name,
+          user_nickname: profileResp?.data?.user_nickname || baseUser.user_nickname,
+          ai_identity_mode: uiSettings.identity_mode || baseUser.ai_identity_mode || 'ai_butler',
+        });
+      } catch {
+        setUser(baseUser);
       }
     } catch (error) {
       setUser(null);

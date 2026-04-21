@@ -726,7 +726,17 @@ async def promo_cards_from_link(payload: dict, db: Session = Depends(get_db)):
 
     card = build_card_payload(db, row.card_type, row.target_type, row.target_id, universal_link)
     templates = build_template_variants(card)
-    return {"status": "success", "share_token": row.share_token, "templates": templates}
+    return {
+        "status": "success",
+        "share_token": row.share_token,
+        "templates": templates,
+        "parsed": {
+            "card_type": row.card_type,
+            "share_category": row.share_category,
+            "target_type": row.target_type,
+            "target_id": row.target_id,
+        },
+    }
 
 
 @router.get("/promo/cards/my-fixed-invite")

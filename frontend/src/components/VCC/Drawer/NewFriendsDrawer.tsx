@@ -1,31 +1,44 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft, UserCheck } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import { friendsApi } from '../../../services/api';
 
 export const NewFriendsDrawer: React.FC = () => {
   const { popDrawer, t } = useAppContext();
 
-  const [newFriends, setNewFriends] = useState(() => {
-    const saved = localStorage.getItem('vcc_new_friend_requests');
-    if (saved) return JSON.parse(saved);
-    return [
-      { id: 'nf1', name: t('contacts.lorna') || 'Lorna', message: `${t('common.me')} ${t('contacts.lorna')}`, status: 'pending', avatar: 'https://ui-avatars.com/api/?name=Lorna&background=random' },
-      { id: 'nf2', name: t('contacts.jessie') || 'Jessie', message: `Hi, I am Jessie from BEA`, status: 'expired', avatar: 'https://ui-avatars.com/api/?name=Jessie&background=random' },
-      { id: 'nf3', name: t('contacts.gtja_support') || 'GTJA Support', message: t('magicpocketmenu.24_7_ai_human'), status: 'added', avatar: 'https://ui-avatars.com/api/?name=GTJA&background=random' },
-      { id: 'nf4', name: t('contacts.premium_wine_17277618867') || 'Premium Wine', message: t('notification.sitewide_100_back_extra_points'), status: 'expired', avatar: 'https://ui-avatars.com/api/?name=JJCC&background=random' },
-    ];
-  });
+  const [newFriends, setNewFriends] = useState<any[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
 
   useEffect(() => {
-    localStorage.setItem('vcc_new_friend_requests', JSON.stringify(newFriends));
-  }, [newFriends]);
+    (async () => {
+      try {
+        setErrorMsg('');
+        const res = await friendsApi.listRequests();
+        const items = (res.data?.items || []).map((x: any) => ({ ...x, status: 'pending' }));
+        setNewFriends(items);
+      } catch (e: any) {
+        setNewFriends([]);
+        setErrorMsg(String(e?.response?.data?.detail || '新朋友加载失败'));
+      }
+    })();
+  }, []);
 
-  const handleAccept = (id: string) => {
-    setNewFriends((prev: any[]) => prev.map((f: any) => f.id === id ? { ...f, status: 'added' } : f));
+  const handleAccept = async (id: string | number) => {
+    try {
+      await friendsApi.accept(Number(id));
+      setNewFriends((prev: any[]) => prev.map((f: any) => String(f.id) === String(id) ? { ...f, status: 'added' } : f));
+    } catch (e: any) {
+      setErrorMsg(String(e?.response?.data?.detail || '同意失败'));
+    }
   };
 
-  const handleIgnore = (id: string) => {
-    setNewFriends((prev: any[]) => prev.map((f: any) => f.id === id ? { ...f, status: 'expired' } : f));
+  const handleIgnore = async (id: string | number) => {
+    try {
+      await friendsApi.ignore(Number(id));
+      setNewFriends((prev: any[]) => prev.map((f: any) => String(f.id) === String(id) ? { ...f, status: 'expired' } : f));
+    } catch (e: any) {
+      setErrorMsg(String(e?.response?.data?.detail || '忽略失败'));
+    }
   };
 
   return (
@@ -44,6 +57,11 @@ export const NewFriendsDrawer: React.FC = () => {
       </div>
 
       <div className="p-4 space-y-3">
+        {!!errorMsg && (
+          <div className="rounded-xl border border-red-200 bg-red-50 text-red-600 px-3 py-2 text-[12px]">
+            {errorMsg}
+          </div>
+        )}
         {newFriends.map((nf) => (
           <div 
             key={nf.id} 

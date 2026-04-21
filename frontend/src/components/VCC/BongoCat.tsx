@@ -67,12 +67,12 @@ export default function BongoCat({ isTyping = false, className = "" }: BongoCatP
 
         {/* Animated Heart */}
         <motion.g
-          animate={{
+          animate={isTyping ? {
             scale: [1, 1.2, 1],
             rotate: [-10, 10, -10],
-          }}
+          } : { scale: 1, rotate: 0 }}
           transition={{
-            duration: 1.5,
+            duration: 0.8,
             repeat: Infinity,
             ease: "easeInOut"
           }}
@@ -93,12 +93,12 @@ export default function BongoCat({ isTyping = false, className = "" }: BongoCatP
           stroke="black"
           strokeWidth="4"
           strokeLinecap="round"
-          animate={{
+          animate={isTyping ? {
             pathLength: [0, 1, 0],
             opacity: [0, 1, 0]
-          }}
+          } : { pathLength: 0, opacity: 0 }}
           transition={{
-            duration: 2,
+            duration: 1.5,
             repeat: Infinity,
             ease: "easeInOut"
           }}

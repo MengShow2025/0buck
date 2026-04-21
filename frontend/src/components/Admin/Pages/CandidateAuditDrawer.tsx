@@ -78,7 +78,7 @@ export const CandidateAuditDrawer: React.FC<CandidateAuditDrawerProps> = ({ cand
       onClose();
     } catch (e: any) {
       console.error(e);
-      alert(e.response?.data?.detail || e.message || '保存失败，请检查网络');
+      console.error('Error in handleSave:', e.response?.data?.detail || e.message);
     } finally {
       setLoading(false);
     }

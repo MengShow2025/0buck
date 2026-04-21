@@ -32,84 +32,8 @@ interface Message {
   user: { id: string };
 }
 
-// Mock data to preview the UI
-const initialMessages: Message[] = [
-  {
-    id: 'msg-1',
-    text: 'ai.resp.initial_dumbo',
-    created_at: new Date(Date.now() - 1000 * 60 * 5).toISOString(),
-    attachments: [],
-    user: { id: 'dumbo' }
-  },
-  {
-    id: 'msg-2',
-    text: 'ai.resp.mock_user_tech',
-    created_at: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
-    attachments: [],
-    user: { id: 'user' }
-  },
-  {
-    id: 'msg-3',
-    text: 'ai.resp.show_products',
-    created_at: new Date(Date.now() - 1000 * 60 * 3).toISOString(),
-    attachments: [
-      {
-        type: '0B_CARD_V3',
-        component: '0B_PRODUCT_GRID',
-        data: {
-          products: [
-            {
-              id: 'demo-1',
-              name: 'Artisan Wireless Earbuds Pro',
-              price: 29.99,
-              image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&q=80',
-              supplier: 'Nordic Audio Lab',
-              rating: 4.9,
-              sales: 3821
-            },
-            {
-              id: 'demo-2',
-              name: 'Titanium Minimalist Watch',
-              price: 149.00,
-              image: 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=500&q=80',
-              supplier: 'Swiss Craft Co.',
-              rating: 4.8,
-              sales: 1204
-            },
-            {
-              id: 'demo-3',
-              name: 'Premium Leather Messenger Bag',
-              price: 89.00,
-              image: 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=500&q=80',
-              supplier: 'Vega Leather Works',
-              rating: 4.7,
-              sales: 892
-            },
-            {
-              id: 'demo-4',
-              name: 'Mechanical Keyboard — Compact TKL',
-              price: 119.00,
-              image: 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?w=500&q=80',
-              supplier: 'MechLab Studio',
-              rating: 4.9,
-              sales: 2156
-            },
-            {
-              id: 'demo-5',
-              name: 'Ceramic Pour-Over Coffee Set',
-              price: 54.99,
-              image: 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=500&q=80',
-              supplier: 'Morning Ritual Co.',
-              rating: 4.8,
-              sales: 1587
-            }
-          ]
-        }
-      }
-    ],
-    user: { id: 'dumbo' }
-  }
-];
+// Keep homepage chat clean on first open; recommendations should appear only when backend attaches product cards.
+const initialMessages: Message[] = [];
 
 function MainApp() {
   const { 
@@ -194,6 +118,31 @@ function MainApp() {
 
   const handleSystemAction = useCallback((action: string, payload: any) => {
     const allowedLanguages = new Set(['en', 'zh', 'ja', 'ko', 'es', 'fr', 'de', 'ar']);
+    const allowedDrawers = new Set([
+      'orders', 'checkout', 'reward_history', 'address', 'settings', 'wallet',
+      'share_menu', 'contacts', 'notification', 'cart', 'me', 'prime',
+      'lounge', 'square', 'fans', 'checkin_hub', 'withdraw', 'vouchers', 'points_history',
+      'points_exchange', 'security', 'personal_info', 'ai_persona', 'scan',
+    ]);
+    const rawDrawer = String(payload?.value || '').trim().toLowerCase().replace(/-/g, '_').replace(/\s+/g, '_');
+    const drawerAlias: Record<string, string> = {
+      share: 'share_menu',
+      order: 'orders',
+      order_center: 'orders',
+      payment: 'checkout',
+      cashback: 'reward_history',
+      rewards: 'reward_history',
+      checkin: 'checkin_hub',
+      check_in: 'checkin_hub',
+      sign_in: 'checkin_hub',
+      profile: 'me',
+      shop: 'prime',
+      mall: 'prime',
+      community: 'square',
+      salon: 'lounge',
+      notifications: 'notification',
+    };
+    const normalizedDrawer = drawerAlias[rawDrawer] || rawDrawer;
     switch (action) {
       case 'SET_THEME':
         setTheme(payload.value);
@@ -207,7 +156,14 @@ function MainApp() {
         setCurrency(payload.value);
         break;
       case 'NAVIGATE':
-        pushDrawer(payload.value);
+        if (allowedDrawers.has(normalizedDrawer)) {
+          pushDrawer(normalizedDrawer as any);
+        }
+        break;
+      case 'OPEN_DRAWER':
+        if (allowedDrawers.has(normalizedDrawer)) {
+          pushDrawer(normalizedDrawer as any);
+        }
         break;
       case 'OPEN_SHARE_MENU':
       case 'OPEN_PROMO_SHARE':
@@ -222,11 +178,6 @@ function MainApp() {
         break;
     }
   }, [setTheme, setLanguage, setCurrency, pushDrawer, setWithdrawalMethod, setHasCheckedInToday]);
-
-  useEffect(() => {
-    (window as any).setActiveDrawer = setActiveDrawer;
-    (window as any).pushDrawer = pushDrawer;
-  }, [setActiveDrawer, pushDrawer]);
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim()) return;
@@ -290,7 +241,7 @@ function MainApp() {
               : t('ai.resp.default');
       const errorMsg: Message = {
         id: `err-${Date.now()}`,
-        text: `${fallback}\n\n(offline fallback)`,
+        text: `${fallback}\n\n(offline fallback: ${error instanceof Error ? error.message : String(error)})`,
         created_at: new Date().toISOString(),
         user: { id: 'dumbo' },
         attachments: []
@@ -301,7 +252,73 @@ function MainApp() {
     }
   };
 
+  const handleSendRichMessage = async (payload: { text: string; attachments: any[]; aiHint?: string }) => {
+    const text = String(payload?.text || '').trim();
+    if (!text && (!payload?.attachments || payload.attachments.length === 0)) return;
+
+    const userMsg: Message = {
+      id: `msg-${Date.now()}`,
+      text,
+      created_at: new Date().toISOString(),
+      attachments: payload.attachments || [],
+      user: { id: 'user' },
+    };
+
+    setMessages((prev) => [...prev, userMsg]);
+    setIsAiTyping(true);
+
+    try {
+      const mediaItems = (payload?.attachments || [])
+        .filter((a: any) => a?.type === '0B_CARD_V3' && a?.component === '0B_MEDIA_GRID')
+        .flatMap((a: any) => (a?.data?.items || []).map((i: any) => ({ url: i?.url, name: i?.name })))
+        .slice(0, 1);
+      const aiInput = [text || '请根据我发送的内容推荐商品', payload?.aiHint || ''].filter(Boolean).join('\n\n');
+      const response = await aiApi.chat(aiInput, {
+        current_drawer: activeDrawer,
+        user_points: userPoints,
+        has_checked_in: hasCheckedInToday,
+        media_items: mediaItems,
+      });
+
+      const aiData = response.data;
+      const aiContent =
+        (aiData?.choices && aiData.choices.length > 0 && aiData.choices[0]?.message
+          ? aiData.choices[0].message.content
+          : aiData?.content) || t('ai.resp.default');
+
+      const aiMsg: Message = {
+        id: aiData?.id || `ai-${Date.now()}`,
+        text: aiContent,
+        created_at: aiData?.timestamp || new Date().toISOString(),
+        user: { id: 'dumbo' },
+        attachments: aiData?.attachments || [],
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+      aiMsg.attachments?.forEach((attachment: any) => {
+        if (attachment.type === '0B_SYSTEM_ACTION' && !attachment.requires_confirmation) {
+          handleSystemAction(attachment.action, attachment.payload);
+        }
+      });
+    } catch (error) {
+      const errorMsg: Message = {
+        id: `err-${Date.now()}`,
+        text: `${t('ai.resp.default')}\n\n(offline fallback: ${error instanceof Error ? error.message : String(error)})`,
+        created_at: new Date().toISOString(),
+        user: { id: 'dumbo' },
+        attachments: [],
+      };
+      setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      setIsAiTyping(false);
+    }
+  };
+
   const isDesktop = useIsDesktop();
+  const hasUserMessage = messages.some((m) => m.user.id === 'user');
+  const showButlerWelcome = !hasUserMessage && !isAiTyping;
+  const welcomeRaw = t('chat.butler_welcome_shadow') || '';
+  const welcomeNormalized = String(welcomeRaw).replace(/^"(.*)"$/s, '$1').replace(/\\n/g, '\n');
+  const welcomeParagraphs = welcomeNormalized.split(/\n\s*\n/).filter(Boolean);
 
   const mobileContent = (
     <div className="flex flex-col h-full w-full bg-[var(--wa-bg)] relative overflow-hidden text-[15px] transition-colors duration-300 transform-gpu">
@@ -318,6 +335,39 @@ function MainApp() {
       <div className="relative z-10 flex flex-col h-full w-full">
         <VortexContainer>
           <div className="flex flex-col gap-2 pb-4">
+            {showButlerWelcome && (
+              <div className="px-1">
+                <div className="max-w-[88%] rounded-3xl p-4 bg-[var(--wa-bubble-out)] text-gray-800 dark:text-white border border-[#FFD9CD] dark:border-white/10">
+                  <div className="text-[15px] leading-relaxed">
+                    {welcomeParagraphs.map((p, idx) => (
+                      <p key={idx} className={idx === 0 ? 'mb-2' : idx === welcomeParagraphs.length - 1 ? '' : 'mb-2'}>
+                        {p}
+                      </p>
+                    ))}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button
+                      onClick={() => handleSendMessage(t('chat.butler_quick_relax_prompt'))}
+                      className="text-[12px] px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/15"
+                    >
+                      {t('chat.butler_quick_relax')}
+                    </button>
+                    <button
+                      onClick={() => handleSendMessage(t('chat.butler_quick_surprise_prompt'))}
+                      className="text-[12px] px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/15"
+                    >
+                      {t('chat.butler_quick_surprise')}
+                    </button>
+                    <button
+                      onClick={() => handleSendMessage(t('chat.butler_quick_mood_prompt'))}
+                      className="text-[12px] px-3 py-1.5 rounded-full bg-white/10 hover:bg-white/15 border border-white/15"
+                    >
+                      {t('chat.butler_quick_mood')}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             {messages.map((msg) => (
               <CustomMessageUI 
                 key={msg.id} 
@@ -330,7 +380,7 @@ function MainApp() {
 
         {/* Fixed positioned input at the bottom */}
         <div className="w-full bg-transparent pt-2 z-20">
-          <VCCInput onSendMessage={handleSendMessage} />
+          <VCCInput onSendMessage={handleSendMessage} onSendRichMessage={handleSendRichMessage} isTyping={isAiTyping} uploadMode="ai" />
         </div>
       </div>
 

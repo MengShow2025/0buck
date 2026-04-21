@@ -14,14 +14,16 @@ import { useAppContext } from './AppContext';
 
 interface MagicPocketMenuProps {
   isOpen: boolean;
+  onAction?: (action: string) => void;
 }
 
-export const MagicPocketMenu: React.FC<MagicPocketMenuProps> = ({ isOpen }) => {
+export const MagicPocketMenu: React.FC<MagicPocketMenuProps> = ({ isOpen, onAction }) => {
   const { pushDrawer, t, isAuthenticated } = useAppContext();
 
   if (!isOpen) return null;
 
-  const handleItemClick = (actionName: string, drawerId?: any) => {
+  const handleItemClick = (actionName: string, action: string, drawerId?: any) => {
+    onAction?.(action);
     if (drawerId) {
       pushDrawer(drawerId);
     } else {
@@ -79,7 +81,7 @@ export const MagicPocketMenu: React.FC<MagicPocketMenuProps> = ({ isOpen }) => {
                     if (!isAuthenticated && authRequired.includes(item.action)) {
                       pushDrawer('auth');
                     } else {
-                      handleItemClick(item.label, (item as any).drawer);
+                      handleItemClick(item.label, item.action, (item as any).drawer);
                     }
                   }}
                   title={item.description || item.label}

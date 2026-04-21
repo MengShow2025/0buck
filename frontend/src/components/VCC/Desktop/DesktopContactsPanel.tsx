@@ -1,33 +1,71 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Search, Users, ChevronRight, UserPlus, Clock, MessageCircle, Star, UserCheck, MoreHorizontal, ChevronDown } from 'lucide-react';
 import { useAppContext } from '../AppContext';
-
-const NEW_FRIENDS = [
-  { id: 'nf1', name: 'Lorna K.',      msg: 'Hi, this is Lorna. Please add me.', status: 'pending', initials: 'L', bg: 'bg-pink-500' },
-  { id: 'nf2', name: 'Jessie T.',     msg: 'Hi, I am Jessie from BEA',  status: 'expired', initials: 'J', bg: 'bg-blue-500' },
-  { id: 'nf3', name: 'GTJA Support',  msg: '24/7 AI + Human support',    status: 'added',   initials: 'G', bg: 'bg-green-600' },
-  { id: 'nf4', name: 'Fine Wine Club',msg: 'Get 100 points for $100 spent', status: 'expired', initials: 'W', bg: 'bg-purple-500' },
-];
-
-const CONTACTS = [
-  { id: 'c1', name: 'Alex Design',   initials: 'A', bg: 'bg-indigo-500', online: true,  note: 'Gadget enthusiast', mutual: 3 },
-  { id: 'c2', name: 'Carl Tech',     initials: 'C', bg: 'bg-blue-500',   online: true,  note: 'Tech expert',       mutual: 1 },
-  { id: 'c3', name: 'Geek Master',   initials: 'G', bg: 'bg-green-600',  online: false, note: 'Hardware lover',    mutual: 5 },
-  { id: 'c4', name: 'Lorna Tech',    initials: 'L', bg: 'bg-pink-500',   online: false, note: 'Style creator',     mutual: 2 },
-  { id: 'c5', name: 'Vortex Fan',    initials: 'V', bg: 'bg-orange-500', online: true,  note: 'Early user',        mutual: 7 },
-];
+import { friendsApi } from '../../../services/api';
 
 export const DesktopContactsPanel: React.FC = () => {
-  const { pushDrawer, setActiveChat } = useAppContext();
+  const { pushDrawer, setActiveChat, requireAuth } = useAppContext();
   const [search, setSearch] = useState('');
-  const [selected, setSelected] = useState(CONTACTS[0]);
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [newFriends, setNewFriends] = useState<any[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [newFriendsOpen, setNewFriendsOpen] = useState(true);
+  const [errorMsg, setErrorMsg] = useState('');
 
-  const filtered = CONTACTS.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase()));
+  const loadData = async () => {
+    try {
+      setErrorMsg('');
+      const [friendsRes, reqRes] = await Promise.all([friendsApi.list(), friendsApi.listRequests()]);
+      const friendItems = resToContacts(friendsRes.data?.items || []);
+      setContacts(friendItems);
+      setSelectedId((prev) => prev ?? friendItems[0]?.id ?? null);
+      const reqItems = (reqRes.data?.items || []).map((x: any) => ({
+        id: Number(x.id),
+        name: x.name,
+        msg: x.message || '',
+        status: x.status,
+        initials: String(x.name || '?').slice(0, 1).toUpperCase(),
+        bg: 'bg-blue-500',
+      }));
+      setNewFriends(reqItems);
+    } catch (e: any) {
+      setContacts([]);
+      setNewFriends([]);
+      setErrorMsg(String(e?.response?.data?.detail || '通讯录加载失败'));
+    }
+  };
 
-  const handleMessage = (contact: typeof CONTACTS[0]) => {
-    setActiveChat({ id: contact.id, name: contact.name, type: 'private' });
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const filtered = useMemo(
+    () => contacts.filter(c => !search || c.name.toLowerCase().includes(search.toLowerCase())),
+    [contacts, search]
+  );
+  const selected = useMemo(() => filtered.find((x) => x.id === selectedId) || filtered[0] || null, [filtered, selectedId]);
+
+  const handleMessage = (contact: any) => {
+    setActiveChat({ id: `private_${contact.id}`, name: contact.name, type: 'private', peerUserId: Number(contact.id) } as any);
     pushDrawer('chat_room');
+  };
+
+  const handleAccept = async (requestId: number) => {
+    try {
+      await friendsApi.accept(requestId);
+      await loadData();
+    } catch (e: any) {
+      setErrorMsg(String(e?.response?.data?.detail || '同意失败'));
+    }
+  };
+
+  const handleIgnore = async (requestId: number) => {
+    try {
+      await friendsApi.ignore(requestId);
+      await loadData();
+    } catch (e: any) {
+      setErrorMsg(String(e?.response?.data?.detail || '忽略失败'));
+    }
   };
 
   return (
@@ -46,6 +84,9 @@ export const DesktopContactsPanel: React.FC = () => {
             />
           </div>
         </div>
+        {!!errorMsg && (
+          <div className="px-3 py-2 text-[11px] text-red-600">{errorMsg}</div>
+        )}
 
         {/* Shortcuts */}
         <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800 shrink-0">
@@ -82,7 +123,7 @@ export const DesktopContactsPanel: React.FC = () => {
           </button>
           {newFriendsOpen && (
             <div className="space-y-1 mt-1">
-              {NEW_FRIENDS.slice(0, 2).map(nf => (
+              {newFriends.slice(0, 2).map(nf => (
                 <div key={nf.id} className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl hover:bg-white dark:hover:bg-white/5 transition-colors">
                   <div className={`w-8 h-8 rounded-xl ${nf.bg} flex items-center justify-center text-white font-black text-[11px] shrink-0`}>
                     {nf.initials}
@@ -92,12 +133,24 @@ export const DesktopContactsPanel: React.FC = () => {
                     <div className="text-[10px] text-zinc-400 truncate">{nf.msg}</div>
                   </div>
                   {nf.status === 'pending' && (
-                    <button className="text-[10px] font-black text-white px-2 py-1 rounded-lg shrink-0" style={{ background: 'linear-gradient(135deg, #FF7A3D 0%, #E8450A 100%)' }}>
-                      Accept
-                    </button>
+                    <div className="flex gap-1 shrink-0">
+                      <button
+                        onClick={() => handleAccept(Number(nf.id))}
+                        className="text-[10px] font-black text-white px-2 py-1 rounded-lg"
+                        style={{ background: 'linear-gradient(135deg, #FF7A3D 0%, #E8450A 100%)' }}
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => handleIgnore(Number(nf.id))}
+                        className="text-[10px] font-black px-2 py-1 rounded-lg text-zinc-500 bg-zinc-100 dark:bg-zinc-800"
+                      >
+                        Ignore
+                      </button>
+                    </div>
                   )}
-                  {nf.status === 'added' && <UserCheck className="w-4 h-4 text-green-500 shrink-0" />}
-                  {nf.status === 'expired' && <span className="text-[10px] text-zinc-400 font-semibold shrink-0">Expired</span>}
+                  {nf.status === 'accepted' && <UserCheck className="w-4 h-4 text-green-500 shrink-0" />}
+                  {(nf.status === 'ignored' || nf.status === 'rejected' || nf.status === 'expired') && <span className="text-[10px] text-zinc-400 font-semibold shrink-0">Ignored</span>}
                 </div>
               ))}
             </div>
@@ -112,8 +165,8 @@ export const DesktopContactsPanel: React.FC = () => {
           {filtered.map(contact => (
             <button
               key={contact.id}
-              onClick={() => setSelected(contact)}
-              className={`w-full flex items-center gap-2.5 px-2 py-2.5 rounded-xl transition-colors text-left ${selected.id === contact.id ? 'bg-white dark:bg-white/8' : 'hover:bg-white dark:hover:bg-white/5'}`}
+              onClick={() => setSelectedId(contact.id)}
+              className={`w-full flex items-center gap-2.5 px-2 py-2.5 rounded-xl transition-colors text-left ${selected?.id === contact.id ? 'bg-white dark:bg-white/8' : 'hover:bg-white dark:hover:bg-white/5'}`}
             >
               <div className={`w-9 h-9 rounded-xl ${contact.bg} flex items-center justify-center text-white font-black text-[12px] shrink-0 relative`}>
                 {contact.initials}
@@ -131,7 +184,9 @@ export const DesktopContactsPanel: React.FC = () => {
 
         {/* Add friend */}
         <div className="p-3 border-t border-zinc-200 dark:border-zinc-800 shrink-0">
-          <button className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-[13px] font-semibold"
+          <button
+            onClick={() => requireAuth(() => pushDrawer('contacts'))}
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl text-white text-[13px] font-semibold"
             style={{ background: 'linear-gradient(135deg, #FF7A3D 0%, #E8450A 100%)' }}
           >
             <UserPlus className="w-4 h-4" /> Add Friend
@@ -141,6 +196,10 @@ export const DesktopContactsPanel: React.FC = () => {
 
       {/* Right: Contact profile */}
       <div className="flex-1 flex flex-col items-center justify-start overflow-y-auto pt-12 px-8" style={{ scrollbarWidth: 'thin', scrollbarColor: '#3f3f46 transparent' }}>
+        {!selected ? (
+          <div className="text-zinc-400 text-[13px]">暂无联系人</div>
+        ) : (
+          <>
         {/* Avatar */}
         <div className={`w-20 h-20 rounded-3xl ${selected.bg} flex items-center justify-center text-white font-black text-[28px] shadow-xl mb-4`}>
           {selected.initials}
@@ -176,7 +235,7 @@ export const DesktopContactsPanel: React.FC = () => {
         {/* Info cards */}
         <div className="w-full max-w-xs space-y-2.5">
           {[
-            { label: '0Buck ID', value: `0B-${selected.id.toUpperCase()}` },
+            { label: '0Buck ID', value: `UID-${selected.id}` },
             { label: 'Mutual Friends', value: `${selected.mutual}` },
             { label: 'Status',     value: selected.online ? 'Online' : 'Offline' },
           ].map(item => (
@@ -186,7 +245,22 @@ export const DesktopContactsPanel: React.FC = () => {
             </div>
           ))}
         </div>
+          </>
+        )}
       </div>
     </div>
   );
 };
+
+function resToContacts(items: any[]) {
+  const colors = ['bg-indigo-500', 'bg-blue-500', 'bg-green-600', 'bg-pink-500', 'bg-orange-500'];
+  return items.map((x: any, i: number) => ({
+    id: Number(x.id),
+    name: x.name,
+    initials: String(x.name || '?').slice(0, 1).toUpperCase(),
+    bg: colors[i % colors.length],
+    online: false,
+    note: x.email || '',
+    mutual: 0,
+  }));
+}

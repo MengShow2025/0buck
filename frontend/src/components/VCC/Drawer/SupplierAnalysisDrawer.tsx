@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Star, CheckCircle2, ShieldCheck, Clock, Package, ShoppingCart, Info, ExternalLink, MessageCircle, Send, PlayCircle, Globe, Award, ChevronRight, Zap, MapPin, ChevronLeft, Scale, Box, Share2 } from 'lucide-react';
-
 import { useAppContext } from '../AppContext';
-import { productApi } from '../../../services/api';
+
+import { imApi, productApi } from '../../../services/api';
 
 export const SupplierAnalysisDrawer: React.FC = () => {
   const { t, selectedProductId } = useAppContext();
@@ -105,6 +105,27 @@ export const SupplierAnalysisDrawer: React.FC = () => {
     };
   }, [detail, t]);
 
+  const handleShareSupplier = async () => {
+    try {
+      const resp = await imApi.generatePromoCard({
+        card_type: 'merchant',
+        target_type: 'merchant',
+        target_id: 1,
+        share_category: 'distribution',
+        entry_type: 'supplier_share',
+      });
+      const link = resp.data?.universal_link || resp.data?.link || resp.data?.short_link;
+      if (link) {
+        await navigator.clipboard.writeText(String(link));
+        alert('商家分销链接已复制');
+      } else {
+        alert('暂未生成分享链接');
+      }
+    } catch (_e) {
+      alert('商家分销链接生成失败，请稍后重试');
+    }
+  };
+
   const matchingProducts = [
     { name: t('supplier.matching_product_1'), price: '$1.07-1.12', minOrder: '10 pieces', image: `https://picsum.photos/seed/s1/400/400` },
     { name: t('supplier.matching_product_2'), price: '$1.25-1.30', minOrder: '10 pieces', image: `https://picsum.photos/seed/s2/400/400` },
@@ -130,7 +151,7 @@ export const SupplierAnalysisDrawer: React.FC = () => {
       <div className="bg-white dark:bg-[#1C1C1E] p-5 pb-8 space-y-6 relative shadow-sm border-b border-gray-100 dark:border-white/5">
         {/* Share Button (Global Distribution) */}
         <div className="absolute top-4 right-4 z-30 group/share">
-          <button className="w-10 h-10 bg-gray-50 dark:bg-white/5 rounded-full flex items-center justify-center text-gray-500 border border-gray-100 dark:border-white/10 shadow-sm active:scale-90 transition-all hover:bg-orange-600 hover:text-white hover:border-orange-400">
+          <button onClick={handleShareSupplier} className="w-10 h-10 bg-gray-50 dark:bg-white/5 rounded-full flex items-center justify-center text-gray-500 border border-gray-100 dark:border-white/10 shadow-sm active:scale-90 transition-all hover:bg-orange-600 hover:text-white hover:border-orange-400">
             <Share2 className="w-5 h-5" />
           </button>
           <div className="absolute right-12 top-1/2 -translate-y-1/2 bg-orange-600 text-white text-[10px] font-black px-2 py-1 rounded opacity-0 group-hover/share:opacity-100 transition-opacity pointer-events-none whitespace-nowrap shadow-lg uppercase tracking-tight">

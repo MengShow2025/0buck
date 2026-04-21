@@ -3,7 +3,9 @@ from .ledger import (
     UserExt, Wallet, WalletTransaction, WithdrawalRequest, UserPayoutAccount,
     CheckinPlan, CheckinLog, ReferralRelationship, 
     GroupBuyCampaign, Order, SquareActivity, Comment, 
-    SourcingOrder, SystemConfig, PTSHistory, AdminAuditLog
+    SourcingOrder, SystemConfig, PTSHistory, AdminAuditLog,
+    FriendRequest, Friendship, FriendBlock, SquareActivityLike,
+    ChatGroup, ChatGroupMember, ChatGroupAuditLog, ChatGroupMemberSetting
 )
 from .membership import MembershipTierRule, InfluencerContract, InfluencerApplication
 from .actuarial import RewardPhase, C2WRefundBuffer, PlatformProfitPool, RiskCollisionIndex

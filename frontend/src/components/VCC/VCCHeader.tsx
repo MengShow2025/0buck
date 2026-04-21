@@ -8,8 +8,18 @@ export const VCCHeader = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
-  // Try to use the user's custom butler name, fallback to i18n default
-  const aiName = user?.butler_name || t('ai_name'); 
+  const identityMode = user?.ai_identity_mode || 'ai_butler';
+  const defaultButlerName = identityMode === 'life_pilot'
+    ? t('ai.header.identity_life_pilot')
+    : identityMode === 'exclusive_twin'
+      ? t('ai.header.identity_exclusive_twin')
+      : t('ai.header.default_name');
+  const rawButlerName = String(user?.butler_name || '').trim();
+  const normalized = rawButlerName.toLowerCase();
+  const defaultAliases = new Set(['', 'ai name', 'ai butler', '0buck butler', '0buck ai 管家']);
+  const hasCustomButlerName = !defaultAliases.has(normalized);
+  const aiName = hasCustomButlerName ? rawButlerName : defaultButlerName;
+  const aiSubtitle = hasCustomButlerName ? t('ai.header.subtitle_named') : t('ai.header.subtitle_default');
   const cartItemCount = 3; // Mock cart count
   const hasNewNotifications = true; // Mock notification dot
 
@@ -42,11 +52,15 @@ export const VCCHeader = () => {
         </div>
       </div>
 
-      {/* Center Content (0Buck Brand Logo) */}
+      {/* Center Content (AI Name + subtitle) */}
       <div className="flex-1 flex justify-center items-center">
-        <div className="ob-wordmark text-[24px]">
-          <span className="ob-zero mr-[0.02em]">0</span>
-          <span className="ob-buck text-white">Buck</span>
+        <div className="flex flex-col items-center leading-none max-w-[180px]">
+          <div className="text-[22px] font-extrabold tracking-[0.01em] text-white truncate max-w-full">
+            {aiName}
+          </div>
+          <div className="text-[10px] text-white/80 mt-0.5 truncate max-w-full">
+            {aiSubtitle}
+          </div>
         </div>
       </div>
       

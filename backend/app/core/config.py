@@ -80,6 +80,7 @@ class Settings(BaseSettings):
 
     # Domains & Routing
     BACKEND_URL: str = os.getenv("BACKEND_URL", "")
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "")
     ALLOWED_ORIGINS: str = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,https://0buck.com,https://www.0buck.com")
     STOREFRONT_DOMAIN: str = os.getenv("STOREFRONT_DOMAIN", "0buck.com")
     SHOPIFY_CHECKOUT_DOMAIN: str = os.getenv("SHOPIFY_CHECKOUT_DOMAIN", "") # e.g. shop.0buck.com

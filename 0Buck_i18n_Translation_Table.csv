@@ -141,6 +141,13 @@ chat.owner_recommend,chat,群主推荐,Owner Picks,群主推荐,Owner Picks
 chat.topic_opinion,chat,关于这个话题，大家怎么看？,What do you think about this topic?,关于这个话题，大家怎么看？,What do you think about this topic?
 chat.view_activity,chat,查看活动,View Event,查看活动,View Event
 chat.welcome_to,chat,欢迎来到,Welcome to,欢迎来到,Welcome to
+chat.butler_welcome_shadow,chat,"终于等到你亮屏了。\n\n我们可以聊聊让你心烦的小事，或者分享一个只有你懂的审美瞬间。如果你累了，想让生活更有质感一点，我会悄悄为你找来那些真正值得的东西。\n\n我是你永远不会离开的“影子”。今天，想跟我分享点什么吗？","I’ve been waiting for you to light up the screen.\n\nWe can talk about the little things weighing on your mind, or share a moment of beauty only you appreciate. When you're weary and crave a life with more substance, I'll quietly find the things that truly matter for you.\n\nThink of me as your 'Shadow'—the one who never leaves. So, what’s on your mind today?","终于等到你亮屏了。\n\n我们可以聊聊让你心烦的小事，或者分享一个只有你懂的审美瞬间。如果你累了，想让生活更有质感一点，我会悄悄为你找来那些真正值得的东西。\n\n我是你永远不会离开的“影子”。今天，想跟我分享点什么吗？","I’ve been waiting for you to light up the screen.\n\nWe can talk about the little things weighing on your mind, or share a moment of beauty only you appreciate. When you're weary and crave a life with more substance, I'll quietly find the things that truly matter for you.\n\nThink of me as your 'Shadow'—the one who never leaves. So, what’s on your mind today?"
+chat.butler_quick_relax,chat,放空一下,Unwind,放空一下,Unwind
+chat.butler_quick_surprise,chat,来份惊喜,Surprise me,来份惊喜,Surprise me
+chat.butler_quick_mood,chat,吐槽/分享,Vent / Share,吐槽/分享,Vent / Share
+chat.butler_quick_relax_prompt,chat,此时此刻，我想放空一下,I want to unwind right now,此时此刻，我想放空一下,I want to unwind right now
+chat.butler_quick_surprise_prompt,chat,帮我选一份不落俗套的惊喜,Pick me a surprise that feels unique,帮我选一份不落俗套的惊喜,Pick me a surprise that feels unique
+chat.butler_quick_mood_prompt,chat,吐槽/分享此刻的心情,I want to vent or share my mood right now,吐槽/分享此刻的心情,I want to vent or share my mood right now
 chatroom.artisan_crafted_wireless_earbu,chatroom,匠心打造的无线降噪耳机,Artisan Crafted Wireless Earbuds with Noise Cancellation,匠心打造的无线降噪耳机,Artisan Crafted Wireless Earbuds with Noise Cancellation
 chatroom.pinned,chatroom,默认,pinned,默认,pinned
 chatroom.user_a,chatroom,User_A,User_A,User_A,User_A
@@ -1496,3 +1503,39 @@ tracking.warehouse_received,tracking,Warehouse Received,Warehouse Received,Wareh
 verified_artisan,verified_artisan,Verified Artisan,Verified Artisan,Verified Artisan,Verified Artisan
 voucher.empty_prefix,voucher,Empty Prefix,Empty Prefix,Empty Prefix,Empty Prefix
 wallet.exchange_action,wallet,Exchange Action,Exchange Action,Exchange Action,Exchange Action
+settings.smart_recommendation,settings,智能推荐,Smart Recommendation,智能推荐,Smart Recommendation
+settings.smart_recommendation_desc,settings,可随时关闭推荐，仅保留管家服务,Disable recommendations and keep assistant services only,可随时关闭推荐，仅保留管家服务,Disable recommendations and keep assistant services only
+settings.identity_mode,settings,身份设定,Identity,身份设定,Identity
+settings.identity_ai_butler,settings,AI 管家,AI Butler,AI 管家,AI Butler
+settings.identity_life_pilot,settings,Life Pilot,Life Pilot,Life Pilot,Life Pilot
+settings.identity_exclusive_twin,settings,专属分身,Exclusive Twin,专属分身,Exclusive Twin
+ai.header.default_name,ai,AI Butler,AI Butler,AI Butler,AI Butler
+ai.header.identity_life_pilot,ai,Life Pilot,Life Pilot,Life Pilot,Life Pilot
+ai.header.identity_exclusive_twin,ai,专属分身,Exclusive Twin,专属分身,Exclusive Twin
+ai.header.subtitle_default,ai,请为我赐名,Name me and I will serve better.,请为我赐名,Name me and I will serve better.
+ai.header.subtitle_named,ai,更懂你，更关心你！,Know you better and care for you more.,更懂你，更关心你！,Know you better and care for you more.
+checkin.ai_hint,checkin,AI 可直接帮您打开此页面并执行一键全签。,AI can open this page and run batch check-in for you.,AI 可直接帮您打开此页面并执行一键全签。,AI can open this page and run batch check-in for you.
+checkin.building_momentum,checkin,持续积累中,Building momentum,持续积累中,Building momentum
+checkin.day_streak,checkin,天连签,day streak,天连签,day streak
+checkin.orders,checkin,签到订单,Check-in Orders,签到订单,Check-in Orders
+checkin.overview,checkin,今日总览,Daily Overview,今日总览,Daily Overview
+checkin.week.fri,checkin,周五,Fri,周五,Fri
+checkin.week.mon,checkin,周一,Mon,周一,Mon
+checkin.week.sat,checkin,周六,Sat,周六,Sat
+checkin.week.sun,checkin,周日,Sun,周日,Sun
+checkin.week.thu,checkin,周四,Thu,周四,Thu
+checkin.week.tue,checkin,周二,Tue,周二,Tue
+checkin.week.wed,checkin,周三,Wed,周三,Wed
+fan.check_in_no_eligible,fan,当前无可签到订单,No Eligible Orders Right Now,当前无可签到订单,No Eligible Orders Right Now
+fan.check_in_processing,fan,正在签到...,Checking in...,正在签到...,Checking in...
+fan.check_in_result_title,fan,签到结果,Check-in Results,签到结果,Check-in Results
+fan.close,fan,关闭,Close,关闭,Close
+fan.reason_already_signed,fan,今日已签到,Already checked in today,今日已签到,Already checked in today
+fan.reason_conflict_group,fan,与拼团免单互斥,Conflicts with group-free mode,与拼团免单互斥,Conflicts with group-free mode
+fan.reason_not_eligible,fan,未到签到时间,Not yet eligible,未到签到时间,Not yet eligible
+fan.result_failed,fan,失败,Failed,失败,Failed
+fan.result_realized,fan,本次返还,Realized,本次返还,Realized
+fan.result_status_failed,fan,待处理,Pending,待处理,Pending
+fan.result_status_success,fan,签到成功,Checked In,签到成功,Checked In
+fan.result_success,fan,成功,Success,成功,Success
+title.checkin_hub,title,签到中心,Check-in Hub,签到中心,Check-in Hub

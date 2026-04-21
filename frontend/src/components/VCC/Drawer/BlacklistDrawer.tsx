@@ -1,22 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft } from 'lucide-react';
 import { useAppContext } from '../AppContext';
+import { friendsApi } from '../../../services/api';
 
 export const BlacklistDrawer: React.FC = () => {
   const { popDrawer, t } = useAppContext();
   
-  const [blockedUsers, setBlockedUsers] = useState(() => {
-    const saved = localStorage.getItem('vcc_blocked_friends');
-    if (saved) return JSON.parse(saved);
-    return [];
-  });
+  const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
+  const [errorMsg, setErrorMsg] = useState('');
+
+  const loadBlocked = async () => {
+    try {
+      setErrorMsg('');
+      const res = await friendsApi.listBlocked();
+      setBlockedUsers(res.data?.items || []);
+    } catch (e: any) {
+      setBlockedUsers([]);
+      setErrorMsg(String(e?.response?.data?.detail || '黑名单加载失败'));
+    }
+  };
 
   useEffect(() => {
-    localStorage.setItem('vcc_blocked_friends', JSON.stringify(blockedUsers));
-  }, [blockedUsers]);
+    loadBlocked();
+  }, []);
 
-  const handleUnblock = (id: string) => {
-    setBlockedUsers((prev: any[]) => prev.filter((u: any) => u.id !== id));
+  const handleUnblock = async (id: string | number) => {
+    try {
+      await friendsApi.unblock(Number(id));
+      await loadBlocked();
+    } catch (e: any) {
+      setErrorMsg(String(e?.response?.data?.detail || '解除拉黑失败'));
+    }
   };
 
   return (
@@ -35,6 +49,11 @@ export const BlacklistDrawer: React.FC = () => {
       </div>
 
       <div className="p-4 space-y-3">
+        {!!errorMsg && (
+          <div className="rounded-xl border border-red-200 bg-red-50 text-red-600 px-3 py-2 text-[12px]">
+            {errorMsg}
+          </div>
+        )}
         {blockedUsers.length === 0 ? (
           <div className="text-center text-gray-500 py-10">No blocked users</div>
         ) : (

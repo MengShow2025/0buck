@@ -1,13 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  User, Shield, Smartphone, Bell, Moon, Sun, 
-  Globe, Bot, Brain, Database, Trash2, ChevronRight,
+  User, Shield, Bell, Moon, Sun, 
+  Globe, Bot, Brain, Database, ChevronRight,
   Monitor, LogOut, Info, HardDrive, ChevronDown, Link2,
   MessageSquare, Send, MessageCircle, Gamepad2, Copy
 } from 'lucide-react';
 import { useAppContext } from '../AppContext';
-import { imApi } from '../../../services/api';
+import { aiApi, imApi } from '../../../services/api';
 
 // Internal Custom Select Component for downward floating menu
 const CustomSelect = ({ value, options, onChange, width = "w-36" }: { value: string, options: {label: string, value: string}[], onChange: (val: any) => void, width?: string }) => {
@@ -74,6 +74,10 @@ export const SettingsDrawer: React.FC = () => {
   const [cacheSize, setCacheSize] = useState('24.5 MB');
   const [isClearing, setIsClearing] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [recommendationEnabled, setRecommendationEnabled] = useState(true);
+  const [recommendationLoading, setRecommendationLoading] = useState(false);
+  const [identityMode, setIdentityMode] = useState<'ai_butler' | 'life_pilot' | 'exclusive_twin'>('ai_butler');
+  const [identityLoading, setIdentityLoading] = useState(false);
   const [imBindings, setImBindings] = useState<Record<string, { linked: boolean; platform_uid: string }>>({});
   const [bindModal, setBindModal] = useState<{
     open: boolean;
@@ -138,6 +142,54 @@ export const SettingsDrawer: React.FC = () => {
   useEffect(() => {
     loadBindings();
   }, [isLoggedIn]);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadRecommendationSetting = async () => {
+      try {
+        const resp = await aiApi.getRecommendationSettings();
+        const enabled = !!resp?.data?.enabled;
+        if (mounted) setRecommendationEnabled(enabled);
+      } catch (_e) {
+        // keep default true on failure
+      }
+    };
+    loadRecommendationSetting();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const mode = user?.ai_identity_mode;
+    if (mode === 'life_pilot' || mode === 'exclusive_twin' || mode === 'ai_butler') {
+      setIdentityMode(mode);
+    }
+  }, [user?.ai_identity_mode]);
+
+  const toggleRecommendation = async (enabled: boolean) => {
+    setRecommendationEnabled(enabled);
+    setRecommendationLoading(true);
+    try {
+      await aiApi.setRecommendationSettings(enabled);
+    } catch (_e) {
+      setRecommendationEnabled((prev) => !enabled ? prev : true);
+    } finally {
+      setRecommendationLoading(false);
+    }
+  };
+
+  const updateIdentityMode = async (mode: 'ai_butler' | 'life_pilot' | 'exclusive_twin') => {
+    setIdentityMode(mode);
+    setIdentityLoading(true);
+    try {
+      await aiApi.syncProfileSettings({ ui_settings: { identity_mode: mode } });
+    } catch (_e) {
+      // keep optimistic UI to avoid interruption; next refresh will reconcile
+    } finally {
+      setIdentityLoading(false);
+    }
+  };
 
   const openBindPanel = async (platform: 'feishu' | 'telegram' | 'whatsapp' | 'discord') => {
     if (!isLoggedIn) {
@@ -336,6 +388,51 @@ export const SettingsDrawer: React.FC = () => {
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" className="sr-only peer" checked={notifications} onChange={(e) => setNotifications(e.target.checked)} />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-[#FF5C00]"></div>
+              </label>
+            </div>
+
+            {/* AI Identity */}
+            <div className="flex items-center justify-between px-4 py-3.5 border-t border-gray-100 dark:border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-violet-100 dark:bg-violet-900/30 flex items-center justify-center text-violet-600 dark:text-violet-400">
+                  <Bot className="w-4 h-4" />
+                </div>
+                <span className="text-[15px] text-gray-900 dark:text-white">{t('settings.identity_mode')}</span>
+              </div>
+              <div className={identityLoading ? 'opacity-60 pointer-events-none' : ''}>
+                <CustomSelect
+                  value={identityMode}
+                  onChange={(v) => updateIdentityMode(v as 'ai_butler' | 'life_pilot' | 'exclusive_twin')}
+                  width="w-40"
+                  options={[
+                    { value: 'ai_butler', label: t('settings.identity_ai_butler') },
+                    { value: 'life_pilot', label: t('settings.identity_life_pilot') },
+                    { value: 'exclusive_twin', label: t('settings.identity_exclusive_twin') },
+                  ]}
+                />
+              </div>
+            </div>
+
+            {/* Smart Recommendation */}
+            <div className="flex items-center justify-between px-4 py-3.5 border-t border-gray-100 dark:border-white/5">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-fuchsia-100 dark:bg-fuchsia-900/30 flex items-center justify-center text-fuchsia-600 dark:text-fuchsia-400">
+                  <Bot className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="text-[15px] text-gray-900 dark:text-white">{t('settings.smart_recommendation')}</div>
+                  <div className="text-[11px] text-gray-500">{t('settings.smart_recommendation_desc')}</div>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="sr-only peer"
+                  checked={recommendationEnabled}
+                  disabled={recommendationLoading}
+                  onChange={(e) => toggleRecommendation(e.target.checked)}
+                />
+                <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-disabled:opacity-50 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-[#FF5C00]"></div>
               </label>
             </div>
 

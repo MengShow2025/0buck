@@ -6,6 +6,7 @@ import { useAppContext } from '../AppContext';
 import { PrimeDrawer } from './PrimeDrawer';
 import { WalletDrawer } from './WalletDrawer';
 import { FanCenterDrawer } from './FanCenterDrawer';
+import { CheckinHubDrawer } from './CheckinHubDrawer.tsx';
 import { SquareDrawer } from './SquareDrawer';
 import { LoungeDrawer } from './LoungeDrawer';
 import { ProductDetailDrawer } from './ProductDetailDrawer';
@@ -52,6 +53,8 @@ import { BackupEmailDrawer } from './BackupEmailDrawer';
 import { DualVerificationDrawer } from './DualVerificationDrawer';
 import { NewFriendsDrawer } from './NewFriendsDrawer';
 import { BlacklistDrawer } from './BlacklistDrawer';
+import { GroupCreateDrawer } from './GroupCreateDrawer';
+import { GroupManageDrawer } from './GroupManageDrawer';
 
 export const GlobalDrawer: React.FC = () => {
   const { activeDrawer, setActiveDrawer, activeChat, drawerHistory, popDrawer, pushDrawer, t, verificationType } = useAppContext();
@@ -110,6 +113,10 @@ export const GlobalDrawer: React.FC = () => {
         return <NewFriendsDrawer />;
       case 'blacklist':
         return <BlacklistDrawer />;
+      case 'group_create':
+        return <GroupCreateDrawer />;
+      case 'group_manage':
+        return <GroupManageDrawer />;
       case 'wishlist_detail':
         return <WishlistDetailDrawer />;
       case 'group_buy_detail':
@@ -127,6 +134,8 @@ export const GlobalDrawer: React.FC = () => {
       case 'fan_center':
       case 'fans':
         return <FanCenterDrawer />;
+      case 'checkin_hub':
+        return <CheckinHubDrawer />;
       case 'points_history':
         return <PointsHistoryDrawer />;
       case 'points_exchange':
@@ -181,6 +190,8 @@ export const GlobalDrawer: React.FC = () => {
     all_fan_feeds: t('title.community'),
     all_topics: t('title.topics'),
     chat_room: activeChat?.name || 'Chat',
+    group_create: 'Create Group',
+    group_manage: 'Group Manage',
     notification: t('title.notification'),
     contacts: t('title.contacts'),
     my_feeds: t('title.my_feeds'),
@@ -198,6 +209,7 @@ export const GlobalDrawer: React.FC = () => {
     leaderboard: t('title.leaderboard'),
     reward_history: t('title.reward_history'),
     fan_center: t('title.fans'),
+    checkin_hub: t('title.checkin_hub'),
     points_history: t('title.points_history'),
     points_exchange: t('title.points_exchange'),
     withdraw: t('title.withdraw'),

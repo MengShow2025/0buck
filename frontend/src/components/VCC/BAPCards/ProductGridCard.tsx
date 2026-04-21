@@ -13,6 +13,8 @@ interface Product {
   sales: number;
   checkoutReady?: boolean;
   checkoutBlockReason?: string;
+  share_link?: string;
+  entity_type?: string;
 }
 
 const currencyMap: Record<string, string> = {
@@ -21,7 +23,7 @@ const currencyMap: Record<string, string> = {
 };
 
 export const ProductGridCard: React.FC<{ data: any }> = ({ data }) => {
-  const { pushDrawer, setSelectedProductId, currency, getExchangeRate, t } = useAppContext();
+  const { pushDrawer, setSelectedProductId, currency, getExchangeRate, t, isAuthenticated, requireAuth } = useAppContext();
   const scrollRef = useRef<HTMLDivElement>(null);
   const symbol = currencyMap[currency] || '$';
   const rate = getExchangeRate(currency);
@@ -48,7 +50,7 @@ export const ProductGridCard: React.FC<{ data: any }> = ({ data }) => {
   };
 
   return (
-    <div className="w-full my-1 relative group/strip">
+    <div className="w-full max-w-full my-1 relative group/strip overflow-hidden">
       {/* Scroll hint arrows — only show when hovered */}
       {products.length > 2 && (
         <>
@@ -70,7 +72,7 @@ export const ProductGridCard: React.FC<{ data: any }> = ({ data }) => {
       {/* Horizontal scroll strip */}
       <div
         ref={scrollRef}
-        className="flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory px-1 pb-1"
+        className="w-full flex gap-3 overflow-x-auto no-scrollbar snap-x snap-mandatory px-1 pb-1 touch-pan-x"
       >
         {products.map((product, idx) => {
           const displayPrice = (product.price * rate).toLocaleString(undefined, {
@@ -83,6 +85,16 @@ export const ProductGridCard: React.FC<{ data: any }> = ({ data }) => {
               key={product.id}
               onClick={() => {
                 if (product.checkoutReady === false) return;
+                if (product.share_link) {
+                  const open = () => window.open(product.share_link, '_blank', 'noopener,noreferrer');
+                  if (isAuthenticated) open();
+                  else requireAuth(open);
+                  return;
+                }
+                if (product.entity_type === 'merchant') {
+                  pushDrawer('supplier_analysis');
+                  return;
+                }
                 setSelectedProductId(String(product.id));
                 pushDrawer('product_detail');
               }}

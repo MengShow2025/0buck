@@ -69,11 +69,13 @@ export const ShareDrawer: React.FC = () => {
       };
       const resp = await imApi.generatePromoCard(payload as any);
       const data = resp.data || {};
-      setGenerated(data);
-      setSelectedTemplateId(data.generatedTemplates?.[0]?.template_id || null);
+      const templates = data.templates || data.generatedTemplates || [];
+      const shareLink = data.universal_link || data.link || data.short_link || data.share_link;
+      setGenerated({ ...data, generatedTemplates: templates, shareLink });
+      setSelectedTemplateId(templates?.[0]?.template_id || null);
 
       if (option === 'copy') {
-        const link = data.link || data.short_link || data.share_link;
+        const link = shareLink;
         if (link) {
           await navigator.clipboard.writeText(link);
           setStatusText('Referral link copied.');
@@ -82,7 +84,7 @@ export const ShareDrawer: React.FC = () => {
         }
       } else {
         setPendingPlatform(option as 'feishu' | 'whatsapp' | 'telegram' | 'discord');
-        setStatusText(`Generated ${data.generatedTemplates?.length || 0} templates. Select one and send.`);
+        setStatusText(`Generated ${templates?.length || 0} templates. Select one and send.`);
       }
     } catch (e) {
       const ax = e as AxiosError;
@@ -104,13 +106,15 @@ export const ShareDrawer: React.FC = () => {
     try {
       const resp = await imApi.buildTemplatesFromLink(pastedLink.trim());
       const data = resp.data || {};
+      const templates = data.templates || data.generatedTemplates || [];
       setGenerated({
         ...generated,
-        generatedTemplates: data.templates || [],
-        link: pastedLink.trim(),
+        generatedTemplates: templates,
+        shareLink: pastedLink.trim(),
+        share_token: data.share_token || generated?.share_token,
       });
-      setSelectedTemplateId((data.templates || [])[0]?.template_id || null);
-      setStatusText(`Parsed link successfully. Generated ${(data.templates || []).length} templates.`);
+      setSelectedTemplateId((templates || [])[0]?.template_id || null);
+      setStatusText(`Parsed link successfully. Generated ${(templates || []).length} templates.`);
     } catch (e) {
       const ax = e as AxiosError;
       if (ax?.code === 'ERR_NETWORK') setStatusText('Network error. Please check backend on port 8000.');
@@ -244,6 +248,29 @@ export const ShareDrawer: React.FC = () => {
 
       {generated?.generatedTemplates?.length > 0 && (
         <div className="rounded-[28px] border border-white/40 bg-white/70 p-4 shadow-lg backdrop-blur-xl dark:border-white/10 dark:bg-white/5">
+          {!!generated?.shareLink && (
+            <div className="mb-3 rounded-xl border border-gray-200 dark:border-white/10 p-2 bg-gray-50/80 dark:bg-white/5">
+              <div className="text-[11px] text-gray-500 dark:text-gray-400 mb-1">Share Link</div>
+              <div className="text-[11px] text-gray-700 dark:text-gray-200 break-all">{generated.shareLink}</div>
+              <div className="mt-2 flex gap-2">
+                <button
+                  onClick={async () => {
+                    await navigator.clipboard.writeText(String(generated.shareLink));
+                    setStatusText('Share link copied.');
+                  }}
+                  className="rounded-lg bg-gray-900 text-white dark:bg-white dark:text-black px-2.5 py-1 text-[11px] font-semibold"
+                >
+                  Copy
+                </button>
+                <button
+                  onClick={() => window.open(String(generated.shareLink), '_blank', 'noopener,noreferrer')}
+                  className="rounded-lg border border-gray-300 dark:border-white/20 px-2.5 py-1 text-[11px] font-semibold text-gray-700 dark:text-gray-200"
+                >
+                  Open
+                </button>
+              </div>
+            </div>
+          )}
           <div className="mb-2 text-[12px] font-bold text-gray-700 dark:text-gray-300">Template cards ({pendingPlatform || 'No platform'})</div>
           <div className="space-y-2">
             {generated.generatedTemplates.map((tpl: any, idx: number) => {

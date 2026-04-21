@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
-import { Heart, MessageSquare, Share2, Plus, TrendingUp, Flame, ChevronRight, Play, MessageCircle, Globe, Trophy, Contact } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Heart, MessageSquare, Share2, Plus, TrendingUp, Flame, ChevronRight, Play, MessageCircle, Globe, Trophy, Contact, Send, Trash2 } from 'lucide-react';
 import { useAppContext } from '../AppContext';
 import { DesktopSquarePanel } from './DesktopSquarePanel';
 import { DesktopLoungePanel } from './DesktopLoungePanel';
 import { DesktopFansPanel } from './DesktopFansPanel';
 import { DesktopContactsPanel } from './DesktopContactsPanel';
 import { getCheckoutBlockReasonText } from '../utils/checkoutBlockReason';
+import { socialApi } from '../../../services/api';
+import { mapSocialComments } from '../utils/socialComments';
 
 const TRENDING_TOPICS = [
   { id: 't1', name: 'Must-Buy Gadget List', count: '125k', color: 'text-orange-500' },
@@ -19,12 +21,6 @@ const GROUP_BUY = [
   { id: 2, name: 'iPhone 15 Pro Group Buy',          tag: 'C2W',          left: 5,  img: '1092644', type: 'presale', checkoutReady: false, checkoutBlockReason: 'not_published' },
 ];
 
-const FEEDS = [
-  { id: 'f1', user: 'Alex_Design', vip: 'SVIP', time: '5m ago', content: 'Just received the Artisan wireless earbuds. Audio quality is incredible: deep bass, clean mids and highs, and great separation. Highly recommended for pop and electronic music lovers.', likes: 128, comments: 24, images: ['https://picsum.photos/seed/f1_a/400/400', 'https://picsum.photos/seed/f1_b/400/400', 'https://picsum.photos/seed/f1_c/400/400'], isLiked: false },
-  { id: 'f2', user: 'Lorna_K', vip: 'VIP3', time: '1h ago', content: 'Found this beautiful leather messenger bag on 0Buck today. Premium leather feel, solid hardware, and even better color in person. Worth buying 🎒', likes: 56, comments: 8, images: ['https://picsum.photos/seed/f2_a/400/400'], isLiked: true },
-  { id: 'f3', user: 'Marcus_T', vip: 'VIP5', time: '3h ago', content: 'Joined the latest C2W campaign for the minimal mechanical keyboard workstation. Already 23% above target. Amazing typing feel with custom switches, crisp but not noisy.', likes: 89, comments: 15, images: [], isVideo: true, videoImg: 'https://picsum.photos/seed/f3_v/800/450' },
-];
-
 type SocialTab = 'feed' | 'square' | 'lounge' | 'fans' | 'contacts';
 
 const TABS: { id: SocialTab; label: string; icon: React.ReactNode }[] = [
@@ -36,16 +32,70 @@ const TABS: { id: SocialTab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export const DesktopSocialView: React.FC = () => {
-  const { pushDrawer, setSelectedProductId, t } = useAppContext();
+  const { pushDrawer, setSelectedProductId, t, user } = useAppContext();
   const [activeTab, setActiveTab] = useState<SocialTab>('feed');
-  const [likedIds, setLikedIds] = useState<Set<string>>(new Set(['f2']));
+  const [feedItems, setFeedItems] = useState<any[]>([]);
+  const [feedError, setFeedError] = useState('');
+  const [openCommentsId, setOpenCommentsId] = useState<string | null>(null);
+  const [commentsByActivity, setCommentsByActivity] = useState<Record<string, any[]>>({});
+  const [commentDraftByActivity, setCommentDraftByActivity] = useState<Record<string, string>>({});
+  const [replyingToByActivity, setReplyingToByActivity] = useState<Record<string, { id: string; user: string } | null>>({});
 
-  const toggleLike = (id: string) => {
-    setLikedIds(prev => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
+  const loadFeed = async () => {
+    try {
+      setFeedError('');
+      const res = await socialApi.listActivities({ limit: 30 });
+      setFeedItems(res.data?.items || []);
+    } catch {
+      setFeedItems([]);
+      setFeedError('动态加载失败');
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'feed') loadFeed();
+  }, [activeTab]);
+
+  const refreshComments = async (activityId: string) => {
+    const res = await socialApi.listComments(activityId);
+    setCommentsByActivity((prev) => ({
+      ...prev,
+      [activityId]: mapSocialComments(res.data?.items || []),
+    }));
+  };
+
+  const toggleComments = async (activityId: string) => {
+    if (openCommentsId === activityId) {
+      setOpenCommentsId(null);
+      return;
+    }
+    setOpenCommentsId(activityId);
+    try {
+      await refreshComments(activityId);
+    } catch {
+      setCommentsByActivity((prev) => ({ ...prev, [activityId]: [] }));
+    }
+  };
+
+  const submitComment = async (activityId: string) => {
+    const content = String(commentDraftByActivity[activityId] || '').trim();
+    if (!content) return;
+    try {
+      const replying = replyingToByActivity[activityId];
+      await socialApi.createComment(activityId, content, replying?.id);
+      setCommentDraftByActivity((prev) => ({ ...prev, [activityId]: '' }));
+      setReplyingToByActivity((prev) => ({ ...prev, [activityId]: null }));
+      await refreshComments(activityId);
+      await loadFeed();
+    } catch {}
+  };
+
+  const removeComment = async (activityId: string, commentId: string) => {
+    try {
+      await socialApi.deleteComment(commentId);
+      await refreshComments(activityId);
+      await loadFeed();
+    } catch {}
   };
 
   return (
@@ -98,22 +148,46 @@ export const DesktopSocialView: React.FC = () => {
 
               {/* Feed List */}
               <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4" style={{ scrollbarWidth: 'thin', scrollbarColor: '#3f3f46 transparent' }}>
-                {FEEDS.map(feed => (
+                {!!feedError && (
+                  <div className="rounded-xl border border-red-200 bg-red-50 text-red-600 px-3 py-2 text-[12px]">{feedError}</div>
+                )}
+                {feedItems.map(feed => (
                   <article key={feed.id} className="bg-white dark:bg-[#18181B] rounded-2xl border border-zinc-200 dark:border-zinc-800 p-5 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-xl bg-indigo-500/10 flex items-center justify-center font-black text-indigo-600 text-[14px] shrink-0 shadow-sm">
-                        {feed.user[0]}
-                      </div>
+                      <img src={feed.avatar} alt={feed.user} className="w-10 h-10 rounded-xl object-cover shrink-0 shadow-sm" />
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-[14px] font-black text-zinc-900 dark:text-white">{feed.user}</span>
-                          <span className="px-1.5 py-0.5 text-[10px] font-black rounded-md bg-gradient-to-r from-yellow-500 to-orange-500 text-white italic">{feed.vip}</span>
+                          {feed.is_official && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-black rounded-md bg-blue-100 dark:bg-blue-500/20 text-blue-600">
+                              {feed.official_type === 'topic' ? '官方话题' : '官方活动'}
+                            </span>
+                          )}
+                          {feed.pinned && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-black rounded-md bg-amber-100 dark:bg-amber-500/20 text-amber-700">置顶</span>
+                          )}
+                          <span className="px-1.5 py-0.5 text-[10px] font-black rounded-md bg-gradient-to-r from-yellow-500 to-orange-500 text-white italic">{feed.visibility === 'friends' ? '好友圈' : '公开'}</span>
                         </div>
-                        <div className="text-[11px] text-zinc-400">{feed.time}</div>
+                        <div className="text-[11px] text-zinc-400">{feed.timestamp || feed.time || ''}</div>
                       </div>
-                      <button className="ml-auto text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
-                        <Share2 className="w-4 h-4" />
-                      </button>
+                      <div className="ml-auto flex items-center gap-2">
+                        {user?.user_type === 'admin' && !!feed.is_official && (
+                          <button
+                            onClick={async () => {
+                              try {
+                                await socialApi.pinActivity(feed.id, !feed.pinned);
+                                await loadFeed();
+                              } catch {}
+                            }}
+                            className="text-[11px] px-2 py-0.5 rounded-md border border-zinc-300 dark:border-zinc-700 text-zinc-500 dark:text-zinc-300"
+                          >
+                            {feed.pinned ? '取消置顶' : '置顶'}
+                          </button>
+                        )}
+                        <button className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 transition-colors">
+                          <Share2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                     <p className="text-[14px] text-zinc-700 dark:text-zinc-300 leading-relaxed mb-3 font-medium">{feed.content}</p>
                     {feed.isVideo ? (
@@ -125,27 +199,128 @@ export const DesktopSocialView: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                    ) : feed.images.length > 0 ? (
-                      <div className={`grid gap-1.5 mb-3 ${feed.images.length === 1 ? 'grid-cols-1 max-w-xs' : feed.images.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                        {feed.images.map((img, i) => (
+                    ) : (feed.media || []).length > 0 ? (
+                      <div className={`grid gap-1.5 mb-3 ${(feed.media || []).length === 1 ? 'grid-cols-1 max-w-xs' : (feed.media || []).length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                        {(feed.media || []).map((img: any, i: number) => (
                           <div key={i} className="aspect-square rounded-xl overflow-hidden cursor-pointer hover:opacity-90 transition-opacity">
-                            <img src={img} alt="" className="w-full h-full object-cover" />
+                            <img src={img.cdn_url || img.url} alt="" className="w-full h-full object-cover" />
                           </div>
                         ))}
                       </div>
                     ) : null}
                     <div className="flex items-center gap-5 text-zinc-400">
                       <button
-                        onClick={() => toggleLike(feed.id)}
-                        className={`flex items-center gap-1.5 text-[13px] font-semibold transition-colors ${likedIds.has(feed.id) ? 'text-red-500' : 'hover:text-red-500'}`}
+                        onClick={async () => {
+                          const nextLiked = !feed.liked;
+                          const delta = nextLiked ? 1 : -1;
+                          setFeedItems((prev) => prev.map((x: any) => (
+                            x.id === feed.id
+                              ? { ...x, liked: nextLiked, likes: Math.max(0, Number(x.likes || 0) + delta) }
+                              : x
+                          )));
+                          try {
+                            if (feed.liked) await socialApi.unlike(feed.id);
+                            else await socialApi.like(feed.id);
+                          } catch {
+                            setFeedItems((prev) => prev.map((x: any) => (
+                              x.id === feed.id ? { ...x, liked: feed.liked, likes: Number(feed.likes || 0) } : x
+                            )));
+                          }
+                        }}
+                        className={`flex items-center gap-1.5 text-[13px] font-semibold transition-colors ${feed.liked ? 'text-red-500' : 'hover:text-red-500'}`}
                       >
-                        <Heart className={`w-4 h-4 ${likedIds.has(feed.id) ? 'fill-current' : ''}`} />
-                        {feed.likes + (likedIds.has(feed.id) && !feed.isLiked ? 1 : 0)}
+                        <Heart className={`w-4 h-4 ${feed.liked ? 'fill-current text-red-500' : ''}`} />
+                        {feed.likes}
                       </button>
-                      <button className="flex items-center gap-1.5 text-[13px] font-semibold hover:text-blue-500 transition-colors">
+                      <button
+                        onClick={() => toggleComments(feed.id)}
+                        className={`flex items-center gap-1.5 text-[13px] font-semibold transition-colors ${openCommentsId === feed.id ? 'text-blue-500' : 'hover:text-blue-500'}`}
+                      >
                         <MessageSquare className="w-4 h-4" /> {feed.comments}
                       </button>
                     </div>
+                    {openCommentsId === feed.id && (
+                      <div className="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-700 space-y-2">
+                        {(commentsByActivity[feed.id] || []).map((c: any) => (
+                          <div key={c.id} className="text-[12px] rounded-lg border border-zinc-200 dark:border-zinc-700 px-2 py-1.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <div className="font-semibold text-zinc-800 dark:text-zinc-100 flex items-center gap-1.5">
+                                  {c.user}
+                                  {c.isAuthor && (
+                                    <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-500/20 text-[10px] text-[#E8450A] font-bold">作者</span>
+                                  )}
+                                </div>
+                                <div className="text-zinc-600 dark:text-zinc-300">{c.content}</div>
+                                <button
+                                  onClick={() => setReplyingToByActivity((prev) => ({ ...prev, [feed.id]: { id: c.id, user: c.user } }))}
+                                  className="mt-1 text-[11px] text-zinc-400 hover:text-[#E8450A]"
+                                >
+                                  回复
+                                </button>
+                              </div>
+                              {c.canDelete && (
+                                <button
+                                  onClick={() => removeComment(feed.id, c.id)}
+                                  className="text-zinc-400 hover:text-red-500"
+                                  title="删除评论"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                            {(c.replies || []).map((r: any) => (
+                              <div key={r.id} className="mt-2 ml-4 pl-2 border-l border-zinc-200 dark:border-zinc-700 flex items-start justify-between gap-2">
+                                <div>
+                                  <div className="font-semibold text-zinc-800 dark:text-zinc-100 flex items-center gap-1.5">
+                                    {r.user}
+                                    {r.isAuthor && (
+                                      <span className="px-1.5 py-0.5 rounded bg-orange-100 dark:bg-orange-500/20 text-[10px] text-[#E8450A] font-bold">作者</span>
+                                    )}
+                                  </div>
+                                  <div className="text-zinc-600 dark:text-zinc-300">{r.content}</div>
+                                </div>
+                                {r.canDelete && (
+                                  <button
+                                    onClick={() => removeComment(feed.id, r.id)}
+                                    className="text-zinc-400 hover:text-red-500"
+                                    title="删除回复"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                        {replyingToByActivity[feed.id] && (
+                          <div className="text-[11px] text-zinc-500">
+                            正在回复 @{replyingToByActivity[feed.id]?.user}
+                            <button
+                              onClick={() => setReplyingToByActivity((prev) => ({ ...prev, [feed.id]: null }))}
+                              className="ml-2 text-[#E8450A]"
+                            >
+                              取消
+                            </button>
+                          </div>
+                        )}
+                        <div className="flex gap-2">
+                          <input
+                            value={commentDraftByActivity[feed.id] || ''}
+                            onChange={(e) => setCommentDraftByActivity((prev) => ({ ...prev, [feed.id]: e.target.value }))}
+                            placeholder={replyingToByActivity[feed.id] ? `回复 @${replyingToByActivity[feed.id]?.user}` : "写评论..."}
+                            className="flex-1 bg-zinc-100 dark:bg-zinc-800 rounded-full px-3 py-1.5 text-[12px] outline-none"
+                          />
+                          <button
+                            onClick={() => submitComment(feed.id)}
+                            className="px-3 py-1.5 rounded-full text-[12px] bg-[var(--wa-teal)] text-white flex items-center gap-1"
+                          >
+                            <Send className="w-3.5 h-3.5" />
+                            发送
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </article>
                 ))}
               </div>
