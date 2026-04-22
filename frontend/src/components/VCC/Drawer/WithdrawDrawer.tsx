@@ -1,9 +1,13 @@
 import React, { useState } from 'react';
 import { ArrowDownToLine, Banknote, Bitcoin, CheckCircle2, DollarSign, Info, ChevronLeft, X } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export const WithdrawDrawer: React.FC = () => {
-  const { popDrawer, setActiveDrawer, drawerHistory, t, userBalance } = useAppContext();
+    const { popDrawer, setActiveDrawer, drawerHistory } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { userBalance } = useCommerceContext();
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('paypal');
   const [submitted, setSubmitted] = useState(false);

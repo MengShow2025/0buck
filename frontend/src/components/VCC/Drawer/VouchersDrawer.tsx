@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Ticket, Search, Filter, AlertCircle, ArrowRight } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export const VouchersDrawer: React.FC = () => {
-  const { pushDrawer, t } = useAppContext();
+    const { pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
   const [activeTab, setActiveTab] = useState<'valid' | 'used' | 'expired'>('valid');
 
   const mockVouchers = [

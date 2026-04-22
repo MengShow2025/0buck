@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Package, Search, Scale, CheckCircle2, Share2, Crown, Zap, ShieldCheck, Coins, ArrowRight, Star } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { imApi, productApi } from '../../../services/api';
 import { getCheckoutBlockReasonText } from '../utils/checkoutBlockReason';
 
@@ -68,7 +70,9 @@ const MOCK_PRODUCTS = [
 ];
 
 export const PrimeDrawer: React.FC = () => {
-  const { setActiveDrawer, setSelectedProductId, pushDrawer, currency, getExchangeRate, t, userLevel, isPrime, setIsPrime, userCountry } = useAppContext();
+    const { setActiveDrawer, setSelectedProductId, pushDrawer } = useDrawerContext();
+  const { currency, getExchangeRate, t } = usePreferenceContext();
+  const { userLevel, isPrime, setIsPrime, userCountry } = useCommerceContext();
   const [isLoading, setIsLoading] = useState(true);
   const [products, setProducts] = useState<any[]>([]);
   const [page, setPage] = useState(1);

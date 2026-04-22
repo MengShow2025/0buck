@@ -1,7 +1,9 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ChevronLeft } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useSecurityContext } from '../contexts/SecurityContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 import { PrimeDrawer } from './PrimeDrawer';
 import { WalletDrawer } from './WalletDrawer';
@@ -57,7 +59,9 @@ import { GroupCreateDrawer } from './GroupCreateDrawer';
 import { GroupManageDrawer } from './GroupManageDrawer';
 
 export const GlobalDrawer: React.FC = () => {
-  const { activeDrawer, setActiveDrawer, activeChat, drawerHistory, popDrawer, pushDrawer, t, verificationType } = useAppContext();
+    const { activeDrawer, setActiveDrawer, activeChat, drawerHistory, popDrawer, pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { verificationType } = useSecurityContext();
 
   const handleClose = () => setActiveDrawer('none');
 

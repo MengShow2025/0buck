@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Flame, ChevronRight, MessageSquare, Heart, Share2, Calendar, Users, Zap, TrendingUp, ChevronDown, Play, Star, X, PlusCircle, Trash2 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { socialApi } from '../../../services/api';
 import { mapSocialComments } from '../utils/socialComments';
 
@@ -18,7 +20,8 @@ const GROUP_BUY_DATA = [
 ];
 
 const FeedCard: React.FC<{ i: number; onMediaClick: (type: 'image' | 'video', url: string) => void }> = ({ i, onMediaClick }) => {
-  const { pushDrawer, t } = useAppContext();
+    const { pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
   const [isExpanded, setIsExpanded] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [isLiked, setIsLiked] = useState(false);
@@ -195,7 +198,9 @@ const FeedCard: React.FC<{ i: number; onMediaClick: (type: 'image' | 'video', ur
 };
 
 export const SquareDrawer: React.FC = () => {
-  const { setActiveDrawer, setActiveChat, pushDrawer, setSelectedProductId, t, user } = useAppContext();
+    const { setActiveDrawer, setActiveChat, pushDrawer, setSelectedProductId } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { user } = useSessionContext();
   const [joinedWishlist, setJoinedWishlist] = useState<number[]>([]);
   const [previewMedia, setPreviewMedia] = useState<{ type: 'image' | 'video'; url: string } | null>(null);
   const [activities, setActivities] = useState<any[]>([]);

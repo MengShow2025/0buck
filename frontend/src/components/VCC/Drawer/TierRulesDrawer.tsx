@@ -1,9 +1,13 @@
 import React from 'react';
 import { ShieldCheck, Zap, Users, Award, ChevronLeft, CheckCircle2, ArrowRight } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export const TierRulesDrawer: React.FC = () => {
-  const { popDrawer, pushDrawer, t, userLevel, isInfluencer } = useAppContext();
+    const { popDrawer, pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { userLevel, isInfluencer } = useCommerceContext();
 
   // Automatic Tiering Design Logic
   // Bronze: Default

@@ -1,17 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Copy, QrCode, ArrowRight, CheckCircle2, Trash2, Key, ChevronLeft } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useSecurityContext } from '../contexts/SecurityContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { authApi } from '../../../services/api';
 
 export const Google2FADrawer: React.FC = () => {
-  const { 
-    isGoogle2FAEnabled, 
-    setIsGoogle2FAEnabled, 
-    google2FASecret, 
-    setGoogle2FASecret,
-    t, 
-    popDrawer 
-  } = useAppContext();
+    const { isGoogle2FAEnabled, setIsGoogle2FAEnabled, google2FASecret, setGoogle2FASecret } = useSecurityContext();
+  const { t } = usePreferenceContext();
+  const { popDrawer } = useDrawerContext();
 
   const [step, setStep] = useState<'status' | 'bind' | 'verify_disable'>('status');
   const [qrCode, setQrCode] = useState<string>('');

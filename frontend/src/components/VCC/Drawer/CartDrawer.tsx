@@ -1,9 +1,11 @@
 import React from 'react';
 import { ShoppingCart, Minus, Plus, ChevronRight } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export const CartDrawer = () => {
-  const { setActiveDrawer, t } = useAppContext();
+    const { setActiveDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
 
   const cartItems = [
     {

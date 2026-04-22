@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, ShieldCheck, ChevronLeft, ArrowRight, CheckCircle2 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
 
 interface VerificationDrawerProps {
   type: 'login_password' | 'pay_password' | 'email_bind' | 'backup_email_bind';
@@ -8,7 +10,9 @@ interface VerificationDrawerProps {
 }
 
 export const VerificationDrawer: React.FC<VerificationDrawerProps> = ({ type, onSuccess }) => {
-  const { user, popDrawer, t } = useAppContext();
+    const { user } = useSessionContext();
+  const { popDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isSuccess, setIsSuccess] = useState(false);
   const [timer, setTimer] = useState(0);

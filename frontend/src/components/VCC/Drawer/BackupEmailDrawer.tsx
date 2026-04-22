@@ -1,15 +1,14 @@
 import React, { useState } from 'react';
 import { Mail, ShieldCheck, ArrowRight, CheckCircle2, ChevronLeft } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
 import { userApi } from '../../../services/api';
 
 export const BackupEmailDrawer: React.FC = () => {
-  const { 
-    user, 
-    setUser,
-    t, 
-    popDrawer 
-  } = useAppContext();
+    const { user, setUser } = useSessionContext();
+  const { t } = usePreferenceContext();
+  const { popDrawer } = useDrawerContext();
 
   const [step, setStep] = useState<'input_email' | 'verify_otp'>('input_email');
   const [email, setEmail] = useState(user?.backup_email || '');

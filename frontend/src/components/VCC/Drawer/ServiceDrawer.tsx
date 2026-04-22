@@ -1,9 +1,9 @@
 import React from 'react';
 import { HelpCircle, FileText, PhoneCall, ChevronRight, ShieldCheck, Mail, MessageCircle } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export const ServiceDrawer: React.FC = () => {
-  const { setActiveDrawer } = useAppContext();
+    const { setActiveDrawer } = useDrawerContext();
 
   const handleSupportChat = () => {
     setActiveDrawer('none');

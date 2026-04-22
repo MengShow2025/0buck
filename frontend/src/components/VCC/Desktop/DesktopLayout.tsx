@@ -9,7 +9,7 @@ import { DesktopNotificationsView } from './DesktopNotificationsView';
 import { DesktopProfileView } from './DesktopProfileView';
 import { DesktopRightPanel, PanelType } from './DesktopRightPanel';
 import { GlobalDrawer } from '../Drawer/GlobalDrawer';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export type DesktopView = 'chat' | 'shop' | 'orders' | 'wallet' | 'social' | 'notifications' | 'profile';
 
@@ -20,7 +20,7 @@ interface Props {
 }
 
 export const DesktopLayout: React.FC<Props> = ({ messages, isAiTyping, onSendMessage }) => {
-  const { setSelectedProductId } = useAppContext();
+    const { setSelectedProductId } = useDrawerContext();
   const [activeView, setActiveView] = useState<DesktopView>('chat');
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [rightPanel, setRightPanel] = useState<PanelType>('none');
@@ -31,6 +31,7 @@ export const DesktopLayout: React.FC<Props> = ({ messages, isAiTyping, onSendMes
   };
 
   const handleOrderSelect = (_id: string) => {
+    setSelectedProductId(_id);
     setRightPanel('order_center');
   };
 

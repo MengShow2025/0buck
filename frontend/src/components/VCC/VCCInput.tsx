@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Plus, Send, X } from 'lucide-react';
 import { MagicPocketMenu } from './MagicPocketMenu';
-import { useAppContext } from './AppContext';
+import { usePreferenceContext } from './contexts/PreferenceContext';
+import { useSessionContext } from './contexts/SessionContext';
 import BongoCat from './BongoCat';
 import { imApi } from '../../services/api';
 
@@ -13,7 +14,8 @@ interface VCCInputProps {
 }
 
 export const VCCInput: React.FC<VCCInputProps> = ({ onSendMessage, onSendRichMessage, isTyping, uploadMode = 'social' }) => {
-  const { t, user } = useAppContext();
+    const { t } = usePreferenceContext();
+  const { user } = useSessionContext();
   const [text, setText] = useState('');
   const [showPocket, setShowPocket] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);

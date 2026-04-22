@@ -1,6 +1,11 @@
 import React, { useState } from 'react';
 import { User, Shield, Bell, Globe, Palette, ChevronRight, Crown, Star, LogOut, Camera, Copy, CheckCircle2, Zap, Heart, MapPin, Ticket, Trophy, Users, ShoppingCart, Package } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { authApi } from '../../../services/api';
+import { clearStoredAuthTokens } from '../../../services/authSession';
+import { getDisplayName, getReferralCode } from '../utils/userIdentity';
 
 const TIER_META: Record<string, { color: string; bg: string; gradient: string }> = {
   Platinum: { color: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-50 dark:bg-violet-900/20', gradient: 'from-violet-500 to-indigo-500' },
@@ -53,16 +58,33 @@ const SETTINGS_GROUPS = [
 ];
 
 export const DesktopProfileView: React.FC = () => {
-  const { user, isAuthenticated, userBalance, userPoints, isPrime, pushDrawer, setActiveDrawer, orders } = useAppContext();
+  const { user, isAuthenticated, setUser } = useSessionContext();
+  const { userBalance, userPoints, isPrime, orders } = useCommerceContext();
+  const { pushDrawer, setActiveDrawer } = useDrawerContext();
   const [copied, setCopied] = useState(false);
 
   const tier = user?.user_tier ?? 'Bronze';
   const meta = TIER_META[tier] ?? TIER_META.Bronze;
+  const displayName = getDisplayName(user);
+  const referralCode = getReferralCode(user);
 
   const handleCopyReferral = () => {
-    navigator.clipboard.writeText(user?.referral_code ?? 'VCC-DEMO');
+    if (!referralCode) return;
+    navigator.clipboard.writeText(referralCode);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await authApi.logout();
+    } catch {
+      // Best-effort logout: clear local auth state even if server logout fails.
+    } finally {
+      clearStoredAuthTokens(window.localStorage);
+      setUser(null);
+      setActiveDrawer('none');
+    }
   };
 
   if (!isAuthenticated) {
@@ -95,14 +117,14 @@ export const DesktopProfileView: React.FC = () => {
           <div className="flex flex-col items-center text-center">
             <div className="relative mb-3">
               <div className={`w-20 h-20 rounded-2xl bg-gradient-to-br ${meta.gradient} flex items-center justify-center text-3xl font-black text-white shadow-lg`}>
-                {(user?.nickname || user?.email || 'U')[0].toUpperCase()}
+                {(displayName || 'U')[0].toUpperCase()}
               </div>
               <button className="absolute -bottom-1 -right-1 w-7 h-7 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl flex items-center justify-center shadow-sm hover:border-orange-400 transition-colors">
                 <Camera className="w-3.5 h-3.5 text-zinc-500" />
               </button>
             </div>
             <h2 className="text-[17px] font-black text-zinc-900 dark:text-white">
-              {user?.nickname || user?.first_name || user?.email?.split('@')[0] || 'User'}
+              {displayName}
             </h2>
             <p className="text-[12px] text-zinc-400 mt-0.5">{user?.email}</p>
             <div className={`mt-2 flex items-center gap-1 px-3 py-1 rounded-full text-[11px] font-black ${meta.bg} ${meta.color}`}>
@@ -131,9 +153,13 @@ export const DesktopProfileView: React.FC = () => {
           <div className="text-[11px] font-semibold text-zinc-400 uppercase tracking-wider mb-2">My Referral Code</div>
           <div className="flex items-center gap-2 bg-zinc-100 dark:bg-zinc-800 rounded-xl px-3 py-2.5">
             <span className="flex-1 font-mono text-[14px] font-bold text-zinc-700 dark:text-zinc-300">
-              {user?.referral_code || 'VCC-DEMO'}
+              {referralCode ?? '--'}
             </span>
-            <button onClick={handleCopyReferral} className="text-orange-500 hover:text-orange-600 transition-colors">
+            <button
+              onClick={handleCopyReferral}
+              disabled={!referralCode}
+              className="text-orange-500 hover:text-orange-600 transition-colors disabled:text-zinc-300 disabled:hover:text-zinc-300"
+            >
               {copied ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
             </button>
           </div>
@@ -142,7 +168,7 @@ export const DesktopProfileView: React.FC = () => {
         {/* Quick Actions */}
         <div className="p-4 space-y-1">
           <button
-            onClick={() => setActiveDrawer('none')}
+            onClick={handleLogout}
             className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
           >
             <LogOut className="w-4 h-4" />

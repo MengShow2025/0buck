@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronLeft } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { friendsApi } from '../../../services/api';
 
 export const BlacklistDrawer: React.FC = () => {
-  const { popDrawer, t } = useAppContext();
+    const { popDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
   
   const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
   const [errorMsg, setErrorMsg] = useState('');

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, Gift, Calendar, Clock, ArrowRight, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
 
 interface PaymentSuccessScreenProps {
   orderId: string;
@@ -10,7 +10,7 @@ interface PaymentSuccessScreenProps {
 }
 
 export const PaymentSuccessScreen: React.FC<PaymentSuccessScreenProps> = ({ orderId, amount, onContinue }) => {
-  const { t, currency, getExchangeRate } = useAppContext();
+    const { t, currency, getExchangeRate } = usePreferenceContext();
   const [phase, setPhase] = useState(0);
 
   useEffect(() => {

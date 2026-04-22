@@ -1,6 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronLeft, Send, Image as ImageIcon, Mic, Plus, Smile, User, Users as UsersIcon, Megaphone, ShoppingBag, ExternalLink, X, ChevronRight, ShoppingCart, CheckCircle2, Box, Scale, MoreHorizontal, UserMinus, Check, CheckCheck } from 'lucide-react';
-import { useAppContext, ChatContext } from '../AppContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useAIContext } from '../contexts/AIContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { ChatContext } from '../contexts/types';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ProductGridCard } from '../BAPCards/ProductGridCard';
 import { MediaGridCard } from '../BAPCards/MediaGridCard';
@@ -39,22 +44,11 @@ const normalizeButlerText = (raw: any) => {
 };
 
 export const ChatRoomDrawer: React.FC = () => {
-  const {
-    activeChat,
-    setActiveChat,
-    setActiveDrawer,
-    pushDrawer,
-    aiInput,
-    setAiInput,
-    t,
-    user,
-    setTheme,
-    setLanguage,
-    setCurrency,
-    setWithdrawalMethod,
-    setHasCheckedInToday,
-    setNotifications,
-  } = useAppContext();
+    const { activeChat, setActiveChat, setActiveDrawer, pushDrawer } = useDrawerContext();
+  const { aiInput, setAiInput } = useAIContext();
+  const { t, setTheme, setLanguage, setCurrency, setNotifications } = usePreferenceContext();
+  const { user } = useSessionContext();
+  const { setWithdrawalMethod, setHasCheckedInToday } = useCommerceContext();
   const [messages, setMessages] = useState<any[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [replyTarget, setReplyTarget] = useState<any | null>(null);

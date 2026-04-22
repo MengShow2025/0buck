@@ -1,11 +1,16 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { CheckCircle2, ExternalLink, Link as LinkIcon, Loader2, Send, Share2, Info } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { imApi, rewardApi } from '../../../services/api';
 import { AxiosError } from 'axios';
+import { resolveRewardUserId } from '../utils/rewardStatus';
 
 export const ShareDrawer: React.FC = () => {
-  const { popDrawer, t, selectedProductId, user } = useAppContext();
+    const { popDrawer, selectedProductId } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { user } = useSessionContext();
   const [cardType, setCardType] = useState<'invite' | 'product' | 'merchant' | 'group_buy'>('invite');
   const [targetId, setTargetId] = useState('');
   const [pendingPlatform, setPendingPlatform] = useState<'feishu' | 'whatsapp' | 'telegram' | 'discord' | null>(null);
@@ -19,7 +24,7 @@ export const ShareDrawer: React.FC = () => {
   const [rewardStats, setRewardStats] = useState<any>(null);
 
   useEffect(() => {
-    const userId = (user as any)?.id || (user as any)?.user_id;
+    const userId = resolveRewardUserId(user);
     if (userId) {
       rewardApi.getStatus(userId).then(res => {
         setRewardStats(res.data);

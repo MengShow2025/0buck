@@ -1,6 +1,8 @@
 import React, { useRef } from 'react';
 import { ShoppingCart, Star, TrendingUp, ShieldCheck, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { getCheckoutBlockReasonText } from '../utils/checkoutBlockReason';
 
 interface Product {
@@ -23,7 +25,9 @@ const currencyMap: Record<string, string> = {
 };
 
 export const ProductGridCard: React.FC<{ data: any }> = ({ data }) => {
-  const { pushDrawer, setSelectedProductId, currency, getExchangeRate, t, isAuthenticated, requireAuth } = useAppContext();
+    const { pushDrawer, setSelectedProductId } = useDrawerContext();
+  const { currency, getExchangeRate, t } = usePreferenceContext();
+  const { isAuthenticated, requireAuth } = useSessionContext();
   const scrollRef = useRef<HTMLDivElement>(null);
   const symbol = currencyMap[currency] || '$';
   const rate = getExchangeRate(currency);

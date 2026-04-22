@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Heart, MessageSquare, Share2, Trash2, Plus, Send, X, Camera, Upload, Play, Crop, Check, ChevronDown } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { socialApi } from '../../../services/api';
 import { mapSocialComments } from '../utils/socialComments';
 import { getSocialPostErrorMessage } from '../utils/socialPostError';
@@ -14,7 +16,7 @@ const CommentItem: React.FC<{
   onAvatarClick: () => void;
   isReply?: boolean;
 }> = ({ comment, onReply, onDelete, onAvatarClick, isReply }) => {
-  const { t } = useAppContext();
+    const { t } = usePreferenceContext();
   return (
   <div className={`flex flex-col gap-2 ${isReply ? 'ml-10 mt-2 relative' : ''}`}>
     {isReply && (
@@ -85,7 +87,9 @@ const CommentItem: React.FC<{
 };
 
 export const MyFeedsDrawer: React.FC = () => {
-  const { pushDrawer, t, user } = useAppContext();
+    const { pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { user } = useSessionContext();
   
   const INITIAL_MY_FEEDS: any[] = [
     {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, SlidersHorizontal, Star, ShoppingCart, ChevronDown, Zap } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 const PRODUCTS = [
   { id: 'demo-1', name: 'Artisan Wireless Earbuds Pro', price: 29.99, original: 59.99, image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&q=80', supplier: 'Nordic Audio Lab', rating: 4.9, sales: 3821, badge: 'Bestseller' },
@@ -20,7 +20,7 @@ interface Props {
 }
 
 export const DesktopShopView: React.FC<Props> = ({ onProductSelect }) => {
-  const { setSelectedProductId } = useAppContext();
+    const { setSelectedProductId } = useDrawerContext();
   const [activeCategory, setActiveCategory] = useState('All');
   const [sortBy] = useState('Best Selling');
   const [search, setSearch] = useState('');

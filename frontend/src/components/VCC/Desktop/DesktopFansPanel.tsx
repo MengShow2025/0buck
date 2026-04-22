@@ -1,27 +1,56 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Target, Users, Zap, Copy, Calendar, ChevronDown, ChevronUp, UserCheck, TrendingUp, Trophy, Bot, ChevronRight, Share2 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
-
-const ORDER_DETAILS = [
-  { id: 'ORD-001', name: 'Wireless Earbuds', phase: '7/20', daysLeft: 4,  rate: '5%', est: '$15.00' },
-  { id: 'ORD-002', name: 'Mechanical Watch',  phase: '3/20', daysLeft: 12, rate: '8%', est: '$22.50' },
-  { id: 'ORD-003', name: 'Leather Bag',        phase: '1/20', daysLeft: 25, rate: '5%', est: '$8.30'  },
-];
-
-const BREAKDOWN = [
-  { label: 'Fan Rewards',      amount: '$245.00', count: 12, icon: Users,  color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-200 dark:border-purple-800' },
-  { label: 'Referral Rewards', amount: '$97.50',  count: 8,  icon: Zap,    color: 'text-blue-500',   bg: 'bg-blue-50 dark:bg-blue-900/20',     border: 'border-blue-200 dark:border-blue-800' },
-  { label: 'Stage Cashback',   amount: '$14.50',  count: 1,  icon: Target, color: 'text-emerald-500',bg: 'bg-emerald-50 dark:bg-emerald-900/20',border: 'border-emerald-200 dark:border-emerald-800'},
-  { label: 'AI Tasks',         amount: '$12.00',  count: 6,  icon: Bot,    color: 'text-cyan-500',   bg: 'bg-cyan-50 dark:bg-cyan-900/20',     border: 'border-cyan-200 dark:border-cyan-800' },
-];
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { rewardApi } from '../../../services/api';
+import { summarizeRewardStatus, summarizeRewardTransactions } from '../utils/rewardCommerce';
 
 export const DesktopFansPanel: React.FC = () => {
-  const { pushDrawer, hasCheckedInToday, setHasCheckedInToday, userLevel, isInfluencer } = useAppContext();
+  const { pushDrawer } = useDrawerContext();
+  const { user } = useSessionContext();
+  const { hasCheckedInToday, setHasCheckedInToday, userLevel, isInfluencer } = useCommerceContext();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [statusPayload, setStatusPayload] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      if (!user?.customer_id) {
+        setStatusPayload(null);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await rewardApi.getStatus(user.customer_id);
+        setStatusPayload(response.data ?? null);
+      } catch {
+        setStatusPayload(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    setLoading(true);
+    fetchStatus();
+  }, [user?.customer_id]);
+
+  const statusSummary = useMemo(() => summarizeRewardStatus(statusPayload), [statusPayload]);
+  const transactionSummary = useMemo(
+    () => summarizeRewardTransactions(statusPayload?.transactions),
+    [statusPayload]
+  );
+  const averageProgress = useMemo(() => {
+    const rows = statusSummary.orderRows;
+    if (rows.length === 0) return 0;
+    const total = rows.reduce((sum, row) => sum + row.currentPeriod, 0);
+    return Math.max(0, Math.min(100, (total / rows.length / 20) * 100));
+  }, [statusSummary.orderRows]);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText('VORTEX888');
+    navigator.clipboard.writeText(statusSummary.referralCode || user?.referral_code || '');
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -34,8 +63,8 @@ export const DesktopFansPanel: React.FC = () => {
         {/* Stats overview */}
         <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 mb-6">
           {[
-            { label: 'Total Fans',      value: '128',      sub: '+12 vs last month', color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/20', icon: Users },
-            { label: 'Total Earnings',  value: '$342.50',  sub: '$48.50 this month', color: 'text-emerald-500',bg: 'bg-emerald-50 dark:bg-emerald-900/20',icon: TrendingUp },
+            { label: 'Total Fans',      value: String(statusSummary.totalFans),      sub: 'Invited users', color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/20', icon: Users },
+            { label: 'Total Earnings',  value: `$${transactionSummary.lifetimeEarnings.toFixed(2)}`,  sub: 'Completed reward income', color: 'text-emerald-500',bg: 'bg-emerald-50 dark:bg-emerald-900/20',icon: TrendingUp },
             { label: 'Referral Rate',   value: isInfluencer ? '5.0%' : userLevel === 'Gold' ? '4.0%' : userLevel === 'Silver' ? '3.0%' : '2.0%', sub: `${userLevel} tier`, color: 'text-blue-500',   bg: 'bg-blue-50 dark:bg-blue-900/20',     icon: Zap },
             { label: 'Fan Cashback Rate', value: isInfluencer ? '3.0%' : '1.0%',  sub: 'Cashback from friend orders',  color: 'text-amber-500',  bg: 'bg-amber-50 dark:bg-amber-900/20',   icon: Trophy },
           ].map(s => (
@@ -56,18 +85,18 @@ export const DesktopFansPanel: React.FC = () => {
             <div>
               <div className="text-[12px] font-black text-zinc-400 uppercase tracking-widest mb-1">Daily Cashback Progress</div>
               <div className="flex items-baseline gap-2">
-                <span className="text-[32px] font-black text-zinc-900 dark:text-white">$45.80</span>
-                <span className="text-[13px] text-orange-500 font-bold">Pending</span>
+                <span className="text-[32px] font-black text-zinc-900 dark:text-white">${statusSummary.pendingCashbackAmount.toFixed(2)}</span>
+                <span className="text-[13px] text-orange-500 font-bold">{loading ? 'Loading' : 'Pending'}</span>
               </div>
             </div>
             <div className="text-right">
-              <div className="text-[13px] font-black text-orange-500">As fast as 4 days to settle</div>
-              <div className="text-[12px] text-zinc-400">3 orders syncing</div>
+              <div className="text-[13px] font-black text-orange-500">{statusSummary.activePlanCount} active check-in plan(s)</div>
+              <div className="text-[12px] text-zinc-400">{statusSummary.orderRows.length} orders syncing</div>
             </div>
           </div>
 
           <div className="h-2 w-full bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden mb-4">
-            <div className="h-full rounded-full" style={{ width: '65%', background: 'linear-gradient(90deg, #FF7A3D 0%, #E8450A 100%)', boxShadow: '0 0 10px rgba(232,69,10,0.3)' }} />
+            <div className="h-full rounded-full" style={{ width: `${averageProgress}%`, background: 'linear-gradient(90deg, #FF7A3D 0%, #E8450A 100%)', boxShadow: '0 0 10px rgba(232,69,10,0.3)' }} />
           </div>
 
           <button
@@ -96,17 +125,20 @@ export const DesktopFansPanel: React.FC = () => {
               <div className="grid grid-cols-5 gap-2 px-5 py-2.5 text-[11px] font-black text-zinc-400 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800">
                 <span className="col-span-2">Order</span><span>Stage</span><span>Rate</span><span className="text-right">Est. Amount</span>
               </div>
-              {ORDER_DETAILS.map(o => (
+              {statusSummary.orderRows.map(o => (
                 <div key={o.id} className="grid grid-cols-5 gap-2 items-center px-5 py-3 border-b border-zinc-50 dark:border-zinc-800/50 hover:bg-zinc-50 dark:hover:bg-white/3 transition-colors">
                   <div className="col-span-2">
                     <div className="text-[12px] font-semibold text-orange-500 underline cursor-pointer hover:text-orange-600" onClick={() => pushDrawer('order_detail')}>{o.id}</div>
-                    <div className="text-[11px] text-zinc-400 truncate">{o.name}</div>
+                    <div className="text-[11px] text-zinc-400 truncate">{o.rawStatus}</div>
                   </div>
-                  <span className="text-[12px] font-semibold text-zinc-700 dark:text-zinc-300">{o.phase}</span>
-                  <span className="text-[12px] font-semibold text-zinc-700 dark:text-zinc-300">{o.rate}</span>
-                  <span className="text-[13px] font-black text-emerald-500 text-right">{o.est}</span>
+                  <span className="text-[12px] font-semibold text-zinc-700 dark:text-zinc-300">{o.currentPeriod}/20</span>
+                  <span className="text-[12px] font-semibold text-zinc-700 dark:text-zinc-300">{(isInfluencer ? 5 : 3).toFixed(1)}%</span>
+                  <span className="text-[13px] font-black text-emerald-500 text-right">${o.estimatedAmount.toFixed(2)}</span>
                 </div>
               ))}
+              {statusSummary.orderRows.length === 0 && (
+                <div className="px-5 py-6 text-center text-[12px] font-semibold text-zinc-400">No cashback plans yet.</div>
+              )}
             </div>
           )}
         </div>
@@ -144,7 +176,7 @@ export const DesktopFansPanel: React.FC = () => {
             <div className="absolute -top-6 -right-6 w-24 h-24 rounded-full bg-white/10 blur-2xl pointer-events-none" />
             <div className="relative z-10">
               <div className="text-[11px] font-black text-white/70 uppercase tracking-widest mb-2">My Referral Code</div>
-              <div className="text-[22px] font-black text-white tracking-wider mb-4">VORTEX888</div>
+              <div className="text-[22px] font-black text-white tracking-wider mb-4">{statusSummary.referralCode || user?.referral_code || '--'}</div>
               <div className="flex gap-2">
                 <button onClick={handleCopy} className="flex-1 flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 py-2 rounded-xl text-white text-[12px] font-semibold transition-colors">
                   <Copy className="w-3.5 h-3.5" /> {copied ? 'Copied!' : 'Copy'}
@@ -161,7 +193,12 @@ export const DesktopFansPanel: React.FC = () => {
         <div className="p-4">
           <div className="text-[11px] font-black text-zinc-400 uppercase tracking-widest mb-3">Earnings Breakdown</div>
           <div className="space-y-2.5">
-            {BREAKDOWN.map(b => (
+            {[
+              { label: 'Fan Rewards', amount: transactionSummary.breakdown.fan.amount, count: transactionSummary.breakdown.fan.count, icon: Users, color: 'text-purple-500', bg: 'bg-purple-50 dark:bg-purple-900/20', border: 'border-purple-200 dark:border-purple-800' },
+              { label: 'Referral Rewards', amount: transactionSummary.breakdown.referral.amount, count: transactionSummary.breakdown.referral.count, icon: Zap, color: 'text-blue-500', bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-200 dark:border-blue-800' },
+              { label: 'Stage Cashback', amount: transactionSummary.breakdown.cashback.amount, count: transactionSummary.breakdown.cashback.count, icon: Target, color: 'text-emerald-500', bg: 'bg-emerald-50 dark:bg-emerald-900/20', border: 'border-emerald-200 dark:border-emerald-800' },
+              { label: 'Other Rewards', amount: transactionSummary.breakdown.other.amount + transactionSummary.breakdown.refund.amount, count: transactionSummary.breakdown.other.count + transactionSummary.breakdown.refund.count, icon: Bot, color: 'text-cyan-500', bg: 'bg-cyan-50 dark:bg-cyan-900/20', border: 'border-cyan-200 dark:border-cyan-800' },
+            ].map(b => (
               <div key={b.label} className={`flex items-center gap-3 p-3 rounded-xl border ${b.bg} ${b.border}`}>
                 <div className={`w-8 h-8 rounded-xl bg-white dark:bg-zinc-900 flex items-center justify-center shadow-sm`}>
                   <b.icon className={`w-4 h-4 ${b.color}`} />
@@ -170,7 +207,7 @@ export const DesktopFansPanel: React.FC = () => {
                   <div className="text-[12px] font-semibold text-zinc-700 dark:text-zinc-300">{b.label}</div>
                   <div className="text-[10px] text-zinc-400">{b.count} records</div>
                 </div>
-                <div className={`text-[14px] font-black ${b.color}`}>{b.amount}</div>
+                <div className={`text-[14px] font-black ${b.color}`}>${b.amount.toFixed(2)}</div>
               </div>
             ))}
           </div>

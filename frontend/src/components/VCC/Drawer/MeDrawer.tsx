@@ -1,25 +1,52 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Settings, ChevronRight, CreditCard, MapPin, Ticket, Camera, Star, Package, Heart, Edit3 } from 'lucide-react';
-import { DrawerType, useAppContext } from '../AppContext';
-import { authApi } from '../../../services/api';
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { DrawerType } from '../contexts/types';
+import { authApi, rewardApi } from '../../../services/api';
 import { clearStoredAuthTokens } from '../../../services/authSession';
+import { buildAvatarFallback, formatMemberId, getDisplayName } from '../utils/userIdentity';
+import { summarizeRewardTransactions } from '../utils/rewardCommerce';
 
 export const MeDrawer = () => {
-  const { setActiveDrawer, pushDrawer, t, userLevel, userBalance, isPrime, isAuthenticated, user, setUser } = useAppContext();
-
-  const [userProfile, setUserProfile] = useState({
-    name: user?.nickname || user?.first_name || 'Guest',
-    avatar: user?.avatar_url || 'https://ui-avatars.com/api/?name=Guest&background=e5e7eb&color=374151&size=128',
-    level: isAuthenticated ? `${userLevel} Member` : 'Not Logged In',
-    isKOL: isAuthenticated ? isPrime : false
-  });
+  const { setActiveDrawer, pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { userLevel, userBalance, isPrime } = useCommerceContext();
+  const { isAuthenticated, user, setUser } = useSessionContext();
 
   const [isEditing, setIsEditing] = useState(false);
-  const [editName, setEditName] = useState(userProfile.name);
+  const [editName, setEditName] = useState(getDisplayName(user));
+  const [rewardIncome, setRewardIncome] = useState(0);
+
+  const displayName = editName.trim() || getDisplayName(user);
+  const avatarUrl = user?.avatar_url || buildAvatarFallback(user);
+  const membershipLabel = isAuthenticated ? `${user?.user_tier ?? userLevel} Member` : 'Not Logged In';
+  const memberId = formatMemberId(user?.customer_id);
+
+  useEffect(() => {
+    const hydrateRewardIncome = async () => {
+      if (!isAuthenticated || !user?.customer_id) {
+        setRewardIncome(0);
+        return;
+      }
+
+      try {
+        const response = await rewardApi.getTransactions(user.customer_id);
+        const transactions = Array.isArray(response.data) ? response.data : [];
+        const summary = summarizeRewardTransactions(transactions);
+        setRewardIncome(summary.lifetimeEarnings);
+      } catch {
+        setRewardIncome(0);
+      }
+    };
+
+    hydrateRewardIncome();
+  }, [isAuthenticated, user?.customer_id]);
 
   const handleSaveProfile = () => {
     if (!isAuthenticated) return;
-    setUserProfile(prev => ({ ...prev, name: editName }));
     setIsEditing(false);
   };
 
@@ -50,7 +77,7 @@ export const MeDrawer = () => {
             onClick={() => isAuthenticated && setIsEditing(true)}
           >
             <div className="w-[68px] h-[68px] rounded-[22px] overflow-hidden border-2 border-white dark:border-white/10 shadow-md">
-              <img src={userProfile.avatar} alt="Avatar" className="w-full h-full object-cover" />
+              <img src={avatarUrl} alt="Avatar" className="w-full h-full object-cover" />
             </div>
             {isAuthenticated && (
               <div className="absolute inset-0 rounded-[22px] bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -69,23 +96,21 @@ export const MeDrawer = () => {
             onClick={() => isAuthenticated && setIsEditing(true)}
           >
             <div className="flex items-center gap-1.5 mb-1">
-              <h2 className="text-[20px] font-bold text-gray-900 dark:text-white leading-none">
-                {userProfile.name}
-              </h2>
+              <h2 className="text-[20px] font-bold text-gray-900 dark:text-white leading-none">{displayName}</h2>
               {isAuthenticated && <Edit3 className="w-3.5 h-3.5 text-gray-400" />}
             </div>
             <div className="flex items-center gap-1.5 flex-wrap">
-              {userProfile.isKOL ? (
+              {isAuthenticated && isPrime ? (
                 <span className="bg-purple-500/10 text-purple-600 px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide border border-purple-500/20 flex items-center gap-0.5">
                   <Star className="w-3 h-3 fill-current" /> KOL
                 </span>
               ) : (
                 <span className="bg-[var(--wa-teal)]/10 text-[var(--wa-teal)] px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide border border-[var(--wa-teal)]/20">
-                  {userProfile.level}
+                  {membershipLabel}
                 </span>
               )}
-              {isAuthenticated && (
-                <span className="text-[11px] text-gray-400 font-mono">ID: 0BUCK_9527</span>
+              {memberId && (
+                <span className="text-[11px] text-gray-400 font-mono">ID: {memberId}</span>
               )}
             </div>
           </div>
@@ -108,7 +133,7 @@ export const MeDrawer = () => {
         {isEditing && (
           <div className="absolute inset-0 bg-white/95 dark:bg-[#1C1C1E]/95 backdrop-blur-sm z-20 flex items-center px-5 gap-3 animate-in fade-in zoom-in-95 duration-200">
             <div className="relative w-12 h-12 bg-gray-100 dark:bg-white/5 rounded-[16px] flex items-center justify-center overflow-hidden border border-gray-200 dark:border-white/10">
-              <img src={userProfile.avatar} className="w-full h-full object-cover opacity-50" />
+              <img src={avatarUrl} className="w-full h-full object-cover opacity-50" />
               <Camera className="w-4 h-4 text-gray-600 dark:text-white absolute" />
             </div>
             <div className="flex-1">
@@ -163,7 +188,7 @@ export const MeDrawer = () => {
             <span className="text-[18px]">👥</span>
           </div>
           <div className="font-mono font-black text-[22px] text-gray-900 dark:text-white leading-none mb-1">
-            $342
+            ${rewardIncome.toFixed(2)}
           </div>
           <div className="text-[11px] text-gray-400 font-medium flex items-center gap-1">
             {t('me.fans_cashback')}

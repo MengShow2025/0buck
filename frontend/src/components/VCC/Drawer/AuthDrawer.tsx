@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
 import { Mail, KeyRound, ChevronLeft, ArrowRight, Zap } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
 import { authApi } from '../../../services/api';
 import { clearStoredAuthTokens } from '../../../services/authSession';
+import { extractUserFromMeResponse } from '../utils/meResponseParser';
 
 type AuthStep = 'email' | 'password';
 
@@ -16,7 +19,9 @@ export const AuthDrawer: React.FC = () => {
   const [isExistingUser, setIsExistingUser] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
-  const { setUser, pendingAuthAction, setPendingAuthAction, setActiveDrawer, t } = useAppContext();
+    const { setUser, pendingAuthAction, setPendingAuthAction } = useSessionContext();
+  const { setActiveDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
 
   const currentStepIndex = STEPS.indexOf(step);
 
@@ -70,7 +75,7 @@ export const AuthDrawer: React.FC = () => {
         response = await authApi.register({ email, password, confirm_password: confirmPassword });
       }
 
-      const userData = response.data.user;
+      const userData = extractUserFromMeResponse(response.data);
       const accessToken = response.data?.access_token || response.data?.token;
       const refreshToken = response.data?.refresh_token;
       if (accessToken) {
@@ -79,15 +84,11 @@ export const AuthDrawer: React.FC = () => {
       if (refreshToken) {
         localStorage.setItem('refresh_token', String(refreshToken));
       }
-      setUser({
-        customer_id: userData.customer_id || Math.floor(Math.random() * 1000),
-        email: email,
-        nickname: userData.first_name || email.split('@')[0],
-        avatar_url: `https://i.pravatar.cc/150?img=${Math.floor(Math.random() * 50)}`,
-        user_tier: 'Silver',
-        user_type: userData.user_type || 'customer',
-        is_two_factor_enabled: false
-      });
+      if (!userData) {
+        throw new Error('Missing user profile in authentication response');
+      }
+
+      setUser(userData);
 
       if (pendingAuthAction) {
         pendingAuthAction();

@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { Camera, ChevronRight } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { buildAvatarFallback, getDisplayName } from '../utils/userIdentity';
 
 export const PersonalInfoDrawer: React.FC = () => {
-  const { user, setUser, t } = useAppContext();
-  const [nickname, setNickname] = useState(user?.nickname || '0Buck User');
+  const { user } = useSessionContext();
+  const { t } = usePreferenceContext();
+  const [nickname, setNickname] = useState(getDisplayName(user));
   
   return (
     <div className="h-full flex flex-col bg-[#F2F2F7] dark:bg-[#000000] overflow-y-auto pb-20">
@@ -15,7 +18,7 @@ export const PersonalInfoDrawer: React.FC = () => {
           <div className="relative group cursor-pointer">
             <div className="w-24 h-24 rounded-full bg-gray-200 dark:bg-gray-800 overflow-hidden border-4 border-white dark:border-[#1C1C1E] shadow-sm">
               <img 
-                src={user?.avatar_url || "https://api.dicebear.com/7.x/notionists/svg?seed=Felix&backgroundColor=FF5C00"} 
+                src={user?.avatar_url || buildAvatarFallback(user)} 
                 alt="Avatar"
                 className="w-full h-full object-cover"
               />
@@ -47,7 +50,7 @@ export const PersonalInfoDrawer: React.FC = () => {
             {/* Email (Readonly) */}
             <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-100 dark:border-white/5">
               <span className="text-[15px] text-gray-900 dark:text-white">{t('email')}</span>
-              <span className="text-[15px] text-gray-400">{user?.email || 'user@example.com'}</span>
+              <span className="text-[15px] text-gray-400">{user?.email || '--'}</span>
             </div>
 
             {/* Level */}

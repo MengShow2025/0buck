@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { Bell, ChevronRight, ShoppingBag, CreditCard, Gift, UserPlus, Trash2, MoreHorizontal, CheckCircle2, Truck, Zap, Heart, MessageSquare, Send, Star, Package, Award, Bot, TrendingUp, ShieldCheck } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 const NotificationCard: React.FC<{ notif: any }> = ({ notif }) => {
-  const { pushDrawer, t } = useAppContext();
+    const { pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
   const [isReplying, setIsReplying] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [hasReplied, setHasReplied] = useState(false);
@@ -162,7 +165,9 @@ const NotificationCard: React.FC<{ notif: any }> = ({ notif }) => {
 };
 
 export const NotificationDrawer: React.FC = () => {
-  const { pushDrawer, t, isAuthenticated } = useAppContext();
+    const { pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { isAuthenticated } = useSessionContext();
 
   const TODAY = t('common.today') || 'Today';
   const YESTERDAY = t('common.yesterday') || 'Yesterday';

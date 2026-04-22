@@ -6,7 +6,10 @@ import {
   Monitor, LogOut, Info, HardDrive, ChevronDown, Link2,
   MessageSquare, Send, MessageCircle, Gamepad2, Copy
 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useAIContext } from '../contexts/AIContext';
+import { useSessionContext } from '../contexts/SessionContext';
 import { aiApi, imApi } from '../../../services/api';
 
 // Internal Custom Select Component for downward floating menu
@@ -58,17 +61,10 @@ const CustomSelect = ({ value, options, onChange, width = "w-36" }: { value: str
 };
 
 export const SettingsDrawer: React.FC = () => {
-  const { 
-    theme, setTheme, 
-    language, setLanguage,
-    notifications, setNotifications,
-    aiPersona, setAiPersona,
-    aiCustomInstructions, setAiCustomInstructions,
-    aiMemoryTags, setAiMemoryTags,
-    user, pushDrawer,
-    currency, setCurrency,
-    t
-  } = useAppContext();
+    const { theme, setTheme, language, setLanguage, notifications, setNotifications, currency, setCurrency, t } = usePreferenceContext();
+  const { aiPersona, setAiPersona, aiCustomInstructions, setAiCustomInstructions, aiMemoryTags, setAiMemoryTags } = useAIContext();
+  const { user } = useSessionContext();
+  const { pushDrawer } = useDrawerContext();
 
   const [instructions, setInstructions] = useState(aiCustomInstructions);
   const [cacheSize, setCacheSize] = useState('24.5 MB');
@@ -278,7 +274,7 @@ export const SettingsDrawer: React.FC = () => {
                 </div>
                 <div className="text-left">
                   <div className="text-[15px] font-medium text-gray-900 dark:text-white">{t('settings.nickname')}</div>
-                  <div className="text-xs text-gray-500">{user?.email || 'user@example.com'}</div>
+                  <div className="text-xs text-gray-500">{user?.email || '--'}</div>
                 </div>
               </div>
               <ChevronRight className="w-4 h-4 text-gray-400" />

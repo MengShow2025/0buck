@@ -2,7 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { Bot, Sparkles } from 'lucide-react';
 import { CustomMessageUI } from '../CustomMessageUI';
 import { VCCInput } from '../VCCInput';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
 import BongoCat from '../BongoCat';
 
 interface Message {
@@ -20,7 +20,7 @@ interface Props {
 }
 
 export const DesktopChatView: React.FC<Props> = ({ messages, isAiTyping, onSendMessage }) => {
-  const { t } = useAppContext();
+    const { t } = usePreferenceContext();
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

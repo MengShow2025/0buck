@@ -1,9 +1,11 @@
 import React from 'react';
 import { Heart, MessageSquare, Share2, Flame, TrendingUp, Users } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export const SquareListDrawer: React.FC = () => {
-  const { activeDrawer, t, pushDrawer } = useAppContext();
+    const { activeDrawer, pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
 
   if (activeDrawer === 'all_group_buy') {
     return (

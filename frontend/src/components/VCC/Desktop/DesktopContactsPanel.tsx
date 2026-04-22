@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Search, Users, ChevronRight, UserPlus, Clock, MessageCircle, Star, UserCheck, MoreHorizontal, ChevronDown } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { friendsApi } from '../../../services/api';
 
 export const DesktopContactsPanel: React.FC = () => {
-  const { pushDrawer, setActiveChat, requireAuth } = useAppContext();
+    const { pushDrawer, setActiveChat } = useDrawerContext();
+  const { requireAuth } = useSessionContext();
   const [search, setSearch] = useState('');
   const [contacts, setContacts] = useState<any[]>([]);
   const [newFriends, setNewFriends] = useState<any[]>([]);

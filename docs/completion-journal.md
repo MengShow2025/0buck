@@ -407,3 +407,21 @@
 ## 一、本批完成（通讯录上线联测模板）
 1、新增 A/B/C 账号制 PASS/FAIL 验收矩阵：`docs/contacts-passfail-matrix.md`。  
 2、覆盖鉴权入口、好友状态机、拉黑收敛、桌面移动一致性、错误语义五大类上线风险。  
+
+## 一、本批完成（P0+P1 真实数据收口）
+1、完成身份数据源收口：`SessionContext` 统一兼容 `/users/me` 与 `/auth/me`，并移除个人页中的固定会员号、默认推荐码、默认邮箱与游客头像占位。  
+2、完成商业态主数据源切换：`CommerceContext` 改为真实 `rewardApi.getStatus(customer_id)` + `orderApi.getMyOrders()` 驱动余额、积分、等级、费率和订单摘要；未登录统一为空态。  
+3、完成奖励与订单抽屉首轮真实化：`PointsHistoryDrawer`、`PointsExchangeDrawer`、`ShareDrawer`、`DesktopOrdersView`、`OrderCenterDrawer`、`OrderDetailDrawer`、`OrderTrackingDrawer` 改为真实数据或空态降级。  
+4、完成剩余 P1 面板真实化：`DesktopWalletView`、`DesktopFansPanel`、`FanCenterDrawer`、`RewardHistoryDrawer` 改为真实奖励状态/流水聚合。  
+5、完成通知与地址收口：`DesktopNotificationsView` 改为真实订单与奖励流水聚合；`AddressDrawer` 改为真实地址 CRUD（列表/新增/编辑/删除/设默认）。  
+6、新增工具与测试：`rewardCommerce.*`、`notificationFeed.*`，固定奖励聚合、通知分组等口径，避免回退到 mock。  
+7、补齐移动端个人中心残留占位符：`MeDrawer` 中粉丝收益卡片由硬编码 `$342` 改为真实奖励流水汇总；`0BUCK_9527` 已确认不在当前源码展示逻辑中。  
+
+## 二、本批验证（P0+P1 真实数据收口）
+1、前端回归：`npm test -- src/components/VCC/utils/rewardCommerce.test.ts src/components/VCC/utils/notificationFeed.test.ts src/components/VCC/contexts/SessionContext.test.tsx src/components/VCC/contexts/CommerceContext.test.tsx src/components/VCC/utils/meResponseParser.test.ts src/components/VCC/utils/userIdentity.test.ts src/components/VCC/utils/rewardStatus.test.ts src/components/VCC/utils/orderSummary.test.ts` 通过（`22 passed`）。  
+2、前端构建：`npm run build` 通过（产物 `dist/assets/index-BJE7jOLH.js`）。  
+3、浏览器预览：本地 `http://localhost:5174/` 可打开，首页首屏交互可进入主界面。  
+
+## 三、本批后续建议测试（P0+P1 真实数据收口）
+1、登录真实账号后手工回归：钱包、粉丝中心、奖励历史、通知页应只展示真实流水衍生内容。  
+2、地址管理建议做一轮新增/编辑/设默认/删除全链路验证，确认 `shipping_addresses` 与结账入口联动一致。  

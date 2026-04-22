@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronLeft, Users } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { friendsApi, groupsApi } from '../../../services/api';
 
 export const GroupCreateDrawer: React.FC = () => {
-  const { popDrawer, setActiveChat, pushDrawer } = useAppContext();
+    const { popDrawer, setActiveChat, pushDrawer } = useDrawerContext();
   const [name, setName] = useState('');
   const [friends, setFriends] = useState<any[]>([]);
   const [selected, setSelected] = useState<number[]>([]);

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Search, Flame, Heart, MessageSquare, Share2, Play, TrendingUp, Zap, Send, Trash2 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { socialApi } from '../../../services/api';
 import { mapSocialComments } from '../utils/socialComments';
 
@@ -20,7 +20,7 @@ const GROUP_BUY = [
 ];
 
 export const DesktopSquarePanel: React.FC = () => {
-  const { pushDrawer } = useAppContext();
+    const { pushDrawer } = useDrawerContext();
   const [activeCategory, setActiveCategory] = useState('All');
   const [search, setSearch] = useState('');
   const [feedItems, setFeedItems] = useState<any[]>([]);

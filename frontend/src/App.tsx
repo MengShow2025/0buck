@@ -4,7 +4,10 @@ import { VCCInput } from './components/VCC/VCCInput';
 import { CustomMessageUI } from './components/VCC/CustomMessageUI';
 import { GlobalDrawer } from './components/VCC/Drawer/GlobalDrawer';
 import { SplashScreen } from './components/VCC/SplashScreen';
-import { useAppContext } from './components/VCC/AppContext';
+import { useCommerceContext } from './components/VCC/contexts/CommerceContext';
+import { usePreferenceContext } from './components/VCC/contexts/PreferenceContext';
+import { useSessionContext } from './components/VCC/contexts/SessionContext';
+import { useDrawerContext } from './components/VCC/contexts/DrawerContext';
 import ArchitectureDiagram from './components/VCC/VisualCompanion';
 import { DesktopLayout } from './components/VCC/Desktop/DesktopLayout';
 import { aiApi } from './services/api';
@@ -36,18 +39,10 @@ interface Message {
 const initialMessages: Message[] = [];
 
 function MainApp() {
-  const { 
-    activeDrawer, setActiveDrawer, t, setOnPaymentSuccess, 
-    hasCheckedInToday, setHasCheckedInToday,
-    userBalance, setUserBalance,
-    userPoints, setUserPoints,
-    isPrime, setIsPrime,
-    isInfluencer, setIsInfluencer,
-    isAuthenticated,
-    orders, pushDrawer,
-    setWithdrawalMethod,
-    setTheme, setLanguage, setCurrency
-  } = useAppContext();
+    const { activeDrawer, setActiveDrawer, pushDrawer } = useDrawerContext();
+  const { t, setTheme, setLanguage, setCurrency } = usePreferenceContext();
+  const { setOnPaymentSuccess, hasCheckedInToday, setHasCheckedInToday, userBalance, setUserBalance, userPoints, setUserPoints, isPrime, setIsPrime, isInfluencer, setIsInfluencer, orders, setWithdrawalMethod } = useCommerceContext();
+  const { isAuthenticated } = useSessionContext();
 
   const initialMessagesWithTranslations = useMemo(() => {
     if (typeof t !== 'function') return []; // Return empty array during initialization to prevent undefined errors

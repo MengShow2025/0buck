@@ -1,31 +1,129 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowUpRight, History, Zap, Target, Users, TrendingUp, CreditCard, Crown, ArrowDownToLine, RefreshCcw, Banknote, Bot, ChevronRight } from 'lucide-react';
-import { useAppContext } from '../AppContext';
-
-const TX_HISTORY = [
-  { id: 'TX-001', type: 'cashback',       icon: <Target className="w-4 h-4 text-emerald-500" />,  bg: 'bg-emerald-50 dark:bg-emerald-900/20', title: 'Cashback Stage 7',     desc: 'ORD-001',    amount: '+$15.00', positive: true,  date: '10-25 14:30' },
-  { id: 'TX-002', type: 'fan',            icon: <Users className="w-4 h-4 text-purple-500" />,    bg: 'bg-purple-50 dark:bg-purple-900/20',   title: 'Fan Reward',           desc: 'Alex_M',    amount: '+$12.50', positive: true,  date: '10-24 09:15' },
-  { id: 'TX-003', type: 'referral',       icon: <Zap className="w-4 h-4 text-blue-500" />,        bg: 'bg-blue-50 dark:bg-blue-900/20',       title: 'Referral Reward',      desc: 'Titanium Watch', amount: '+$45.00', positive: true,  date: '10-22 18:45' },
-  { id: 'TX-004', type: 'payment',        icon: <CreditCard className="w-4 h-4 text-zinc-500" />, bg: 'bg-zinc-100 dark:bg-zinc-800',         title: 'Order Payment',        desc: 'ORD-099',   amount: '-$120.00',positive: false, date: '10-21 11:20' },
-  { id: 'TX-005', type: 'withdraw',       icon: <ArrowDownToLine className="w-4 h-4 text-orange-500" />, bg: 'bg-orange-50 dark:bg-orange-900/20', title: 'Withdrawal',  desc: 'Fee $2.00',amount: '-$500.00',positive: false, date: '10-20 09:10' },
-  { id: 'TX-006', type: 'refund',         icon: <RefreshCcw className="w-4 h-4 text-indigo-500" />,bg: 'bg-indigo-50 dark:bg-indigo-900/20', title: 'Order Refund',          desc: 'ORD-052',   amount: '+$35.80', positive: true,  date: '10-19 08:05' },
-  { id: 'TX-007', type: 'crowdfund_refund',icon: <Banknote className="w-4 h-4 text-rose-500" />, bg: 'bg-rose-50 dark:bg-rose-900/20',       title: 'Crowdfund Overflow Refund', desc: 'C2W-X',     amount: '+$18.50', positive: true,  date: '10-15 16:30' },
-  { id: 'TX-008', type: 'ai_reward',      icon: <Bot className="w-4 h-4 text-cyan-500" />,        bg: 'bg-cyan-50 dark:bg-cyan-900/20',       title: 'AI Task Reward',       desc: 'Daily task',   amount: '+$2.50',  positive: true,  date: '10-14 10:00' },
-];
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { rewardApi } from '../../../services/api';
+import { classifyRewardTransaction, summarizeRewardTransactions } from '../utils/rewardCommerce';
 
 export const DesktopWalletView: React.FC = () => {
-  const { userBalance, userPoints, pushDrawer, isPrime } = useAppContext();
+  const { userBalance, userPoints, isPrime } = useCommerceContext();
+  const { pushDrawer } = useDrawerContext();
+  const { user } = useSessionContext();
   const [activeFilter, setActiveFilter] = useState<'all' | 'income' | 'expense'>('all');
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered = TX_HISTORY.filter(tx =>
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      if (!user?.customer_id) {
+        setTransactions([]);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const response = await rewardApi.getTransactions(user.customer_id);
+        setTransactions(Array.isArray(response.data) ? response.data : []);
+      } catch {
+        setTransactions([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    setLoading(true);
+    fetchTransactions();
+  }, [user?.customer_id]);
+
+  const summary = useMemo(() => summarizeRewardTransactions(transactions), [transactions]);
+
+  const normalizedTransactions = useMemo(() => {
+    return transactions.map((tx) => {
+      const category = classifyRewardTransaction(tx);
+      const amount = Number(tx.amount) || 0;
+      const positive = amount >= 0;
+
+      const metadata = {
+        cashback: {
+          icon: <Target className="w-4 h-4 text-emerald-500" />,
+          bg: 'bg-emerald-50 dark:bg-emerald-900/20',
+          title: 'Cashback Reward',
+        },
+        fan: {
+          icon: <Users className="w-4 h-4 text-purple-500" />,
+          bg: 'bg-purple-50 dark:bg-purple-900/20',
+          title: 'Fan Reward',
+        },
+        referral: {
+          icon: <Zap className="w-4 h-4 text-blue-500" />,
+          bg: 'bg-blue-50 dark:bg-blue-900/20',
+          title: 'Referral Reward',
+        },
+        payment: {
+          icon: <CreditCard className="w-4 h-4 text-zinc-500" />,
+          bg: 'bg-zinc-100 dark:bg-zinc-800',
+          title: 'Order Payment',
+        },
+        withdraw: {
+          icon: <ArrowDownToLine className="w-4 h-4 text-orange-500" />,
+          bg: 'bg-orange-50 dark:bg-orange-900/20',
+          title: 'Withdrawal',
+        },
+        refund: {
+          icon: <RefreshCcw className="w-4 h-4 text-indigo-500" />,
+          bg: 'bg-indigo-50 dark:bg-indigo-900/20',
+          title: 'Refund',
+        },
+        other: {
+          icon: <Banknote className="w-4 h-4 text-rose-500" />,
+          bg: 'bg-rose-50 dark:bg-rose-900/20',
+          title: 'Wallet Update',
+        },
+      }[category];
+
+      return {
+        id: String(tx.id || `${category}-${tx.created_at || ''}`),
+        positive,
+        icon: metadata.icon,
+        bg: metadata.bg,
+        title: metadata.title,
+        desc: tx.description || tx.order_id || tx.status || '--',
+        amount: `${positive ? '+' : '-'}$${Math.abs(amount).toFixed(2)}`,
+        date: tx.created_at ? new Date(tx.created_at).toLocaleString() : '--',
+      };
+    });
+  }, [transactions]);
+
+  const filtered = normalizedTransactions.filter((tx) =>
     activeFilter === 'all' || (activeFilter === 'income' ? tx.positive : !tx.positive)
   );
 
   const EARN_ITEMS = [
-    { label: 'Total Cashback',   value: '$342.50', icon: <Target className="w-4 h-4 text-emerald-500" />, sub: '15 of 20 stages completed' },
-    { label: 'Referral Earnings', value: '$128.00', icon: <Zap className="w-4 h-4 text-blue-500" />,    sub: '8 friends referred' },
-    { label: 'Fan Rewards',   value: '$76.50',  icon: <Users className="w-4 h-4 text-purple-500" />, sub: '14 fan orders' },
-    { label: 'AI Task Rewards', value: '$24.00', icon: <Bot className="w-4 h-4 text-cyan-500" />,     sub: '12 completed this month' },
+    {
+      label: 'Total Cashback',
+      value: `$${summary.breakdown.cashback.amount.toFixed(2)}`,
+      icon: <Target className="w-4 h-4 text-emerald-500" />,
+      sub: `${summary.breakdown.cashback.count} reward records`,
+    },
+    {
+      label: 'Referral Earnings',
+      value: `$${summary.breakdown.referral.amount.toFixed(2)}`,
+      icon: <Zap className="w-4 h-4 text-blue-500" />,
+      sub: `${summary.breakdown.referral.count} commission records`,
+    },
+    {
+      label: 'Fan Rewards',
+      value: `$${summary.breakdown.fan.amount.toFixed(2)}`,
+      icon: <Users className="w-4 h-4 text-purple-500" />,
+      sub: `${summary.breakdown.fan.count} fan records`,
+    },
+    {
+      label: 'Refunds & Other',
+      value: `$${(summary.breakdown.refund.amount + summary.breakdown.other.amount).toFixed(2)}`,
+      icon: <Bot className="w-4 h-4 text-cyan-500" />,
+      sub: `${summary.breakdown.refund.count + summary.breakdown.other.count} records`,
+    },
   ];
 
   return (
@@ -142,19 +240,25 @@ export const DesktopWalletView: React.FC = () => {
               </div>
             </div>
             <div className="space-y-2">
-              {filtered.map(tx => (
-                <div key={tx.id} className="flex items-center gap-4 bg-white dark:bg-[#18181B] p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tx.bg}`}>{tx.icon}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-semibold text-zinc-900 dark:text-white">{tx.title}</div>
-                    <div className="text-[11px] text-zinc-400">{tx.desc}</div>
+              {loading ? (
+                <div className="text-center py-10 text-[13px] font-semibold text-zinc-400">Loading transactions...</div>
+              ) : filtered.length === 0 ? (
+                <div className="text-center py-10 text-[13px] font-semibold text-zinc-400">No wallet activity yet.</div>
+              ) : (
+                filtered.map(tx => (
+                  <div key={tx.id} className="flex items-center gap-4 bg-white dark:bg-[#18181B] p-4 rounded-2xl border border-zinc-200 dark:border-zinc-800 hover:border-zinc-300 dark:hover:border-zinc-700 transition-colors">
+                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${tx.bg}`}>{tx.icon}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-semibold text-zinc-900 dark:text-white">{tx.title}</div>
+                      <div className="text-[11px] text-zinc-400">{tx.desc}</div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className={`text-[15px] font-black ${tx.positive ? 'text-emerald-500' : 'text-zinc-600 dark:text-zinc-300'}`}>{tx.amount}</div>
+                      <div className="text-[10px] text-zinc-400">{tx.date}</div>
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <div className={`text-[15px] font-black ${tx.positive ? 'text-emerald-500' : 'text-zinc-600 dark:text-zinc-300'}`}>{tx.amount}</div>
-                    <div className="text-[10px] text-zinc-400">{tx.date}</div>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

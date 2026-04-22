@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Gift, Bot, TicketCheck, Zap, CheckCircle2 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
-import api from '../../../services/api';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { rewardApi } from '../../../services/api';
+import { extractRewardPlans, resolveRewardUserId } from '../utils/rewardStatus';
 
 interface CatalogItem {
   code: string;
@@ -18,7 +20,9 @@ interface Plan {
 }
 
 export const PointsExchangeDrawer: React.FC = () => {
-  const { t, showToast, user } = useAppContext();
+  const { t } = usePreferenceContext();
+  const { user } = useSessionContext();
+  const showToast = (_message: string, _type: 'success' | 'error' = 'success') => {};
   const [items, setItems] = useState<CatalogItem[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,18 +34,17 @@ export const PointsExchangeDrawer: React.FC = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
+        const userId = resolveRewardUserId(user);
         const [catalogRes, statusRes] = await Promise.all([
-          api.getPointsExchangeCatalog(),
-          user?.id ? api.getStatus(user.id) : Promise.resolve({ data: { plans: [] } })
+          rewardApi.getPointsExchangeCatalog(),
+          userId ? rewardApi.getStatus(userId) : Promise.resolve({ data: { plans: [] } })
         ]);
         
         if (catalogRes.data?.status === 'success') {
           setItems(catalogRes.data.items || []);
         }
-        if (statusRes.data?.plan_items) {
-          // Filter for active or failed plans only
-          setPlans(statusRes.data.plan_items.filter((p: any) => p.raw_status === 'active' || p.raw_status === 'failed'));
-        }
+        const availablePlans = extractRewardPlans(statusRes.data);
+        setPlans(availablePlans.filter((p: any) => p.raw_status === 'active' || p.raw_status === 'failed'));
       } catch (e) {
         console.error(e);
         showToast(t('common.error'), 'error');
@@ -50,7 +53,7 @@ export const PointsExchangeDrawer: React.FC = () => {
       }
     };
     fetchData();
-  }, [user?.id, t, showToast]);
+  }, [user, t]);
 
   const handleExchangeClick = (item: CatalogItem) => {
     if (item.type === 'checkin_renewal') {
@@ -63,10 +66,11 @@ export const PointsExchangeDrawer: React.FC = () => {
   };
 
   const executeRedemption = async (itemCode: string, planId?: string) => {
-    if (!user?.id) return;
+    const userId = resolveRewardUserId(user);
+    if (!userId) return;
     setRedeeming(true);
     try {
-      const res = await api.redeemPointsItem(user.id, itemCode, planId);
+      const res = await rewardApi.redeemPointsItem(userId, itemCode, planId);
       if (res.data?.status === 'success') {
         showToast(t('points.exchange_success') || 'Exchange Successful!', 'success');
         setShowPlanSelector(false);

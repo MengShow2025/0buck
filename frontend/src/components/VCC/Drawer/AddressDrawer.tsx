@@ -1,29 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, Plus, CheckCircle2, Edit2, Trash2, ChevronLeft, ChevronDown, Check } from 'lucide-react';
-import { useAppContext } from '../AppContext';
- 
-const INITIAL_ADDRESSES = [
-  {
-    id: '1',
-    name: 'Long',
-    phone: '+1 123-456-7890',
-    address: '123 Artisan Ave',
-    city: 'New York',
-    state: 'NY',
-    zip: '10001',
-    isDefault: true
-  },
-  {
-    id: '2',
-    name: 'Long (Office)',
-    phone: '+1 123-456-7890',
-    address: '456 Tech Park Blvd, Suite 200',
-    city: 'San Francisco',
-    state: 'CA',
-    zip: '94105',
-    isDefault: false
-  }
-];
+import { MapPin, Plus, CheckCircle2, Edit2, Trash2, ChevronDown, Check } from 'lucide-react';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { addressApi } from '../../../services/api';
 
 const STATES: Record<string, string[]> = {
   US: ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming'],
@@ -102,10 +80,13 @@ const FloatingSelect: React.FC<FloatingSelectProps> = ({ value, options, placeho
 };
 
 export const AddressDrawer: React.FC = () => {
-  const { t } = useAppContext();
-  const [addresses, setAddresses] = useState(INITIAL_ADDRESSES);
+  const { t } = usePreferenceContext();
+  const [addresses, setAddresses] = useState<any[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
 
   const countries = [
     { label: t('address.country_us'), value: 'US' },
@@ -118,6 +99,21 @@ export const AddressDrawer: React.FC = () => {
 
   const stateOptions = (STATES[form.country] || []).map(s => ({ label: s, value: s }));
 
+  useEffect(() => {
+    const loadAddresses = async () => {
+      try {
+        const response = await addressApi.list();
+        setAddresses(Array.isArray(response.data?.addresses) ? response.data.addresses : []);
+      } catch {
+        setAddresses([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAddresses();
+  }, []);
+
   const handleFieldChange = (field: keyof typeof EMPTY_FORM, value: string | boolean) => {
     setForm((prev) => {
       const next = { ...prev, [field]: value };
@@ -128,37 +124,80 @@ export const AddressDrawer: React.FC = () => {
     });
   };
 
-  const handleSaveAddress = () => {
+  const resetForm = () => {
+    setForm(EMPTY_FORM);
+    setIsAdding(false);
+    setEditingId(null);
+  };
+
+  const handleSaveAddress = async () => {
     if (!form.name || !form.phone || !form.address1 || !form.city || !form.state || !form.zip) {
       return;
     }
 
-    const nextAddress = {
-      id: Date.now().toString(),
-      name: form.name,
-      phone: form.phone,
-      address: `${form.address1}${form.address2 ? ', ' + form.address2 : ''}`,
-      city: form.city,
-      state: form.state,
-      zip: form.zip,
-      country: form.country,
-      isDefault: form.isDefault
-    };
+    setSaving(true);
+    try {
+      const payload = {
+        name: form.name,
+        phone: form.phone,
+        country: form.country,
+        address1: form.address1,
+        address2: form.address2,
+        city: form.city,
+        state: form.state,
+        zip: form.zip,
+        isDefault: form.isDefault,
+      };
 
-    setAddresses((prev) => {
-      const normalized = form.isDefault
-        ? prev.map((item) => ({ ...item, isDefault: false }))
-        : prev;
-      return [nextAddress, ...normalized];
-    });
+      const response = editingId
+        ? await addressApi.update(editingId, payload)
+        : await addressApi.create(payload);
 
-    setForm(EMPTY_FORM);
-    setIsAdding(false);
+      setAddresses(Array.isArray(response.data?.addresses) ? response.data.addresses : []);
+      resetForm();
+    } catch {
+      // Keep current form values so user can retry.
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCancelAdd = () => {
-    setForm(EMPTY_FORM);
-    setIsAdding(false);
+    resetForm();
+  };
+
+  const handleEditAddress = (addr: any) => {
+    setEditingId(String(addr.id));
+    setForm({
+      name: addr.name || '',
+      phone: addr.phone || '',
+      country: addr.country || 'US',
+      address1: addr.address1 || '',
+      address2: addr.address2 || '',
+      city: addr.city || '',
+      state: addr.state || '',
+      zip: addr.zip || '',
+      isDefault: !!addr.isDefault,
+    });
+    setIsAdding(true);
+  };
+
+  const handleDeleteAddress = async (addressId: string) => {
+    try {
+      const response = await addressApi.remove(addressId);
+      setAddresses(Array.isArray(response.data?.addresses) ? response.data.addresses : []);
+    } catch {
+      // Keep current list when deletion fails.
+    }
+  };
+
+  const handleSetDefault = async (addressId: string) => {
+    try {
+      const response = await addressApi.setDefault(addressId);
+      setAddresses(Array.isArray(response.data?.addresses) ? response.data.addresses : []);
+    } catch {
+      // Keep current list when request fails.
+    }
   };
 
   return (
@@ -246,15 +285,26 @@ export const AddressDrawer: React.FC = () => {
               </button>
               <button
                 onClick={handleSaveAddress}
+                disabled={saving}
               className="h-12 rounded-2xl text-white font-semibold active:scale-95 transition-transform"
               style={{ background: 'linear-gradient(135deg, #FF7A3D 0%, #E8450A 100%)' }}
               >
-                {t('address.save')}
+                {saving ? t('common.loading') : t('address.save')}
               </button>
             </div>
           </div>
         ) : (
-          addresses.map((addr) => (
+          loading ? (
+            <div className="bg-white dark:bg-[#1C1C1E] rounded-[22px] p-6 text-center text-[13px] font-semibold text-gray-400 shadow-sm border border-gray-100 dark:border-white/5">
+              {t('common.loading')}
+            </div>
+          ) : addresses.length === 0 ? (
+            <div className="bg-white dark:bg-[#1C1C1E] rounded-[22px] p-8 text-center shadow-sm border border-gray-100 dark:border-white/5">
+              <MapPin className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <div className="text-[16px] font-black text-gray-900 dark:text-white">No saved addresses</div>
+              <div className="text-[12px] text-gray-400 mt-1">Add your first delivery address to continue checkout with real data.</div>
+            </div>
+          ) : addresses.map((addr) => (
             <div
               key={addr.id}
             className={`bg-white dark:bg-[#1C1C1E] rounded-[22px] p-4 shadow-sm border ${addr.isDefault ? 'border-[var(--wa-teal)]/50' : 'border-gray-100 dark:border-white/5'} relative overflow-hidden`}
@@ -274,20 +324,29 @@ export const AddressDrawer: React.FC = () => {
                     {addr.name} <span className="text-[13px] font-normal text-gray-500">{addr.phone}</span>
                   </div>
                   <div className="text-[13px] text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
-                    {addr.address}<br />
+                    {addr.address1}{addr.address2 ? `, ${addr.address2}` : ''}<br />
                     {addr.city}, {addr.state} {addr.zip}
                   </div>
 
                   <div className="flex gap-4 mt-4 pt-3 border-t border-gray-100 dark:border-white/5">
-                    <button className="flex items-center gap-1 text-[12px] font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                    <button
+                      onClick={() => handleEditAddress(addr)}
+                      className="flex items-center gap-1 text-[12px] font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                    >
                       <Edit2 className="w-3.5 h-3.5" /> {t('address.edit')}
                     </button>
                     {!addr.isDefault && (
-                      <button className="flex items-center gap-1 text-[12px] font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">
+                      <button
+                        onClick={() => handleSetDefault(String(addr.id))}
+                        className="flex items-center gap-1 text-[12px] font-semibold text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                      >
                         <CheckCircle2 className="w-3.5 h-3.5" /> {t('address.set_default_btn')}
                       </button>
                     )}
-                    <button className="flex items-center gap-1 text-[12px] font-semibold text-red-500 hover:text-red-600 ml-auto">
+                    <button
+                      onClick={() => handleDeleteAddress(String(addr.id))}
+                      className="flex items-center gap-1 text-[12px] font-semibold text-red-500 hover:text-red-600 ml-auto"
+                    >
                       <Trash2 className="w-3.5 h-3.5" /> {t('address.delete')}
                     </button>
                   </div>

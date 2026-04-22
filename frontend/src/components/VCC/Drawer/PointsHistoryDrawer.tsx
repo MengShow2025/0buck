@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowDownToLine, Coins, Gift, TrendingUp, Users, CalendarDays, Filter, MessageSquare, ShoppingBag, Zap, Bot, TicketCheck } from 'lucide-react';
-import { useAppContext } from '../AppContext';
-import api from '../../../services/api';
+import { ArrowDownToLine, Coins, TrendingUp, Users, CalendarDays, Filter, MessageSquare, ShoppingBag, Zap, Bot, TicketCheck } from 'lucide-react';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { rewardApi } from '../../../services/api';
+import { resolveRewardUserId } from '../utils/rewardStatus';
 
 type PointTxCategory = 'community' | 'shopping' | 'fan_shopping' | 'referral' | 'exchange' | 'ai_reward' | 'signin' | 'unknown';
 
 export const PointsHistoryDrawer: React.FC = () => {
-  const { popDrawer, t, user, showToast } = useAppContext();
+  const { t } = usePreferenceContext();
+  const { user } = useSessionContext();
+  const showToast = (_message: string, _type: 'success' | 'error' = 'success') => {};
   const [filter, setFilter] = useState<'all' | 'earn' | 'spend'>('all');
   const [history, setHistory] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -14,11 +18,17 @@ export const PointsHistoryDrawer: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!user?.id) return;
+      const userId = resolveRewardUserId(user);
+      if (!userId) {
+        setHistory([]);
+        setBalance(0);
+        setLoading(false);
+        return;
+      }
       try {
         const [txRes, statusRes] = await Promise.all([
-          api.getPointsTransactions(user.id),
-          api.getStatus(user.id)
+          rewardApi.getPointsTransactions(userId),
+          rewardApi.getStatus(userId)
         ]);
 
         if (statusRes.data?.wallet?.points !== undefined) {
@@ -26,24 +36,25 @@ export const PointsHistoryDrawer: React.FC = () => {
         }
 
         if (txRes.data?.status === 'success') {
-          const formatted = txRes.data.transactions.map((tx: any) => {
+          const formatted = (txRes.data.transactions || []).map((tx: any) => {
             const amountNum = parseFloat(tx.amount);
             let category: PointTxCategory = 'unknown';
             
-            if (tx.source.includes('shopping')) category = 'shopping';
-            else if (tx.source.includes('referral')) category = 'referral';
-            else if (tx.source.includes('exchange')) category = 'exchange';
-            else if (tx.source.includes('ai') || tx.source.includes('gpt')) category = 'ai_reward';
-            else if (tx.source.includes('signin') || tx.source.includes('checkin')) category = 'signin';
-            else if (tx.source.includes('fan')) category = 'fan_shopping';
-            else if (tx.source.includes('community')) category = 'community';
+            const source = String(tx.source || '');
+            if (source.includes('shopping')) category = 'shopping';
+            else if (source.includes('referral')) category = 'referral';
+            else if (source.includes('exchange')) category = 'exchange';
+            else if (source.includes('ai') || source.includes('gpt')) category = 'ai_reward';
+            else if (source.includes('signin') || source.includes('checkin')) category = 'signin';
+            else if (source.includes('fan')) category = 'fan_shopping';
+            else if (source.includes('community')) category = 'community';
             
             return {
               id: tx.id,
               type: amountNum >= 0 ? 'earn' : 'spend',
               category,
-              title: t(`points.cat_${category}`) || tx.source.replace(/_/g, ' ').toUpperCase(),
-              desc: tx.description || tx.source,
+              title: t(`points.cat_${category}`) || source.replace(/_/g, ' ').toUpperCase(),
+              desc: tx.description || source,
               amount: amountNum > 0 ? `+${amountNum}` : `${amountNum}`,
               date: new Date(tx.created_at).toLocaleString(),
               status: t('common.completed')
@@ -59,7 +70,7 @@ export const PointsHistoryDrawer: React.FC = () => {
       }
     };
     fetchData();
-  }, [user?.id, t, showToast]);
+  }, [user, t]);
 
   const filteredHistory = history.filter(item => filter === 'all' || item.type === filter);
 

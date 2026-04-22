@@ -3,18 +3,17 @@ import {
   ShieldCheck, Key, Lock, Fingerprint, Mail, 
   ChevronRight, MessageCircle as FacebookIcon, Send as TwitterIcon, Code as GithubIcon 
 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { useSecurityContext } from '../contexts/SecurityContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
 import { userApi, authApi } from '../../../services/api';
 
 export const SecurityDrawer: React.FC = () => {
-  const { 
-    user, t, pushDrawer, setVerificationType, refreshUser,
-    isGoogle2FAEnabled, setIsGoogle2FAEnabled,
-    isFacebookBound, setIsFacebookBound,
-    isTwitterBound, setIsTwitterBound,
-    isGithubBound, setIsGithubBound,
-    mfaRecoveryEnabled, setMfaRecoveryEnabled
-  } = useAppContext();
+    const { user, refreshUser } = useSessionContext();
+  const { t } = usePreferenceContext();
+  const { pushDrawer } = useDrawerContext();
+  const { setVerificationType, isGoogle2FAEnabled, setIsGoogle2FAEnabled, isFacebookBound, setIsFacebookBound, isTwitterBound, setIsTwitterBound, isGithubBound, setIsGithubBound, mfaRecoveryEnabled, setMfaRecoveryEnabled } = useSecurityContext();
 
   const [kycStatus, setKycStatus] = useState<{ kyc_level: number; status: string }>({ kyc_level: 0, status: 'unverified' });
   useEffect(() => {

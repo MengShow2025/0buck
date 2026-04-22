@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
-import { AppProvider } from './components/VCC/AppContext'
+import { VCCProviders } from './components/VCC/VCCProviders'
 import { bootstrapAuthFromUrl } from './bootstrapAuth'
 
 const bootstrappedAuth = bootstrapAuthFromUrl(window.location.href, window.localStorage)
@@ -19,10 +19,10 @@ if (bootstrappedAuth.cleanedUrl !== window.location.href) {
 // Trigger HMR full reload for dark mode root sync
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <React.StrictMode>
-    <AppProvider>
+    <VCCProviders>
       <BrowserRouter>
         <App />
       </BrowserRouter>
-    </AppProvider>
+    </VCCProviders>
   </React.StrictMode>,
 )

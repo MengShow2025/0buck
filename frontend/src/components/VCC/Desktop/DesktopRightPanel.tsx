@@ -4,7 +4,7 @@ import { ProductDetailDrawer } from '../Drawer/ProductDetailDrawer';
 import { SupplierAnalysisDrawer } from '../Drawer/SupplierAnalysisDrawer';
 import { RewardHistoryDrawer } from '../Drawer/RewardHistoryDrawer';
 import { OrderCenterDrawer } from '../Drawer/OrderCenterDrawer';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
 
 export type PanelType = 'none' | 'product_detail' | 'supplier_analysis' | 'reward_history' | 'order_center';
 
@@ -22,7 +22,7 @@ const PANEL_TITLES: Record<PanelType, string> = {
 };
 
 export const DesktopRightPanel: React.FC<Props> = ({ panel, onClose }) => {
-  const { t } = useAppContext();
+    const { t } = usePreferenceContext();
   if (panel === 'none') return null;
 
   return (

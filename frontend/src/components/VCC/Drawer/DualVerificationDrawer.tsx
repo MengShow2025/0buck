@@ -1,15 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, ShieldCheck, ChevronLeft, ArrowRight, CheckCircle2, Lock, Key } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { useSecurityContext } from '../contexts/SecurityContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
 
 export const DualVerificationDrawer: React.FC = () => {
-  const { 
-    user, 
-    popDrawer, 
-    t, 
-    dualVerification,
-    setDualVerification
-  } = useAppContext();
+    const { user } = useSessionContext();
+  const { popDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { dualVerification, setDualVerification } = useSecurityContext();
 
   const [currentStepIndex, setCurrentStepIndex] = useState(0);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);

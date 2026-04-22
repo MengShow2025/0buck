@@ -1,6 +1,6 @@
 # 项目完成程度总表
 
-更新时间：2026-04-21
+更新时间：2026-04-22
 维护说明：本文件作为“模块完成度唯一对照表”，后续按批次更新状态与阻断项。
 
 ## 总览矩阵
@@ -1104,3 +1104,12 @@
 - 已完成：按用户提供值写入 `backend/.env`：`GOOGLE_CLIENT_ID`、`GOOGLE_CLIENT_SECRET`，并补充 `FACEBOOK_*`、`APPLE_*` 占位。
 - 已完成：域名配置改为生产值：`BACKEND_URL=https://www.0buck.com`、`FRONTEND_URL=https://www.0buck.com`、`ALLOWED_ORIGINS=https://www.0buck.com,https://0buck.com`（移除反引号格式风险）。
 - 已验证：新进程读取配置正确（`settings.GOOGLE_CLIENT_ID` 已生效、`BACKEND_URL/FRONTEND_URL` 正确）。
+
+## 本轮进展（第 142 批：P0+P1 前端真实数据收口）
+- 已完成：身份展示主链去占位，`SessionContext` 统一兼容 `/users/me` 与 `/auth/me`，`MeDrawer`、`DesktopProfileView`、`PersonalInfoDrawer`、`SettingsDrawer` 不再展示固定会员号/默认邮箱/默认推荐码。
+- 已完成：`CommerceContext` 改为真实奖励状态与真实订单摘要驱动，未登录统一空态，不再默认注入余额/积分/等级/费率/订单样例。
+- 已完成：订单链路与奖励链路首轮真实化，`DesktopOrdersView`、`OrderCenterDrawer`、`OrderDetailDrawer`、`OrderTrackingDrawer`、`PointsHistoryDrawer`、`PointsExchangeDrawer`、`ShareDrawer` 已切到真实数据或空态降级。
+- 已完成：剩余 P1 面板收口，`DesktopWalletView`、`DesktopFansPanel`、`FanCenterDrawer`、`RewardHistoryDrawer` 改为真实奖励状态/流水聚合。
+- 已完成：`DesktopNotificationsView` 改为真实订单与奖励流水聚合；`AddressDrawer` 改为真实地址 CRUD，P0+P1 范围内“强信任数据”主视图已无固定演示值。
+- 已完成：补齐 `MeDrawer` 移动端残留占位，粉丝收益卡片不再显示硬编码 `$342`；会员号 `0BUCK_9527` 不存在于当前源码展示逻辑。
+- 已验证：前端 8 个测试文件共 `22 passed`，`npm run build` 通过。

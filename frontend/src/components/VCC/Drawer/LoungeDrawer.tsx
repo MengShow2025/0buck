@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Search, VolumeX, ShieldAlert, Sparkles, Bot, UserPlus, Users, Plus, PlusCircle, UserCheck, ChevronLeft } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { friendsApi, groupsApi } from '../../../services/api';
 
 export const LoungeDrawer: React.FC = () => {
-  const { setActiveDrawer, setActiveChat, pushDrawer, t, user, requireAuth } = useAppContext();
+    const { setActiveDrawer, setActiveChat, pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { user, requireAuth } = useSessionContext();
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);

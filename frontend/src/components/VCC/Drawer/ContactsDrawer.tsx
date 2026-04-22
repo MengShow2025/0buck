@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Search, UserPlus, Users, MessageSquare, ChevronRight, ChevronDown, Star, MoreHorizontal, UserCheck, Clock, UserX } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { friendsApi } from '../../../services/api';
 
 export const ContactsDrawer: React.FC = () => {
-  const { pushDrawer, setActiveChat, t, requireAuth } = useAppContext();
+    const { pushDrawer, setActiveChat } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { requireAuth } = useSessionContext();
   const [blockedFriends, setBlockedFriends] = useState<any[]>([]);
   const [contacts, setContacts] = useState<any[]>([]);
   const [requestsCount, setRequestsCount] = useState(0);

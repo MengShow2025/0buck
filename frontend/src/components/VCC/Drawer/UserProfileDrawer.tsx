@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { UserPlus, MessageSquare, MapPin, Briefcase, Calendar, ShieldCheck, Star, ChevronRight, X } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export const UserProfileDrawer: React.FC = () => {
-  const { pushDrawer, setActiveChat, t } = useAppContext();
+    const { pushDrawer, setActiveChat } = useDrawerContext();
+  const { t } = usePreferenceContext();
   const [requestSent, setRequestSent] = useState(false);
 
   // Mock user data - in a real app this would come from a selected user state

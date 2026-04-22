@@ -15,10 +15,12 @@ import {
   ShieldCheck,
   Clock
 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export const WishlistDetailDrawer: React.FC = () => {
-  const { popDrawer, selectedProductId, t } = useAppContext();
+    const { popDrawer, selectedProductId } = useDrawerContext();
+  const { t } = usePreferenceContext();
   const [isWished, setIsWished] = useState(false);
   const [selectedImgIndex, setSelectedImgIndex] = useState(0);
 

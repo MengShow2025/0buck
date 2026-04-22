@@ -4,8 +4,12 @@ import { MediaGridCard } from './BAPCards/MediaGridCard';
 import { PromoActionCard } from './BAPCards/PromoActionCard';
 import { LinkTextCard } from './BAPCards/LinkTextCard';
 import { CashbackRadarCard } from './BAPCards/CashbackRadarCard';
-import { useAppContext } from './AppContext';
+
 import { aiApi } from '../../services/api';
+import { usePreferenceContext } from './contexts/PreferenceContext';
+import { useDrawerContext } from './contexts/DrawerContext';
+import { useAIContext } from './contexts/AIContext';
+import { useCommerceContext } from './contexts/CommerceContext';
 // import { MessageSimple } from 'stream-chat-react'; // Uncomment when stream is installed
 
 interface CustomMessageUIProps {
@@ -28,19 +32,23 @@ export const CustomMessageUI: React.FC<CustomMessageUIProps> = (props) => {
   let memoryClearer = () => {};
   let checkInPerformer = (v: boolean) => {};
   let t = (key: string) => key;
-  
+
   try {
-    const { setTheme, setLanguage, setActiveDrawer, pushDrawer, setAiPersona, setAiMemoryTags, setNotifications, setCurrency, setHasCheckedInToday, t: tFromContext } = useAppContext() as any;
-    themeSetter = setTheme;
-    langSetter = setLanguage;
-    drawerSetter = setActiveDrawer;
-    drawerPusher = pushDrawer;
-    personaSetter = setAiPersona;
-    notificationsSetter = setNotifications;
-    currencySetter = setCurrency;
-    memoryClearer = () => setAiMemoryTags([]);
-    checkInPerformer = setHasCheckedInToday;
-    t = typeof tFromContext === 'function' ? tFromContext : t;
+    const prefCtx = usePreferenceContext();
+    const drawerCtx = useDrawerContext();
+    const aiCtx = useAIContext();
+    const commCtx = useCommerceContext();
+
+    themeSetter = prefCtx.setTheme;
+    langSetter = prefCtx.setLanguage;
+    drawerSetter = drawerCtx.setActiveDrawer;
+    drawerPusher = drawerCtx.pushDrawer;
+    personaSetter = aiCtx.setAiPersona;
+    notificationsSetter = prefCtx.setNotifications;
+    currencySetter = prefCtx.setCurrency;
+    memoryClearer = () => aiCtx.setAiMemoryTags([]);
+    checkInPerformer = commCtx.setHasCheckedInToday;
+    t = prefCtx.t;
   } catch (e) {
     console.warn('AppContext not found, system actions disabled');
   }

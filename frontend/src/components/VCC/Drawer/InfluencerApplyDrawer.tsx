@@ -1,9 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Star, ShieldCheck, TrendingUp, Users, MessageSquare, ArrowRight, CheckCircle2, Award, Zap, Sparkles, ChevronDown } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export const InfluencerApplyDrawer: React.FC = () => {
-  const { popDrawer, t } = useAppContext();
+    const { popDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
   const [step, setStep] = useState(1);
   const [showOtherPlatform, setShowOtherPlatform] = useState(false);
   const [isPlatformDropdownOpen, setIsPlatformDropdownOpen] = useState(false);

@@ -1,23 +1,67 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Users, Zap, Target, TrendingUp, CalendarDays, Filter, Wallet, ArrowDownToLine, RefreshCcw, Banknote, Bot } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { rewardApi } from '../../../services/api';
+import { resolveRewardUserId } from '../utils/rewardStatus';
+import { classifyRewardTransaction, summarizeRewardTransactions } from '../utils/rewardCommerce';
 
 type TxType = 'all' | 'cashback' | 'referral' | 'fan' | 'payment' | 'withdraw' | 'refund' | 'crowdfund_refund' | 'ai_reward';
 
 export const RewardHistoryDrawer: React.FC = () => {
-  const { popDrawer, t } = useAppContext();
+  const { popDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { user } = useSessionContext();
   const [filter, setFilter] = useState<TxType>('all');
+  const [transactions, setTransactions] = useState<any[]>([]);
 
-  // Mock transaction history covering all 8 types
-  const history = [
-    { id: 'TX-001', type: 'cashback', title: t('reward.milestone_rebate').replace('{phase}', '7'), desc: t('reward.order_met').replace('{orderId}', 'ORD-001'), amount: '+15.00', date: '2023-10-25 14:30', status: t('reward.status_completed') },
-    { id: 'TX-002', type: 'fan', title: t('reward.fan'), desc: t('reward.fan_order').replace('{name}', t('contacts.alex_m')), amount: '+12.50', date: '2023-10-24 09:15', status: t('reward.status_completed') },
-    { id: 'TX-003', type: 'referral', title: t('reward.referral'), desc: t('reward.referral_desc').replace('{product}', t('ordercenter.minimalist_titanium_watch')), amount: '+45.00', date: '2023-10-22 18:45', status: t('reward.status_completed') },
-    { id: 'TX-004', type: 'payment', title: t('reward.cat_payment'), desc: t('reward.payment_desc').replace('{orderId}', 'ORD-099'), amount: '-120.00', date: '2023-10-21 11:20', status: t('reward.status_completed') },
-    { id: 'TX-005', type: 'withdraw', title: t('reward.cat_withdraw'), desc: t('reward.withdraw_desc').replace('{fee}', '$2.00'), amount: '-500.00', date: '2023-10-20 09:10', status: t('reward.status_processing') },
-    { id: 'TX-006', type: 'refund', title: t('reward.cat_refund'), desc: t('reward.refund_desc').replace('{orderId}', 'ORD-052'), amount: '+35.80', date: '2023-10-19 08:05', status: t('reward.status_completed') },
-    { id: 'TX-007', type: 'crowdfund_refund', title: t('reward.cat_overflow'), desc: t('reward.overflow_desc').replace('{id}', 'C2W-X'), amount: '+18.50', date: '2023-10-15 16:30', status: t('reward.status_completed') },
-  ];
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      const userId = resolveRewardUserId(user);
+      if (!userId) {
+        setTransactions([]);
+        return;
+      }
+      try {
+        const response = await rewardApi.getTransactions(userId);
+        setTransactions(Array.isArray(response.data) ? response.data : []);
+      } catch {
+        setTransactions([]);
+      }
+    };
+    fetchTransactions();
+  }, [user]);
+
+  const lifetimeSummary = useMemo(() => summarizeRewardTransactions(transactions), [transactions]);
+
+  const history = useMemo(() => {
+    return transactions.map((tx) => {
+      const category = classifyRewardTransaction(tx);
+      const amount = Number(tx.amount) || 0;
+      const isPositive = amount >= 0;
+
+      const titleMap: Record<string, string> = {
+        cashback: t('reward.cat_cashback') || 'Cashback',
+        fan: t('reward.cat_fan') || 'Fan Reward',
+        referral: t('reward.cat_referral') || 'Referral Reward',
+        payment: t('reward.cat_payment') || 'Payment',
+        withdraw: t('reward.cat_withdraw') || 'Withdrawal',
+        refund: t('reward.cat_refund') || 'Refund',
+        other: t('reward.all_details') || 'Transaction',
+      };
+
+      return {
+        id: String(tx.id || `${category}-${tx.created_at || ''}`),
+        type: (category === 'other' ? 'all' : category) as TxType,
+        title: titleMap[category] || titleMap.other,
+        desc: tx.description || tx.order_id || tx.status || '--',
+        amount: `${isPositive ? '+' : '-'}${Math.abs(amount).toFixed(2)}`,
+        date: tx.created_at ? new Date(tx.created_at).toLocaleString() : '--',
+        status: String(tx.status || t('reward.status_completed') || 'completed'),
+      };
+    });
+  }, [t, transactions]);
 
   const filteredHistory = history.filter(item => filter === 'all' || item.type === filter);
 
@@ -60,7 +104,7 @@ export const RewardHistoryDrawer: React.FC = () => {
 
         <h2 className="text-[12px] font-black text-gray-400 uppercase tracking-widest mb-2 relative z-10">{t('reward.total_lifetime')}</h2>
         <div className="flex items-baseline gap-2 relative z-10">
-          <span className="text-[40px] font-black text-gray-900 dark:text-white tracking-tighter leading-[1.1]">$342.50</span>
+          <span className="text-[40px] font-black text-gray-900 dark:text-white tracking-tighter leading-[1.1]">${lifetimeSummary.lifetimeEarnings.toFixed(2)}</span>
           <span className="text-[12px] font-bold text-[var(--wa-teal)] uppercase tracking-widest bg-[var(--wa-teal)]/10 px-2 py-1 rounded-lg">{t('reward.status_available')}</span>
         </div>
 
@@ -126,29 +170,33 @@ export const RewardHistoryDrawer: React.FC = () => {
           </button>
         </div>
 
-        {filteredHistory.map((tx) => (
-          <div key={tx.id} className="bg-white dark:bg-[#1C1C1E] p-4 rounded-[24px] shadow-sm border border-gray-100 dark:border-white/5 flex items-center gap-4">
-            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${getBg(tx.type)}`}>
-              {getIcon(tx.type)}
-            </div>
-            
-            <div className="flex-1 min-w-0">
-              <div className="text-[14px] font-black text-gray-900 dark:text-white truncate">{tx.title}</div>
-              <div className="text-[11px] text-gray-400 font-bold truncate mt-0.5">{tx.desc}</div>
-              <div className="flex items-center gap-1 mt-1.5 text-[10px] text-gray-400 uppercase font-black tracking-widest">
-                <CalendarDays className="w-3 h-3" />
-                {tx.date}
+        {filteredHistory.length === 0 ? (
+          <div className="text-center py-12 text-[13px] font-semibold text-gray-400">No reward transactions yet.</div>
+        ) : (
+          filteredHistory.map((tx) => (
+            <div key={tx.id} className="bg-white dark:bg-[#1C1C1E] p-4 rounded-[24px] shadow-sm border border-gray-100 dark:border-white/5 flex items-center gap-4">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${getBg(tx.type)}`}>
+                {getIcon(tx.type)}
+              </div>
+              
+              <div className="flex-1 min-w-0">
+                <div className="text-[14px] font-black text-gray-900 dark:text-white truncate">{tx.title}</div>
+                <div className="text-[11px] text-gray-400 font-bold truncate mt-0.5">{tx.desc}</div>
+                <div className="flex items-center gap-1 mt-1.5 text-[10px] text-gray-400 uppercase font-black tracking-widest">
+                  <CalendarDays className="w-3 h-3" />
+                  {tx.date}
+                </div>
+              </div>
+              
+              <div className="text-right shrink-0">
+                <div className="text-[16px] font-black text-[var(--wa-teal)]">{tx.amount}</div>
+                <div className="text-[9px] text-emerald-500 font-bold uppercase mt-1 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block">
+                  {tx.status}
+                </div>
               </div>
             </div>
-            
-            <div className="text-right shrink-0">
-              <div className="text-[16px] font-black text-[var(--wa-teal)]">{tx.amount}</div>
-              <div className="text-[9px] text-emerald-500 font-bold uppercase mt-1 bg-emerald-500/10 px-2 py-0.5 rounded-full inline-block">
-                {tx.status}
-              </div>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

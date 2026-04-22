@@ -1,10 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ShoppingCart, Plus, ChevronLeft, MessageCircle, Trophy, ShoppingBag, Scan, Settings, Users, Bell } from 'lucide-react';
-import { useAppContext } from './AppContext';
+import { usePreferenceContext } from './contexts/PreferenceContext';
+import { useSessionContext } from './contexts/SessionContext';
+import { useDrawerContext } from './contexts/DrawerContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export const VCCHeader = () => {
-  const { setActiveDrawer, pushDrawer, t, isAuthenticated, user } = useAppContext();
+    const { setActiveDrawer, pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { isAuthenticated, user } = useSessionContext();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   

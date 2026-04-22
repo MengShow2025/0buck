@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import BongoCat from './BongoCat';
-import { useAppContext } from './AppContext';
+import { usePreferenceContext } from './contexts/PreferenceContext';
 
 interface SplashScreenProps {
   onComplete: () => void;
 }
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
-  const { t, theme } = useAppContext();
+    const { t, theme } = usePreferenceContext();
   const [isFadingOut, setIsFadingOut] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   

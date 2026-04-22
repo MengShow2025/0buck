@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { Ticket, Crown, ArrowRight, CalendarClock, Cpu } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export const CouponsDrawer: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'store' | 'platform'>('store');
-  const { pushDrawer, requireAuth, t } = useAppContext();
+    const { pushDrawer } = useDrawerContext();
+  const { requireAuth } = useSessionContext();
+  const { t } = usePreferenceContext();
 
   const MOCK_STORE_COUPONS = [
     {

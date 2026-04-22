@@ -1,9 +1,9 @@
 import React from 'react';
 import { Star } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
 
 export const ReviewsDrawer: React.FC = () => {
-  const { t } = useAppContext();
+    const { t } = usePreferenceContext();
   const stats = [
     { label: t('product.supplier_service'), value: 4.7 },
     { label: t('product.on_time_shipment'), value: 4.6 },

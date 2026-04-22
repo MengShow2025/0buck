@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Heart, MessageSquare, Share2, Plus, TrendingUp, Flame, ChevronRight, Play, MessageCircle, Globe, Trophy, Contact, Send, Trash2 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { DesktopSquarePanel } from './DesktopSquarePanel';
 import { DesktopLoungePanel } from './DesktopLoungePanel';
 import { DesktopFansPanel } from './DesktopFansPanel';
@@ -32,7 +34,9 @@ const TABS: { id: SocialTab; label: string; icon: React.ReactNode }[] = [
 ];
 
 export const DesktopSocialView: React.FC = () => {
-  const { pushDrawer, setSelectedProductId, t, user } = useAppContext();
+    const { pushDrawer, setSelectedProductId } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { user } = useSessionContext();
   const [activeTab, setActiveTab] = useState<SocialTab>('feed');
   const [feedItems, setFeedItems] = useState<any[]>([]);
   const [feedError, setFeedError] = useState('');

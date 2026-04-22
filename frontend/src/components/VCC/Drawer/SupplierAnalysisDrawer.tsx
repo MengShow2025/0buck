@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Star, CheckCircle2, ShieldCheck, Clock, Package, ShoppingCart, Info, ExternalLink, MessageCircle, Send, PlayCircle, Globe, Award, ChevronRight, Zap, MapPin, ChevronLeft, Scale, Box, Share2 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 import { imApi, productApi } from '../../../services/api';
 
 export const SupplierAnalysisDrawer: React.FC = () => {
-  const { t, selectedProductId } = useAppContext();
+    const { t } = usePreferenceContext();
+  const { selectedProductId } = useDrawerContext();
   const [detail, setDetail] = useState<any | null>(null);
 
   useEffect(() => {

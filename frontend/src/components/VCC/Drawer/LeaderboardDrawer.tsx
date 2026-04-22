@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
 import { Trophy, Star, ChevronLeft, Search, Filter, ArrowUpRight, Award, Flame, Users } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 export const LeaderboardDrawer: React.FC = () => {
-  const { popDrawer, t } = useAppContext();
+    const { popDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
   const [activeTab, setActiveTab] = useState<'global' | 'influencers'>('global');
 
   // Mock data for Global Leaderboard (Top Earners)

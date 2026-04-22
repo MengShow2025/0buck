@@ -1,5 +1,5 @@
 import React from 'react';
-import { useAppContext } from '../AppContext';
+import { useSessionContext } from '../contexts/SessionContext';
 
 interface PromoActionItem {
   id: string;
@@ -10,7 +10,7 @@ interface PromoActionItem {
 }
 
 export const PromoActionCard: React.FC<{ data: any }> = ({ data }) => {
-  const { isAuthenticated, requireAuth } = useAppContext();
+    const { isAuthenticated, requireAuth } = useSessionContext();
   const actions: PromoActionItem[] = Array.isArray(data?.actions) ? data.actions : [];
   if (!actions.length) return null;
 

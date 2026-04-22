@@ -1,10 +1,14 @@
 import React, { useState } from 'react';
 import { ChevronRight, History, ArrowUpRight, Bot, Plus, HelpCircle, TrendingUp, AlertTriangle } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { loadByokConfig } from '../../../services/byokStorage';
 
 export const WalletDrawer: React.FC = () => {
-  const { pushDrawer, t, userBalance, userPoints } = useAppContext();
+    const { pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { userBalance, userPoints } = useCommerceContext();
   const [isUsingCustomModel] = useState(() => Boolean(loadByokConfig()?.enabled));
 
   const usagePercent = isUsingCustomModel ? null : 81;

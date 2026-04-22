@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Bot, Key, ChevronDown, CheckCircle2, Server, ShieldCheck, Trash2, Power, PowerOff, RefreshCw } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { saveByokConfig, loadByokConfig, clearByokConfig } from '../../../services/byokStorage';
 
 export const APIModelAddDrawer: React.FC = () => {
-  const { popDrawer, t } = useAppContext();
+    const { popDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
   const [provider, setProvider] = useState('Google');
   const [model, setModel] = useState('gemini-2.5-flash');
   const [apiKey, setApiKey] = useState('');

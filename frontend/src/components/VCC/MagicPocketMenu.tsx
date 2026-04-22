@@ -10,7 +10,9 @@ import {
   User,
   Gift
 } from 'lucide-react';
-import { useAppContext } from './AppContext';
+import { usePreferenceContext } from './contexts/PreferenceContext';
+import { useSessionContext } from './contexts/SessionContext';
+import { useDrawerContext } from './contexts/DrawerContext';
 
 interface MagicPocketMenuProps {
   isOpen: boolean;
@@ -18,7 +20,9 @@ interface MagicPocketMenuProps {
 }
 
 export const MagicPocketMenu: React.FC<MagicPocketMenuProps> = ({ isOpen, onAction }) => {
-  const { pushDrawer, t, isAuthenticated } = useAppContext();
+    const { pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { isAuthenticated } = useSessionContext();
 
   if (!isOpen) return null;
 

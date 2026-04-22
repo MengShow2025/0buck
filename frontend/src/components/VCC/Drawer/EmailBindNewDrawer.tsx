@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { Mail, ShieldCheck, ArrowRight, CheckCircle2 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { useSecurityContext } from '../contexts/SecurityContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
 import { authApi } from '../../../services/api';
 
 export const EmailBindNewDrawer: React.FC = () => {
-  const { 
-    user, 
-    setUser,
-    isGoogle2FAEnabled, 
-    t, 
-    popDrawer 
-  } = useAppContext();
+    const { user, setUser } = useSessionContext();
+  const { isGoogle2FAEnabled } = useSecurityContext();
+  const { t } = usePreferenceContext();
+  const { popDrawer } = useDrawerContext();
 
   const [step, setStep] = useState<'verify_current' | 'input_new' | 'verify_new'>('verify_current');
   const [newEmail, setNewEmail] = useState('');

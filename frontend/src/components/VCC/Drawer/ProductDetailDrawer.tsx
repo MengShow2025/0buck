@@ -1,11 +1,13 @@
 import { Package, ShieldCheck, ShoppingCart, ChevronLeft, ChevronRight, Star, MapPin, Calendar, Info, Zap, Award, CheckCircle2, Truck, Timer, Minus, Plus, Scale, Box, Users, TrendingUp, Share2 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { useEffect, useMemo, useState } from 'react';
 import { imApi, productApi } from '../../../services/api';
 import { getCheckoutBlockReasonText } from '../utils/checkoutBlockReason';
 
 export const ProductDetailDrawer: React.FC = () => {
-  const { setActiveDrawer, pushDrawer, popDrawer, selectedProductId, t, currency, getExchangeRate } = useAppContext();
+    const { setActiveDrawer, pushDrawer, popDrawer, selectedProductId } = useDrawerContext();
+  const { t, currency, getExchangeRate } = usePreferenceContext();
   const [quantity, setQuantity] = useState(1);
   const [selectedVarIndex, setSelectedVarIndex] = useState(0);
   const [isLoading, setIsLoading] = useState(true);

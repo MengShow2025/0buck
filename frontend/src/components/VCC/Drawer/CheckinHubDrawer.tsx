@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { CalendarCheck2, CheckCircle2, Circle, Loader2, Menu, Sparkles } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
 import { resolveCheckinBatchState, runMockBatchCheckin } from '../utils/checkinBatch';
 import { getCheckinCtaVariant } from '../utils/checkinCtaVariant';
 
@@ -16,7 +17,8 @@ type CheckinOrder = {
 const WEEK_KEYS = ['sat', 'sun', 'mon', 'tue', 'wed', 'thu', 'fri'] as const;
 
 export const CheckinHubDrawer: React.FC = () => {
-  const { t, language, theme, hasCheckedInToday, setHasCheckedInToday } = useAppContext();
+    const { t, language, theme } = usePreferenceContext();
+  const { hasCheckedInToday, setHasCheckedInToday } = useCommerceContext();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [result, setResult] = useState<null | ReturnType<typeof runMockBatchCheckin>>(null);

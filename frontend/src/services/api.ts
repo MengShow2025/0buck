@@ -33,6 +33,7 @@ export const authApi = {
   checkEmail: (email: string) => api.post('/auth/check-email', { email }),
   login: (data: any) => api.post('/auth/login', data),
   register: (data: any) => api.post('/auth/register', data),
+  me: () => api.get('/auth/me'),
   logout: () => api.post('/auth/logout'),
   check2fa: (email: string) => api.post('/auth/check-2fa', { email }),
   setup2fa: () => api.post('/auth/2fa/setup-authenticated'),

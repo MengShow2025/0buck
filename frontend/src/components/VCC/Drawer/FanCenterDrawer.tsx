@@ -1,11 +1,38 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Target, Users, Trophy, ChevronRight, ShieldCheck, Share2, Award, Zap, Copy, QrCode, Calendar, ChevronDown, ChevronUp, Star, HelpCircle } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { imApi } from '../../../services/api';
+import { useSessionContext } from '../contexts/SessionContext';
+import { rewardApi } from '../../../services/api';
+import { summarizeRewardStatus, summarizeRewardTransactions } from '../utils/rewardCommerce';
 
 export const FanCenterDrawer: React.FC = () => {
-  const { pushDrawer, t, userLevel, isInfluencer, influencerRatios } = useAppContext();
+  const { pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
+  const { userLevel, isInfluencer, influencerRatios } = useCommerceContext();
+  const { user } = useSessionContext();
   const [isRatesExpanded, setIsRatesExpanded] = useState(false);
+  const [statusPayload, setStatusPayload] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchStatus = async () => {
+      if (!user?.customer_id) {
+        setStatusPayload(null);
+        return;
+      }
+
+      try {
+        const response = await rewardApi.getStatus(user.customer_id);
+        setStatusPayload(response.data ?? null);
+      } catch {
+        setStatusPayload(null);
+      }
+    };
+
+    fetchStatus();
+  }, [user?.customer_id]);
 
   // Define ratios for each level
   const levelRatios = {
@@ -19,26 +46,27 @@ export const FanCenterDrawer: React.FC = () => {
     ? influencerRatios 
     : levelRatios[userLevel as keyof typeof levelRatios];
 
-  // Mock data for rewards summary
+  const statusSummary = useMemo(() => summarizeRewardStatus(statusPayload), [statusPayload]);
+  const transactionSummary = useMemo(
+    () => summarizeRewardTransactions(statusPayload?.transactions),
+    [statusPayload]
+  );
+
   const rewardStats = {
-    totalFans: 128,
-    totalEarned: '342.50',
-    todayEarned: '12.00',
-    referralCode: 'VORTEX888',
+    totalFans: statusSummary.totalFans,
+    totalEarned: transactionSummary.lifetimeEarnings.toFixed(2),
+    referralCode: statusSummary.referralCode || user?.referral_code || '--',
     userLevel: isInfluencer ? t('influencer.label') : `${userLevel} Member`,
     referralRate: `${(currentRatios.referral * 100).toFixed(1)}%`,
     fanRate: `${(currentRatios.fan * 100).toFixed(1)}%`,
     rebateSummary: {
-      totalPendingAmount: '45.80',
-      daysRemaining: 4,
-      totalPhases: 20,
-      currentPhase: 7,
-      activeOrdersCount: 3
+      totalPendingAmount: statusSummary.pendingCashbackAmount.toFixed(2),
+      activeOrdersCount: statusSummary.activePlanCount
     },
     breakdown: [
-      { label: t('fan.fan_reward'), amount: '245.00', count: 12, icon: Users, color: 'text-purple-500', bg: 'bg-purple-50' },
-      { label: t('fan.referral_reward'), amount: '97.50', count: 8, icon: Zap, color: 'text-blue-500', bg: 'bg-blue-50' },
-      { label: t('fan.cashback_amount'), amount: '14.50', count: 1, icon: Target, color: 'text-emerald-500', bg: 'bg-emerald-50' }
+      { label: t('fan.fan_reward'), amount: transactionSummary.breakdown.fan.amount.toFixed(2), count: transactionSummary.breakdown.fan.count, icon: Users, color: 'text-purple-500', bg: 'bg-purple-50' },
+      { label: t('fan.referral_reward'), amount: transactionSummary.breakdown.referral.amount.toFixed(2), count: transactionSummary.breakdown.referral.count, icon: Zap, color: 'text-blue-500', bg: 'bg-blue-50' },
+      { label: t('fan.cashback_amount'), amount: transactionSummary.breakdown.cashback.amount.toFixed(2), count: transactionSummary.breakdown.cashback.count, icon: Target, color: 'text-emerald-500', bg: 'bg-emerald-50' }
     ]
   };
 
@@ -82,7 +110,7 @@ export const FanCenterDrawer: React.FC = () => {
             <div className="text-[24px] font-black text-gray-900 dark:text-white mt-1">
               ${rewardStats.rebateSummary.totalPendingAmount}
             </div>
-            <p className="text-[12px] text-gray-500 dark:text-white/65 mt-1">{t('checkin.building_momentum')}</p>
+            <p className="text-[12px] text-gray-500 dark:text-white/65 mt-1">{rewardStats.rebateSummary.activeOrdersCount} active plan(s)</p>
           </div>
           <Calendar className="w-10 h-10 text-[var(--wa-teal)]/70" />
         </div>

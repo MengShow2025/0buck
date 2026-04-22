@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, Search, ChevronRight, Plus } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { groupsApi } from '../../../services/api';
 
 export const GroupManageDrawer: React.FC = () => {
-  const { popDrawer, activeChat, user } = useAppContext();
+    const { popDrawer, activeChat } = useDrawerContext();
+  const { user } = useSessionContext();
   const [members, setMembers] = useState<any[]>([]);
   const [groupName, setGroupName] = useState('');
   const [announcement, setAnnouncement] = useState('');

@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { Lock, KeyRound, ChevronLeft, ArrowRight, CheckCircle2 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 interface ChangePasswordDrawerProps {
   type: 'login_password' | 'pay_password';
 }
 
 export const ChangePasswordDrawer: React.FC<ChangePasswordDrawerProps> = ({ type }) => {
-  const { popDrawer, t } = useAppContext();
+    const { popDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [isSuccess, setIsSuccess] = useState(false);

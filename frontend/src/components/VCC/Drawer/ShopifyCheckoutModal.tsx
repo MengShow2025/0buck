@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Lock, ShieldCheck, CheckCircle2 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
 
 interface ShopifyCheckoutModalProps {
   url: string;
@@ -11,7 +11,7 @@ interface ShopifyCheckoutModalProps {
 export const ShopifyCheckoutModal: React.FC<ShopifyCheckoutModalProps> = ({ url, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState<'loading' | 'browsing' | 'verifying' | 'success'>('loading');
-  const { t } = useAppContext();
+    const { t } = usePreferenceContext();
 
   useEffect(() => {
     if (!url) {

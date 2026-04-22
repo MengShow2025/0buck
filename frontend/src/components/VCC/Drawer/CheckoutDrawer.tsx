@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { CreditCard, MapPin, CheckCircle2, DollarSign, Wallet, ShieldCheck, ShoppingBag, ChevronRight, Ticket, Info, Loader2, ChevronLeft, Tag, Lock } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 import { orderApi, productApi } from '../../../services/api';
 import { ShopifyCheckoutModal } from './ShopifyCheckoutModal';
 import { PaymentSuccessScreen } from './PaymentSuccessScreen';
@@ -53,13 +55,9 @@ const StepBar: React.FC<{ step: number; steps: [string, string, string] }> = ({ 
 };
 
 export const CheckoutDrawer: React.FC = () => {
-  const {
-    setActiveDrawer, pushDrawer, popDrawer, selectedProductId, t,
-    setIsShopifyCheckoutOpen, isShopifyCheckoutOpen,
-    setShopifyCheckoutUrl, shopifyCheckoutUrl,
-    triggerPaymentSuccess, currency, getExchangeRate,
-    isPrime, userBalance: globalBalance
-  } = useAppContext();
+    const { setActiveDrawer, pushDrawer, popDrawer, selectedProductId } = useDrawerContext();
+  const { t, currency, getExchangeRate } = usePreferenceContext();
+  const { setIsShopifyCheckoutOpen, isShopifyCheckoutOpen, setShopifyCheckoutUrl, shopifyCheckoutUrl, triggerPaymentSuccess, isPrime, userBalance: globalBalance } = useCommerceContext();
 
   // Step state: 1 = Review, 2 = Address, 3 = Payment
   const [step, setStep] = useState(1);

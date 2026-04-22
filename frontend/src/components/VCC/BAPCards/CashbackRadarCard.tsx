@@ -1,6 +1,7 @@
 import React from 'react';
 import { Gift, ChevronRight, Clock } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
 
 interface CashbackRadarProps {
   current_phase: number;
@@ -83,7 +84,8 @@ export const CashbackRadarCard: React.FC<CashbackRadarProps> = ({
   status = 'active',
   orderId
 }) => {
-  const { pushDrawer, t } = useAppContext();
+    const { pushDrawer } = useDrawerContext();
+  const { t } = usePreferenceContext();
   const isCompleted = current_phase >= total_phases || status === 'completed';
   const isPending = status === 'pending';
 

@@ -4,7 +4,11 @@ import {
   Users, Bell, LogIn,
   Zap, ChevronRight, Crown, ShoppingCart
 } from 'lucide-react';
-import { useAppContext } from '../AppContext';
+import { useCommerceContext } from '../contexts/CommerceContext';
+import { useDrawerContext } from '../contexts/DrawerContext';
+import { usePreferenceContext } from '../contexts/PreferenceContext';
+import { useSessionContext } from '../contexts/SessionContext';
+import { getDisplayName } from '../utils/userIdentity';
 
 type DesktopView = 'chat' | 'shop' | 'orders' | 'wallet' | 'social' | 'notifications' | 'profile';
 
@@ -35,8 +39,12 @@ const NAV_LABELS: Record<string, string> = {
 };
 
 export const DesktopSidebar: React.FC<Props> = ({ activeView, onViewChange, expanded, onToggle }) => {
-  const { t, isAuthenticated, user, isPrime, userBalance, pushDrawer } = useAppContext();
+    const { t } = usePreferenceContext();
+  const { isAuthenticated, user } = useSessionContext();
+  const { isPrime, userBalance } = useCommerceContext();
+  const { pushDrawer } = useDrawerContext();
   const cartItemCount = 3; // Mock cart count
+  const displayName = getDisplayName(user);
 
   const label = (key: string) => t(key) || NAV_LABELS[key] || key;
 
@@ -146,13 +154,13 @@ export const DesktopSidebar: React.FC<Props> = ({ activeView, onViewChange, expa
           >
             <div className={`w-8 h-8 rounded-xl bg-gradient-to-br ${tierColor} flex items-center justify-center shrink-0 shadow-sm`}>
               <span className="text-[12px] font-black text-white">
-                {(user.nickname || user.email || 'U')[0].toUpperCase()}
+                {(displayName || 'U')[0].toUpperCase()}
               </span>
             </div>
             {expanded && (
               <div className="flex-1 min-w-0 text-left">
                 <div className="text-[13px] font-semibold text-zinc-900 dark:text-white truncate">
-                  {user.nickname || user.email?.split('@')[0]}
+                  {displayName}
                 </div>
                 <div className="text-[11px] text-zinc-400 font-medium">
                   ${userBalance.toFixed(2)}
