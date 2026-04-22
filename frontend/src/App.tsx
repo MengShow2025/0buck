@@ -65,6 +65,29 @@ function MainApp() {
   const [isAiTyping, setIsAiTyping] = useState(false);
 
   useEffect(() => {
+    // Handle OAuth success redirect
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('auth_success') === 'true') {
+      params.delete('auth_success');
+      const newSearch = params.toString();
+      const newUrl = window.location.pathname + (newSearch ? `?${newSearch}` : '');
+      window.history.replaceState({}, document.title, newUrl);
+      
+      // Optionally add a welcome message from the AI Butler to confirm login
+      setTimeout(() => {
+        const welcomeMsg: Message = {
+          id: `ai-login-success-${Date.now()}`,
+          text: typeof t === 'function' ? t('auth.login_success_welcome') || 'Welcome back! You have successfully logged in.' : 'Welcome back! You have successfully logged in.',
+          created_at: new Date().toISOString(),
+          user: { id: 'dumbo' },
+          attachments: []
+        };
+        setMessages(prev => [...prev, welcomeMsg]);
+      }, 1000);
+    }
+  }, [t]);
+
+  useEffect(() => {
     setOnPaymentSuccess(() => (orderId: string) => {
       const aiMsg = {
         id: `ai-success-${Date.now()}`,
