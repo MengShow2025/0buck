@@ -8,6 +8,10 @@ import { bootstrapAuthFromUrl } from './bootstrapAuth'
 
 const bootstrappedAuth = bootstrapAuthFromUrl(window.location.href, window.localStorage)
 
+if (bootstrappedAuth.didBootstrap) {
+  window.sessionStorage.setItem('recent_oauth_login', '1')
+}
+
 if (bootstrappedAuth.cleanedUrl !== window.location.href) {
   window.history.replaceState({}, document.title, bootstrappedAuth.cleanedUrl)
 }

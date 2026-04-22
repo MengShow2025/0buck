@@ -43,6 +43,7 @@ function MainApp() {
     userPoints, setUserPoints,
     isPrime, setIsPrime,
     isInfluencer, setIsInfluencer,
+    isAuthenticated,
     orders, pushDrawer,
     setWithdrawalMethod,
     setTheme, setLanguage, setCurrency
@@ -61,8 +62,21 @@ function MainApp() {
   useEffect(() => {
     setMessages(initialMessagesWithTranslations);
   }, [initialMessagesWithTranslations]);
-  const [showSplash, setShowSplash] = useState(true);
+  const [showSplash, setShowSplash] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    return !(
+      window.sessionStorage.getItem('recent_oauth_login') === '1' ||
+      Boolean(window.localStorage.getItem('access_token'))
+    );
+  });
   const [isAiTyping, setIsAiTyping] = useState(false);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      setShowSplash(false);
+      window.sessionStorage.removeItem('recent_oauth_login');
+    }
+  }, [isAuthenticated]);
 
   useEffect(() => {
     // Handle OAuth success redirect
@@ -71,9 +85,10 @@ function MainApp() {
       const accessToken = params.get('access_token');
       if (accessToken) {
         localStorage.setItem('access_token', accessToken);
-        // Dispatch custom event to trigger user refresh globally if needed
-        window.dispatchEvent(new Event('oauth-login-success'));
       }
+      // Always dispatch OAuth success event.
+      // Even when access_token is absent from URL, backend cookie-based auth may still be valid.
+      window.dispatchEvent(new Event('oauth-login-success'));
       
       params.delete('auth_success');
       params.delete('access_token');
