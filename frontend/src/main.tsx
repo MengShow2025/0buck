@@ -4,6 +4,13 @@ import { BrowserRouter } from 'react-router-dom'
 import App from './App'
 import './index.css'
 import { AppProvider } from './components/VCC/AppContext'
+import { bootstrapAuthFromUrl } from './bootstrapAuth'
+
+const bootstrappedAuth = bootstrapAuthFromUrl(window.location.href, window.localStorage)
+
+if (bootstrappedAuth.cleanedUrl !== window.location.href) {
+  window.history.replaceState({}, document.title, bootstrappedAuth.cleanedUrl)
+}
 
 // Trigger HMR full reload for dark mode root sync
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(

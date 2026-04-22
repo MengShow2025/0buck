@@ -657,6 +657,13 @@
 - 已完成：登录态聊天新增语言优先级链路：`消息实时识别 > 已存 response_language > 系统 language`，当本轮消息无法判定时仍可回落到系统语言服务。
 - 已完成：Guest 聊天语言从“中英二分”升级为“快速识别 + 语言识别兜底”，非预设语种不再默认强制英文。
 - 已完成：新增 TDD 回归用例，覆盖“检测失败走系统语言”和“用户改用德语后立即跟随并持久化”两条关键路径。
+
+## 本轮进展（第 83 批：OAuth 首次 401 时序修复）
+- 已定位：Google OAuth 回跳后前端首次 `GET /api/v1/users/me` 返回 `401` 的根因是时序竞争：`AppContext.refreshUser()` 先于 `App.tsx` 消费 URL 中的 `access_token` 执行，导致第一次请求未携带 Bearer Token。
+- 已完成：新增前端启动引导 `bootstrapAuthFromUrl()`，在 React 挂载前先消费 `auth_success/access_token`，写入 `localStorage` 后再启动应用，彻底消除首次鉴权裸奔。
+- 已完成：`main.tsx` 接入启动前清洗逻辑，并在首屏渲染前用 `history.replaceState` 移除 URL 中的 `auth_success/access_token/email`，避免后续状态判断继续受污染。
+- 已完成：新增 TDD 回归 `frontend/src/bootstrapAuth.test.ts`，覆盖“启动前写 token”“清理 OAuth 参数”“保留无关 query 参数”三条关键行为。
+- 已验证：`cd frontend && npm test -- src/bootstrapAuth.test.ts` 通过（`3 passed`）；`cd frontend && npm run build` 通过。
 - 已验证：`PYTHONPATH=. python3 -m pytest -q tests/test_butler_chat_timeout_guard.py` 通过（`3 passed`）。
 
 ## 本轮进展（第 83 批：AI 命名显示与系统动作覆盖扩展）
