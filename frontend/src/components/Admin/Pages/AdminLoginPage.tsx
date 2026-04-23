@@ -3,7 +3,8 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Card, CardHeader, CardTitle, CardContent } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { useAppContext } from '../../VCC/AppContext';
+import { usePreferenceContext } from '../../VCC/contexts/PreferenceContext';
+import { useSessionContext } from '../../VCC/contexts/SessionContext';
 import { authApi } from '../../../services/api';
 
 export const AdminLoginPage = () => {
@@ -12,7 +13,8 @@ export const AdminLoginPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   
-  const { refreshUser, setUser, t } = useAppContext();
+    const { refreshUser, setUser } = useSessionContext();
+  const { t } = usePreferenceContext();
   const navigate = useNavigate();
   const location = useLocation();
 

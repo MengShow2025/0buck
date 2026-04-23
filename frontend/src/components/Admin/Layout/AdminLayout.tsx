@@ -5,12 +5,12 @@ import { AIPersonaPage } from '../Pages/AIPersonaPage';
 import { ProductsPage } from '../Pages/ProductsPage';
 import { FinancePage } from '../Pages/FinancePage';
 import { OrdersPage } from '../Pages/OrdersPage';
-import { useAppContext } from '../../VCC/AppContext';
+import { useSessionContext } from '../../VCC/contexts/SessionContext';
 import { authApi } from '../../../services/api';
 import { clearStoredAuthTokens } from '../../../services/authSession';
 
 const AdminSidebar = () => {
-  const { user, setUser } = useAppContext();
+    const { user, setUser } = useSessionContext();
   const navigate = useNavigate();
 
   const links = [
@@ -74,7 +74,7 @@ const AdminSidebar = () => {
 };
 
 export const AdminLayout: React.FC = () => {
-  const { user } = useAppContext();
+    const { user } = useSessionContext();
   const location = useLocation();
 
   // Protect the entire /admin/* route
