@@ -1,6 +1,6 @@
 # 项目完成程度总表
 
-更新时间：2026-04-22
+更新时间：2026-04-23
 维护说明：本文件作为“模块完成度唯一对照表”，后续按批次更新状态与阻断项。
 
 ## 总览矩阵
@@ -1113,3 +1113,9 @@
 - 已完成：`DesktopNotificationsView` 改为真实订单与奖励流水聚合；`AddressDrawer` 改为真实地址 CRUD，P0+P1 范围内“强信任数据”主视图已无固定演示值。
 - 已完成：补齐 `MeDrawer` 移动端残留占位，粉丝收益卡片不再显示硬编码 `$342`；会员号 `0BUCK_9527` 不存在于当前源码展示逻辑。
 - 已验证：前端 8 个测试文件共 `22 passed`，`npm run build` 通过。
+
+## 本轮进展（第 143 批：Railway 构建根因修复与线上部署复核）
+- 已定位：Railway 失败根因为远端构建仍使用旧版 `AdminLoginPage.tsx` / `AdminLayout.tsx`，其中残留 `../../VCC/AppContext` 导入；本地工作区未提交修复导致“本地可构建、线上失败”。
+- 已完成：将管理后台最小必要修复单独提交为 `fix(admin): remove stale AppContext imports`，并推送到 Railway 使用的 `official/main`。
+- 已验证：新提交 `e8b4fce` 推送后，Railway 新部署 `b15fe1aa` 构建成功，`frontend-builder RUN npm run build` 不再出现未解析导入错误。
+- 已验证：线上页面已切换到新部署；设置页可读取真实登录邮箱，个人资料入口未再出现此前固定会员占位值的旧构建表现。
